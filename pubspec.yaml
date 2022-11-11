@@ -1,0 +1,12 @@
+name: eloquent
+descriptio: eloquent query builder port from PHP Laravel
+
+environment:
+  sdk: '>=2.18.0 <3.0.0'
+
+dependencies:
+  postgres: ^2.5.2
+  intl: any
+
+dev_dependencies:
+  test: ^1.22.0

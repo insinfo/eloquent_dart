@@ -1,0 +1,3 @@
+class Manager {
+  // DatabaseManager? manager;
+}
