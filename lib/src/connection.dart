@@ -8,7 +8,7 @@ class Connection implements ConnectionInterface {
   ///
   /// @var PDO
   ///
-  late PDO pdo;
+  PDO? pdo;
 
   ///
   /// The active PDO connection used for reads.
@@ -226,8 +226,7 @@ class Connection implements ConnectionInterface {
   /// @return \Illuminate\Database\Query\Builder
   ///
   QueryBuilder query() {
-    return new QueryBuilder(
-        this, this.getQueryGrammar(), this.getPostProcessor());
+    return QueryBuilder(this, this.getQueryGrammar(), this.getPostProcessor());
   }
 
   ///
@@ -271,7 +270,8 @@ class Connection implements ConnectionInterface {
   /// @param  bool  $useReadPdo
   /// @return array
   ///
-  dynamic select(String query, [bindings = const [], bool useReadPdo = true]) {
+  dynamic select(String query,
+      [List bindings = const [], bool useReadPdo = true]) {
     return this.run(query, bindings, (me, query, bindings) {
       if (me.pretending()) {
         return [];
@@ -280,7 +280,9 @@ class Connection implements ConnectionInterface {
       // For select statements, we'll simply execute the query and return an array
       // of the database result set. Each element in the array will be a single
       // row from the database table, and will either be an array or objects.
-      var statement = this.getPdoForSelect(useReadPdo).prepare(query);
+      var pdo = this.getPdoForSelect(useReadPdo);
+
+      var statement = pdo!.prepare(query);
 
       statement.execute(me.prepareBindings(bindings));
 
@@ -294,7 +296,7 @@ class Connection implements ConnectionInterface {
   /// @param  bool  $useReadPdo
   /// @return \PDO
   ///
-  dynamic getPdoForSelect([bool useReadPdo = true]) {
+  PDO? getPdoForSelect([bool useReadPdo = true]) {
     return useReadPdo ? this.getReadPdo() : this.getPdo();
   }
 
@@ -453,10 +455,10 @@ class Connection implements ConnectionInterface {
     this.transactions++;
 
     if (this.transactions == 1) {
-      this.pdo.beginTransaction();
+      this.pdo!.beginTransaction();
     } else if (this.transactions > 1 &&
         this.queryGrammar.supportsSavepoints()) {
-      this.pdo.exec(this
+      this.pdo!.exec(this
           .queryGrammar
           .compileSavepoint('trans' + this.transactions.toString()));
     }
@@ -471,7 +473,7 @@ class Connection implements ConnectionInterface {
   ///
   dynamic commit() {
     if (this.transactions == 1) {
-      this.pdo.commit();
+      this.pdo!.commit();
     }
 
     --this.transactions;
@@ -486,10 +488,10 @@ class Connection implements ConnectionInterface {
   ///
   dynamic rollBack() {
     if (this.transactions == 1) {
-      this.pdo.rollBack();
+      this.pdo!.rollBack();
     } else if (this.transactions > 1 &&
         this.queryGrammar.supportsSavepoints()) {
-      this.pdo.exec(this
+      this.pdo!.exec(this
           .queryGrammar
           .compileSavepointRollBack('trans' + this.transactions.toString()));
     }
@@ -546,19 +548,19 @@ class Connection implements ConnectionInterface {
   /// @throws \Illuminate\Database\QueryException
   ///
   dynamic run(String query, dynamic bindings, Function callback) {
-    this.reconnectIfMissingConnection();
+    //this.reconnectIfMissingConnection();
 
     var start = Utils.microtime();
     var result;
     // Here we will run this query. If an exception occurs we'll determine if it was
     // caused by a connection that has been lost. If that is the cause, we'll try
     // to re-establish connection and re-run the query with a fresh connection.
-    try {
-      result = this.runQueryCallback(query, bindings, callback);
-    } catch (e) {
-      result =
-          this.tryAgainIfCausedByLostConnection(e, query, bindings, callback);
-    }
+    // try {
+    result = this.runQueryCallback(query, bindings, callback);
+    // } catch (e) {
+    //   result =
+    //       this.tryAgainIfCausedByLostConnection(e, query, bindings, callback);
+    // }
 
     // Once we have run the query we will calculate the time that it took to run and
     // then log the query, bindings, and execution time so we will report them on
@@ -585,16 +587,16 @@ class Connection implements ConnectionInterface {
     // run the SQL against the PDO connection. Then we can calculate the time it
     // took to execute and log the query SQL, bindings and time in our memory.
     var result;
-    try {
-      result = callback(this, query, bindings);
-    }
+    //try {
+    result = callback(this, query, bindings);
+    //}
 
     // If an exception occurs when attempting to run a query, we'll format the error
     // message to include the bindings with SQL, which will make this exception a
     // lot more helpful to the developer instead of just the database's errors.
-    catch (e) {
-      throw new QueryException(query, this.prepareBindings(bindings), e);
-    }
+    // catch (e) {
+    //   throw new QueryException(query, this.prepareBindings(bindings), e);
+    // }
 
     return result;
   }
@@ -778,7 +780,7 @@ class Connection implements ConnectionInterface {
   ///
   /// @return \PDO
   ///
-  dynamic getPdo() {
+  PDO? getPdo() {
     return this.pdo;
   }
 
@@ -787,7 +789,7 @@ class Connection implements ConnectionInterface {
   ///
   /// @return \PDO
   ///
-  dynamic getReadPdo() {
+  PDO? getReadPdo() {
     if (this.transactions >= 1) {
       return this.getPdo();
     }
@@ -801,13 +803,13 @@ class Connection implements ConnectionInterface {
   /// @param  \PDO|null  $pdo
   /// @return $this
   ///
-  dynamic setPdo($pdo) {
+  dynamic setPdo(PDO? pdo) {
     if (this.transactions >= 1) {
       //RuntimeException
       throw Exception("Can't swap PDO instance while within transaction.");
     }
 
-    this.pdo = $pdo;
+    this.pdo = pdo;
 
     return this;
   }
@@ -941,7 +943,7 @@ class Connection implements ConnectionInterface {
   ///
   dynamic setEventDispatcher($events) {
     //this.events = $events;
-    throw UnimplementedError();
+    //throw UnimplementedError();
   }
 
   ///

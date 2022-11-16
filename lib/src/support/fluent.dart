@@ -24,9 +24,8 @@ class Fluent {
     }
   }
 
-  dynamic operator [](dynamic key) {
-    return get(key);
-  }
+  operator [](String key) => offsetGet(key); // get
+  operator []=(String key, dynamic value) => offsetSet(key, value); // set
 
   ///
   /// Get an attribute from the container.
@@ -75,7 +74,7 @@ class Fluent {
   ///
   bool offsetExists(String offset) {
     // return isset($this->{$offset});
-    return false;
+    return this.attributes.containsKey(offset);
   }
 
   ///
@@ -87,6 +86,7 @@ class Fluent {
   dynamic offsetGet(String offset) {
     //return $this->{$offset};
     //return false;
+    return get(offset);
   }
 
   ///
@@ -98,6 +98,7 @@ class Fluent {
   ///
   void offsetSet(String offset, dynamic value) {
     //$this->{$offset} = $value;
+    this.attributes[offset] = value;
   }
 
   ///
@@ -108,6 +109,7 @@ class Fluent {
   ///
   void offsetUnset(String offset) {
     //unset($this->{$offset});
+    this.attributes.remove(offset);
   }
 
   ///

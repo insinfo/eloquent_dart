@@ -8,6 +8,60 @@ import 'package:eloquent/src/utils/utils.dart';
 import '../exceptions/invalid_argument_exception.dart';
 
 class QueryBuilder {
+  /// Isaque
+  /// Eu adicionei este metodo para mapear uma String para uma propriedade/atributo da Class QueryBuilder
+  /// isso permite ler a propriedade/atributo da Class QueryBuilder com base no nome da propriedade
+  dynamic getProperty(String propertyName) {
+    switch (propertyName) {
+      case 'columns':
+        return this.columnsProp;
+      case 'from':
+        return this.fromProp;
+      case 'limit':
+        return this.limitProp;
+      case 'offset':
+        return this.offsetProp;
+      case 'aggregate':
+        return this.aggregateProp;
+      case 'distinct':
+        return this.distinctProp;
+      case 'joins':
+        return this.joinsProp;
+      case 'wheres':
+        return this.wheresProp;
+      case 'groups':
+        return this.groupsProp;
+      case 'havings':
+        return this.havingsProp;
+      case 'orders':
+        return this.ordersProp;
+      case 'unions':
+        return this.unionsProp;
+      case 'bindings':
+        return this.bindings;
+      case 'unionLimit':
+        return this.unionLimit;
+      case 'unionOffset':
+        return this.unionOffset;
+      case 'unionOrders':
+        return this.unionOrdersProp;
+      case 'lock':
+        return this.lockProp;
+      case 'backups':
+        return this.backups;
+      case 'unionOrders':
+        return this.unionOrdersProp;
+      case 'bindingBackups':
+        return this.bindingBackups;
+      case 'operators':
+        return this._operators;
+      default:
+        print('QueryBuilder@getProperty propertyName');
+        return propertyName;
+    }
+    // return propertyName;
+  }
+
   ///
   /// The database connection instance.
   ///
@@ -98,7 +152,7 @@ class QueryBuilder {
   ///
   /// @var array
   ///
-  List groups = [];
+  List groupsProp = [];
 
   ///
   /// The having constraints for the query.
@@ -1084,12 +1138,12 @@ class QueryBuilder {
   ///
   QueryBuilder groupBy(dynamic column) {
     // for(func_get_args() as $arg) {
-    //     this.groups = array_merge((array) this.groups, is_array($arg) ? $arg : [$arg]);
+    //     this.groupsProp = array_merge((array) this.groupsProp, is_array($arg) ? $arg : [$arg]);
     // }
     if (Utils.is_array(column)) {
-      this.groups = Utils.array_merge(this.groups, column);
+      this.groupsProp = Utils.array_merge(this.groupsProp, column);
     } else if (Utils.is_string(column)) {
-      this.groups = Utils.array_merge(this.groups, [column]);
+      this.groupsProp = Utils.array_merge(this.groupsProp, [column]);
     }
 
     return this;
@@ -1421,13 +1475,15 @@ class QueryBuilder {
   /// @return array|static[]
   ///
   dynamic get([List<String> columnsP = const ['*']]) {
-    var original = [...this.columnsProp!];
+    var original = this.columnsProp != null ? [...this.columnsProp!] : null;
 
     if (Utils.is_null(original)) {
       this.columnsProp = columnsP;
     }
 
-    var results = this.processor.processSelect(this, this.runSelect());
+    var resultRunSelect = this.runSelect();
+
+    var results = this.processor.processSelect(this, resultRunSelect);
 
     this.columnsProp = original;
 
@@ -1439,10 +1495,14 @@ class QueryBuilder {
   ///
   /// @return array
   ///
-  List runSelect() {
-    return this
-        .connection
-        .select(this.toSql(), this.getBindings(), this.useWritePdoProp);
+  dynamic runSelect() {
+    var sqlStr = this.toSql();
+    print('QueryGrammar@runSelect sql: $sqlStr');
+    var bid = this.getBindings();
+    print('QueryGrammar@runSelect getBindings: $bid');
+    var com = this.connection;
+
+    return com.select(sqlStr, bid, !this.useWritePdoProp);
   }
 
   ///
@@ -1508,7 +1568,7 @@ class QueryBuilder {
 
   //     this.restoreFieldsForCount();
 
-  //     if (isset(this.groups)) {
+  //     if (isset(this.groupsProp)) {
   //         return count($results);
   //     }
 
@@ -1976,9 +2036,32 @@ class QueryBuilder {
   ///
   /// @return array
   ///
-  dynamic getBindings() {
+  List getBindings() {
     // return array_flatten(this.bindings);
-    return this.bindings;
+
+    //TODO verificar isso
+
+    var result = [];
+    if (this.bindings['select'] != null) {
+      result.addAll(this.bindings['select']);
+    }
+    if (this.bindings['join'] != null) {
+      result.addAll(this.bindings['join']);
+    }
+    if (this.bindings['where'] != null) {
+      result.addAll(this.bindings['where']);
+    }
+    if (this.bindings['having'] != null) {
+      result.addAll(this.bindings['having']);
+    }
+    if (this.bindings['order'] != null) {
+      result.addAll(this.bindings['order']);
+    }
+    if (this.bindings['union'] != null) {
+      result.addAll(this.bindings['union']);
+    }
+
+    return result;
   }
 
   ///

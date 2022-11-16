@@ -1,7 +1,21 @@
 import 'package:eloquent/eloquent.dart';
+import 'package:eloquent/src/container/container.dart';
 
 class ConnectionFactory {
-  ConnectionFactory();
+  /**
+     * The IoC container instance.
+     *
+     * @var \Illuminate\Contracts\Container\Container
+     */
+  Container container;
+
+  /**
+     * Create a new connection factory instance.
+     *
+     * @param  \Illuminate\Contracts\Container\Container  $container
+     * @return void
+     */
+  ConnectionFactory(this.container);
 
   ///
   /// Establish a PDO connection based on the configuration.
@@ -10,8 +24,7 @@ class ConnectionFactory {
   /// @param  string  $name
   /// @return \Illuminate\Database\Connection
   ///
-  Future<Connection> make(Map<String, dynamic> configP,
-      [String name = 'default']) async {
+  Connection make(Map<String, dynamic> configP, [String name = 'default']) {
     var config = parseConfig(configP, name);
 
     if (config['read'] != null) {
@@ -27,8 +40,10 @@ class ConnectionFactory {
   /// @param  array  $config
   /// @return \Illuminate\Database\Connection
   ///
-  Future<Connection> createSingleConnection(Map<String, dynamic> config) async {
-    var pdo = await createConnector(config).connect(config);
+  Connection createSingleConnection(Map<String, dynamic> config) {
+    var conC = createConnector(config);
+
+    var pdo = conC.connect(config);
 
     return createConnection(
         config['driver'], pdo, config['database'], config['prefix'], config);
@@ -40,9 +55,8 @@ class ConnectionFactory {
   /// @param  array  $config
   /// @return \Illuminate\Database\Connection
   ///
-  Future<Connection> createReadWriteConnection(
-      Map<String, dynamic> config) async {
-    var connection = await createSingleConnection(getWriteConfig(config));
+  Connection createReadWriteConnection(Map<String, dynamic> config) {
+    var connection = createSingleConnection(getWriteConfig(config));
     var pdo = createReadPdo(config);
     connection.setReadPdo(pdo);
     return connection;
@@ -54,7 +68,7 @@ class ConnectionFactory {
   /// @param  array  $config
   /// @return \PDO
   ///
-  Future<dynamic> createReadPdo(Map<String, dynamic> config) async {
+  dynamic createReadPdo(Map<String, dynamic> config) async {
     var readConfig = getReadConfig(config);
 
     return createConnector(readConfig).connect(readConfig);
@@ -126,18 +140,19 @@ class ConnectionFactory {
   /// @return Map<String,dynamic>
   ///
   Map<String, dynamic> parseConfig(Map<String, dynamic> config, String name) {
-    return Utils.map_add_sd(
-        Utils.map_add_sd(config, 'prefix', ''), 'name', name);
+    var arr = Utils.map_add_sd(config, 'prefix', '');
+    var result = Utils.map_add_sd(arr, 'name', name);
+    return result;
   }
 
-  /**
-     * Create a connector instance based on the configuration.
-     *
-     * @param  array  $config
-     * @return \Illuminate\Database\Connectors\ConnectorInterface
-     *
-     * @throws \InvalidArgumentException
-     */
+  ///
+  ///  Create a connector instance based on the configuration.
+  ///
+  ///  @param  array  $config
+  ///  @return \Illuminate\Database\Connectors\ConnectorInterface
+  ///
+  ///  @throws \InvalidArgumentException
+  ///
   ConnectorInterface createConnector(Map<String, dynamic> config) {
     if (config['driver'] == null) {
       throw InvalidArgumentException('A driver must be specified.');
@@ -164,19 +179,19 @@ class ConnectionFactory {
     throw InvalidArgumentException("Unsupported driver [${config['driver']}]");
   }
 
-  /**
-     * Create a new connection instance.
-     *
-     * @param  string   $driver
-     * @param  \PDO     $connection
-     * @param  string   $database
-     * @param  string   $prefix
-     * @param  array    $config
-     * @return \Illuminate\Database\Connection
-     *
-     * @throws \InvalidArgumentException
-     */
-  Connection createConnection(String driver, PDO connection, String database,
+  ///
+  ///  Create a new Connection instance.
+  ///
+  ///  @param  string   $driver
+  ///  @param  \PDO     $connection
+  ///  @param  string   $database
+  ///  @param  string   $prefix
+  ///  @param  array    $config
+  ///  @return \Illuminate\Database\Connection
+  ///
+  ///  @throws \InvalidArgumentException
+  ///
+  Connection createConnection(String driver, PDO pdoP, String database,
       [String prefix = '', Map<String, dynamic> config = const {}]) {
     // if ($this->container->bound($key = "db.connection.{$driver}")) {
     //     return $this->container->make($key, [$connection, $database, $prefix, $config]);
@@ -187,7 +202,7 @@ class ConnectionFactory {
       //     return new MySqlConnection($connection, $database, $prefix, $config);
 
       case 'pgsql':
-        return PostgresConnection(connection, database, prefix, config);
+        return PostgresConnection(pdoP, database, prefix, config);
 
       // case 'sqlite':
       //     return new SQLiteConnection($connection, $database, $prefix, $config);

@@ -88,8 +88,18 @@ class Utils {
   /// Dividir uma string por uma string
   ///
   /// PHP_INT_MAX = 9223372036854775807 [int limit = 9223372036854775807]
-  static List explode(Pattern separator, String string) {
-    return string.split(separator);
+  static List explode(Pattern separator, String string, [int? limit]) {
+    var items = string.split(separator);
+    if (limit == null) {
+      return items;
+    } else {
+      limit = limit > items.length ? items.length : limit;
+      var result = [];
+      for (var i = 0; i < limit; i++) {
+        result.add(items[i]);
+      }
+      return result;
+    }
   }
 
   /// Conta todos os elementos em uma matriz ou em um objeto Countable
@@ -176,14 +186,47 @@ class Utils {
     return map;
   }
 
-  /**
-     * Get an item from an array or object using "dot" notation.
-     *
-     * @param  mixed   $target
-     * @param  string|array  $key
-     * @param  mixed   $default
-     * @return mixed
-     */
+  ///
+  /// Get an item from an array using "dot" notation.
+  ///
+  /// @param  \ArrayAccess|array  $array
+  /// @param  string  $key
+  /// @param  mixed   $default
+  /// @return mixed
+  /// equivalente a Arr::get($connections, $name)
+  ///
+  static dynamic array_get(array, String key, [dynamic defaultP]) {
+    if (!array_accessible(array)) {
+      return value(defaultP);
+    }
+
+    if (is_null(key)) {
+      return array;
+    }
+
+    if (array_exists(array, key)) {
+      return array[key];
+    }
+
+    for (var segment in explode('.', key)) {
+      if (array_accessible(array) && array_exists(array, segment)) {
+        array = array[segment];
+      } else {
+        return value(defaultP);
+      }
+    }
+
+    return array;
+  }
+
+  ///
+  /// Get an item from an array or object using "dot" notation.
+  ///
+  /// @param  mixed   $target
+  /// @param  string|array  $key
+  /// @param  mixed   $default
+  /// @return mixed
+  ///
   static dynamic data_get(dynamic target, dynamic key, [dynamic defaultP]) {
     if (is_null(key)) {
       return target;
@@ -220,14 +263,15 @@ class Utils {
     return target;
   }
 
-  /**
-     * Determine whether the given value is array accessible.
-     *
-     * @param  mixed  $value
-     * @return bool
-     */
+  ///
+  /// Determine whether the given value is array accessible.
+  ///
+  /// @param  mixed  $value
+  /// @return bool
+  ///
   static bool array_accessible(dynamic value) {
-    return is_array(value); // || $value instanceof ArrayAccess;
+    return is_array(value) ||
+        is_map(value); // || $value instanceof ArrayAccess;
   }
 
   static bool is_object(dynamic value) {
@@ -283,7 +327,7 @@ class Utils {
   /**
      * Determine if the given key exists in the provided array or Map
      *
-     * @param  \ArrayAccess|array  $array
+     * [array] @param  \ArrayAccess|array   Map | List
      * @param  string|int  $key
      * @return bool
      */
@@ -398,13 +442,15 @@ class Utils {
     };
   }
 
-  /// Add an element to an map  if it doesn't exist.
+  /// Add an element to an map of String, dynamic if it doesn't exist.
   static Map<String, dynamic> map_add_sd(
       Map<String, dynamic> map, String key, dynamic value) {
     if (map.containsKey(key)) {
       return map;
     }
-    return map[key] = value;
+    map[key] = value;
+
+    return map;
   }
 
   ///
@@ -518,6 +564,17 @@ class Utils {
     return val == null;
   }
 
+  /// verifica se o valor é nulo
+  /// e se val for um List ou Map verifica se esta vazio
+  static bool is_null_or_empty(dynamic val) {
+    if (val is List) {
+      return val.isEmpty;
+    } else if (val is Map) {
+      return val.isEmpty;
+    }
+    return val == null;
+  }
+
   /// Verifica se a variável é definida.
   /// se val == null => FALSE
   /// se val is List empty => FALSE
@@ -549,8 +606,37 @@ class Utils {
     return map.entries.first.key;
   }
 
+  /// if array is Empty return false
   static dynamic array_end(List array) {
-    return array.last;
+    return array.isEmpty ? false : array.last;
+  }
+
+  static void var_dump(dynamic val) {
+    print(val);
+  }
+
+  static int str_length(String str) {
+    return str.length;
+  }
+
+  ///
+  /// Determine if a given string ends with a given substring.
+  ///
+  /// @param  string  $haystack
+  /// @param  string|array  $needles
+  /// @return bool
+  ///
+  static bool endsWith(String haystack, dynamic needles) {
+    if (needles is List) {
+      for (var needle in needles) {
+        if (needle == substr(haystack, -str_length(needle))) {
+          return true;
+        }
+      }
+    } else if (needles is String) {
+      return haystack.endsWith(needles);
+    }
+    return false;
   }
 
   /// trim characters from the left-side of the input
@@ -578,8 +664,20 @@ class Utils {
     return map.values.toList();
   }
 
+  ///
+  /// Example:
+  ///  echo(substr("abcdef", -2,10));
+  ///  ef
   static String substr(String str, int offset, [int? length]) {
-    return str.substring(offset, length);
+    if (length != null && length > str.length) {
+      length = str.length;
+    }
+    if (offset >= 0) {
+      return str.substring(offset, length);
+    } else {
+      var reverStr = str.substring(str.length - offset.abs(), length);
+      return reverStr;
+    }
   }
 
   /// max — Find highest value
@@ -610,10 +708,21 @@ class Utils {
 
   /// Verifica se o método da classe existe
   /// this use  dart:mirrors
+  /// Example:
+  /// class FooBar {
+  ///  String showMessage(String msg) {
+  ///    print("message $msg");
+  ///    return msg;
+  ///  }
+  /// }
+  /// var c = FooBar();
+  /// var result = Utils.method_exists(c, 'showMessage');
+  /// print(result);
+  /// true
   static bool method_exists(dynamic object_or_class, String methodName) {
     var mirror = reflect(object_or_class);
     return mirror.type.instanceMembers.values
-        .map((MethodMirror method) => method.simpleName)
+        .map((MethodMirror method) => MirrorSystem.getName(method.simpleName))
         .contains(methodName);
   }
 
@@ -622,11 +731,12 @@ class Utils {
   static bool property_exists(dynamic object_or_class, String propName) {
     var mirror = reflect(object_or_class);
     return mirror.type.declarations.values
-        .map((value) => value.simpleName)
+        .map((value) => MirrorSystem.getName(value.simpleName))
         .contains(propName);
   }
 
   /// callMethod of class
+  /// somente testado em metodos sem Future
   static dynamic call_method(
     dynamic object_or_class,
     String methodName, [
@@ -635,14 +745,19 @@ class Utils {
   ]) {
     var mirror = reflect(object_or_class);
     var methods = mirror.type.instanceMembers.entries;
+    //print(methods);
     for (var m in methods) {
-      if (m.value.simpleName == methodName) {
-        var re = mirror.invoke(
+      //print(MirrorSystem.getName(m.value.simpleName));
+      if (MirrorSystem.getName(m.value.simpleName) == methodName) {
+        var result = mirror.invoke(
             m.value.simpleName,
             positionalArguments == null ? [] : positionalArguments,
             namedArguments);
 
-        return re;
+        //var resultValue = await (result.reflectee as Future<MyData>);
+        var resultValue = (result.reflectee as dynamic);
+
+        return resultValue;
       }
     }
   }

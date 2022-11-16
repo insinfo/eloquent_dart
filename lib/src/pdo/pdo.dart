@@ -47,7 +47,9 @@ class PDO {
 
   /// Executa uma instrução SQL e retornar o número de linhas afetadas
   int exec(String statement) {
-    throw UnimplementedError();
+    print('PDO@exec statement: $statement');
+    //throw UnimplementedError();
+    return 1;
   }
 
   /// Recuperar um atributo da conexão com o banco de dados
@@ -74,6 +76,7 @@ class PDO {
   /// Prepares a statement for execution and returns a statement object
   /// Return PDOStatement|false
   dynamic prepare(String query, [List options = const []]) {
+    print('PDO@prepare query: $query');
     throw UnimplementedError();
   }
 

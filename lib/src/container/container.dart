@@ -190,18 +190,18 @@ class Container {
     // // If the factory is not a Closure, it means it is just a class name which is
     // // bound into this container to the abstract type and we will just wrap it
     // // up inside its own Closure to give us more convenience when extending.
-    // if (! $concrete instanceof Closure) {
-    //     $concrete = this.getClosure($abstract, $concrete);
-    // }
+    if (!(concrete is Function)) {
+      concrete = this.getClosure(abstract, concrete);
+    }
 
-    // this.bindings[$abstract] = compact('concrete', 'shared');
+    this.bindings[abstract] = {'concrete': concrete, 'shared': shared};
 
     // // If the abstract type was already resolved in this container we'll fire the
     // // rebound listener so that any objects which have already gotten resolved
     // // can have their copy of the object updated via the listener callbacks.
-    // if (this.resolved($abstract)) {
-    //     this.rebound($abstract);
-    // }
+    if (this.resolved(abstract)) {
+      this.rebound(abstract);
+    }
   }
 
   ///
@@ -320,18 +320,18 @@ class Container {
       this.alias(abstract, alias);
     }
 
-    // unset(this.aliases[$abstract]);
+    this.aliases.remove(abstract);
 
     // // We'll check to determine if this type has been bound before, and if it has
     // // we will fire the rebound callbacks registered with the container and it
     // // can be updated with consuming classes that have gotten resolved here.
-    // $bound = this.bound($abstract);
+    var bound = this.bound(abstract);
 
-    // this.instances[$abstract] = $instance;
+    this.instances[abstract] = instanceP;
 
-    // if ($bound) {
-    //     this.rebound($abstract);
-    // }
+    if (bound) {
+      this.rebound(abstract);
+    }
   }
 
   ///
@@ -575,6 +575,7 @@ class Container {
     }
 
     var concrete = this.getConcrete(abstract);
+
     var objectL;
     // We're ready to instantiate an instance of the concrete type registered for
     // the binding. This will instantiate the types, as well as resolve any of
@@ -635,10 +636,12 @@ class Container {
   /// @return string|null
   ///
   String? getContextualConcrete(String abstract) {
-    if (Utils.isset(
-        this.contextual[Utils.array_end(this.buildStack)][abstract])) {
+    if (this.contextual[Utils.array_end(this.buildStack)] != null &&
+        Utils.isset(
+            this.contextual[Utils.array_end(this.buildStack)][abstract])) {
       return this.contextual[Utils.array_end(this.buildStack)][abstract];
     }
+
     return null;
   }
 
@@ -980,10 +983,10 @@ class Container {
   /// @param  string  $abstract
   /// @return bool
   ///
-  dynamic isShared(abstract) {
+  bool isShared(abstract) {
     abstract = this.normalize(abstract);
 
-    if (Utils.isset(this.instances[abstract])) {
+    if (this.instances[abstract] != null) {
       return true;
     }
 
@@ -1092,33 +1095,33 @@ class Container {
     Container.instanceProp = container;
   }
 
-  /**
-     * Determine if a given offset exists.
-     *
-     * @param  string  $key
-     * @return bool
-     */
+  ///
+  /// Determine if a given offset exists.
+  ///
+  /// @param  string  $key
+  /// @return bool
+  ///
   bool offsetExists(String key) {
     return this.bound(key);
   }
 
-  /**
-     * Get the value at a given offset.
-     *
-     * @param  string  $key
-     * @return mixed
-     */
+  ///
+  /// Get the value at a given offset.
+  ///
+  /// @param  string  $key
+  /// @return mixed
+  ///
   dynamic offsetGet(String key) {
     return this.make(key);
   }
 
-  /**
-     * Set the value at a given offset.
-     *
-     * @param  string  $key
-     * @param  mixed   $value
-     * @return void
-     */
+  ///
+  /// Set the value at a given offset.
+  ///
+  /// @param  string  $key
+  /// @param  mixed   $value
+  /// @return void
+  ///
   void offsetSet(String key, dynamic value) {
     // If the value is not a Closure, we will make it one. This simply gives
     // more "drop-in" replacement functionality for the Pimple which this
@@ -1132,12 +1135,15 @@ class Container {
     this.bind(key, value);
   }
 
-  /**
-     * Unset the value at a given offset.
-     *
-     * @param  string  $key
-     * @return void
-     */
+  operator [](String key) => offsetGet(key); // get
+  operator []=(String key, dynamic value) => offsetSet(key, value); // set
+
+  ///
+  /// Unset the value at a given offset.
+  ///
+  /// @param  string  $key
+  /// @return void
+  ///
   void offsetUnset(String key) {
     key = this.normalize(key);
     this.bindings.remove(key);

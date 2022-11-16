@@ -13,8 +13,8 @@ class PostgresConnection extends Connection {
   ///
   /// @return \Illuminate\Database\Query\Grammars\PostgresGrammar
   ///
-  QueryPostgresGrammar getDefaultQueryGrammar() {
-    return withTablePrefix(new QueryGrammar());
+  QueryGrammar getDefaultQueryGrammar() {
+    return withTablePrefix(QueryGrammar());
   }
 
   ///
@@ -22,8 +22,8 @@ class PostgresConnection extends Connection {
   ///
   /// @return \Illuminate\Database\Schema\Grammars\PostgresGrammar
   ///
-  SchemaPostgresGrammar getDefaultSchemaGrammar() {
-    return this.withTablePrefix(new SchemaGrammar());
+  SchemaGrammar getDefaultSchemaGrammar() {
+    return this.withTablePrefix(SchemaGrammar());
   }
 
   ///

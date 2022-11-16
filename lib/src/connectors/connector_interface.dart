@@ -7,5 +7,5 @@ abstract class ConnectorInterface {
   /// @param  array  $config
   /// @return \PDO
   ///
-  Future<PDO> connect(Map<String, dynamic> config);
+  PDO connect(Map<String, dynamic> config);
 }

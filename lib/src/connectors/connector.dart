@@ -32,7 +32,7 @@ abstract class Connector with DetectsLostConnections {
   /// @param  array   $options
   /// @return \PDO
   ///
-  Future<dynamic> createConnection(
+  dynamic createConnection(
       String dsn, Map<String, dynamic> config, Map<String, dynamic> options);
   // var username = config['username'];
   //var password = config['password'];
