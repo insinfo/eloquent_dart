@@ -7,7 +7,7 @@ abstract class ConnectionResolverInterface {
   /// @param  string  $name
   /// @return \Illuminate\Database\ConnectionInterface
   ///
-  ConnectionInterface connection([String name]);
+  Future<ConnectionInterface> connection([String name]);
 
   ///
   /// Get the default connection name.

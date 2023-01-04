@@ -38,12 +38,12 @@ class SchemaBuilder {
   /// @param  string  $table
   /// @return bool
   ///
-  bool hasTable(String tableP) {
+  Future<bool> hasTable(String tableP)async {
     var sql = grammar.compileTableExists();
 
     var table = this.connection.getTablePrefix() + tableP;
 
-    return Utils.count(this.connection.select(sql, [table])) > 0;
+    return Utils.count(await this.connection.select(sql, [table])) > 0;
   }
 
   ///

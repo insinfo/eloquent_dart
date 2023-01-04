@@ -147,10 +147,11 @@ class SchemaGrammar extends BaseGrammar {
   String addModifiers(sql, Blueprint blueprint, Fluent column) {
     for (var modifier in this.modifiers) {
       var method = "modify${modifier}";
-      if (Utils.method_exists(this, method)) {
-        //sql += this.{$method}(blueprint, column);
-        sql += Utils.call_method(this, method, [blueprint, column]);
-      }
+      // if (Utils.method_exists(this, method)) {
+      //   //sql += this.{$method}(blueprint, column);
+      //   sql += Utils.call_method(this, method, [blueprint, column]);
+      // }
+      throw UnimplementedError();
     }
 
     return sql;
@@ -193,8 +194,9 @@ class SchemaGrammar extends BaseGrammar {
   ///
   String getType(Fluent column) {
     //return this.{'type'.ucfirst($column->type)}($column);
-    return Utils.call_method(
-        this, 'type' + Utils.ucfirst(column['type']), [column]);
+    // return Utils.call_method(
+    //     this, 'type' + Utils.ucfirst(column['type']), [column]);
+    throw UnimplementedError();
   }
 
   ///

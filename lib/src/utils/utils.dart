@@ -1,4 +1,4 @@
-import 'dart:mirrors';
+//import 'dart:mirrors';
 import 'package:intl/intl.dart';
 
 import 'dart:math';
@@ -719,46 +719,50 @@ class Utils {
   /// var result = Utils.method_exists(c, 'showMessage');
   /// print(result);
   /// true
-  static bool method_exists(dynamic object_or_class, String methodName) {
-    var mirror = reflect(object_or_class);
-    return mirror.type.instanceMembers.values
-        .map((MethodMirror method) => MirrorSystem.getName(method.simpleName))
-        .contains(methodName);
-  }
+  // static bool method_exists(dynamic object_or_class, String methodName) {
+  //   var mirror = reflect(object_or_class);
+  //   return mirror.type.instanceMembers.values
+  //       .map((MethodMirror method) => MirrorSystem.getName(method.simpleName))
+  //       .contains(methodName);
+  // }
 
   /// Verifica se uma propriedade da classe existe
   /// this use  dart:mirrors
-  static bool property_exists(dynamic object_or_class, String propName) {
-    var mirror = reflect(object_or_class);
-    return mirror.type.declarations.values
-        .map((value) => MirrorSystem.getName(value.simpleName))
-        .contains(propName);
-  }
+  // static bool property_exists(dynamic object_or_class, String propName) {
+  //   var mirror = reflect(object_or_class);
+  //   return mirror.type.declarations.values
+  //       .map((value) => MirrorSystem.getName(value.simpleName))
+  //       .contains(propName);
+  // }
 
   /// callMethod of class
   /// somente testado em metodos sem Future
-  static dynamic call_method(
-    dynamic object_or_class,
-    String methodName, [
-    List<dynamic>? positionalArguments,
-    Map<Symbol, dynamic> namedArguments = const <Symbol, dynamic>{},
-  ]) {
-    var mirror = reflect(object_or_class);
-    var methods = mirror.type.instanceMembers.entries;
-    //print(methods);
-    for (var m in methods) {
-      //print(MirrorSystem.getName(m.value.simpleName));
-      if (MirrorSystem.getName(m.value.simpleName) == methodName) {
-        var result = mirror.invoke(
-            m.value.simpleName,
-            positionalArguments == null ? [] : positionalArguments,
-            namedArguments);
+  // static dynamic call_method(
+  //   dynamic object_or_class,
+  //   String methodName, [
+  //   List<dynamic>? positionalArguments,
+  //   Map<Symbol, dynamic> namedArguments = const <Symbol, dynamic>{},
+  // ]) {
+  //   var mirror = reflect(object_or_class);
+  //   var methods = mirror.type.instanceMembers.entries;
+  //   //print(methods);
+  //   for (var m in methods) {
+  //     //print(MirrorSystem.getName(m.value.simpleName));
+  //     if (MirrorSystem.getName(m.value.simpleName) == methodName) {
+  //       var result = mirror.invoke(
+  //           m.value.simpleName,
+  //           positionalArguments == null ? [] : positionalArguments,
+  //           namedArguments);
 
-        //var resultValue = await (result.reflectee as Future<MyData>);
-        var resultValue = (result.reflectee as dynamic);
+  //       //var resultValue = await (result.reflectee as Future<MyData>);
+  //       var resultValue = (result.reflectee as dynamic);
 
-        return resultValue;
-      }
-    }
+  //       return resultValue;
+  //     }
+  //   }
+  // }
+
+  static List array_fill(int start_index, int count, dynamic value) {
+    return List.generate(count, (v)=>value);
   }
 }

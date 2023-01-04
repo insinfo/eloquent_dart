@@ -38,6 +38,14 @@ class DSNParser {
     'params': {}
   };
 
+  String get password => dsnParts['password'];
+  String get user => dsnParts['user'];
+  String get host => dsnParts['host'];
+  String get driver => dsnParts['driver'];
+  int get port =>  dsnParts['port'] != null ? int.parse(dsnParts['port']) : 0;
+  String get database => dsnParts['database'];
+  Map<String, dynamic> get params => dsnParts['params'];
+
   DSNParser(this.dsn, [this.dsnType = DsnType.pdoPostgreSql]) {
     parse();
   }

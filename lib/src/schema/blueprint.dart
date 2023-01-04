@@ -95,14 +95,15 @@ class Blueprint {
     // o elemento blueprint, então vamos chamar essa função de compiladores.
     for (var command in _commands) {
       var method = 'compile' + Utils.ucfirst(command['name']);
+      throw UnimplementedError();
 
-      if (Utils.method_exists(grammar, method)) {
-        var sql =
-            Utils.call_method(grammar, method, [this, command, connection]);
-        if (!Utils.is_null(sql)) {
-          statements = Utils.array_merge(statements, sql as List);
-        }
-      }
+      // if (Utils.method_exists(grammar, method)) {
+      //   var sql =
+      //       Utils.call_method(grammar, method, [this, command, connection]);
+      //   if (!Utils.is_null(sql)) {
+      //     statements = Utils.array_merge(statements, sql as List);
+      //   }
+      // }
     }
 
     return statements;

@@ -25,7 +25,7 @@ abstract class BaseGrammar {
   /// @param  string|\Illuminate\Database\Query\Expression  $table
   /// @return string
   ///
-  dynamic wrapTable(dynamic table) {
+  String wrapTable(dynamic table) {
     if (isExpression(table)) {
       return getValue(table as QueryExpression);
     }

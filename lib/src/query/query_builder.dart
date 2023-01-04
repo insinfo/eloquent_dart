@@ -383,13 +383,13 @@ class QueryBuilder {
   ///
   /// Add a join clause to the query.
   ///
-  /// @param  String  $table
-  /// @param  String  $one
-  /// @param  String  $operator
+  /// [table] String name of table 
+  /// [one]  String | Function(JoinClause)
+  /// [operator] String  Example: '=', 'in', 'not in'
   /// @param  String  $two
-  /// @param  String  $type
-  /// @param  bool    $where
-  /// @return $this
+  /// [type]  String  Example: 'inner', 'left'
+  /// [where]  bool   
+  /// `Return` this QueryBuilder
   ///
   QueryBuilder join(String table, dynamic one,
       [String? operator,
@@ -401,21 +401,16 @@ class QueryBuilder {
     // one condition, so we'll add the join and call a Closure with the query.
     if (one is Function) {
       var join = JoinClause(type, table);
-
-      one(join);
-      //this.joins ?? [];
+      one(join);      
       this.joinsProp.add(join);
       this.addBinding(join.bindings, 'join');
     }
-
     // If the column is simply a string, we can assume the join simply has a basic
     // "on" clause with a single condition. So we will just build the join with
     // this simple join clauses attached to it. There is not a join callback.
     else {
       var join = new JoinClause(type, table);
-
       this.joinsProp.add(join.on(one, operator, two, 'and', where));
-
       this.addBinding(join.bindings, 'join');
     }
 
@@ -519,11 +514,11 @@ class QueryBuilder {
     // Here we will make some assumptions about the operator. If only 2 values are
     // passed to the method, we will assume that the operator is an equals sign
     // and keep going. Otherwise, we'll require the operator to be passed in.
-    // if (func_num_args() == 2) {
-    //     list($value, $operator) = [$operator, '='];
-    // } else if (this.invalidOperatorAndValue($operator, $value)) {
-    //     throw new InvalidArgumentException('Illegal operator and value combination.');
-    // }
+    //  if (func_num_args() == 2) {
+    //      list($value, $operator) = [$operator, '='];
+    //  } else if (this.invalidOperatorAndValue($operator, $value)) {
+    //      throw new InvalidArgumentException('Illegal operator and value combination.');
+    //  }
 
     // If the columns is actually a Closure instance, we will assume the developer
     // wants to begin a nested where statement which is wrapped in parenthesis.
@@ -566,7 +561,7 @@ class QueryBuilder {
       'boolean': boolean
     });
 
-    if (!value is QueryExpression) {
+    if (!(value is QueryExpression)) {
       this.addBinding(value, 'where');
     }
 
@@ -1227,12 +1222,12 @@ class QueryBuilder {
   /// @param  String  $direction
   /// @return $this
   ///
-  QueryBuilder orderBy(String column, [String directionP = 'asc']) {
+  QueryBuilder orderBy(String column, [String direction = 'asc']) {
     //var property = this.unions.isNotEmpty ? 'unionOrders' : 'orders';
-    var direction = Utils.strtolower(directionP) == 'asc' ? 'asc' : 'desc';
+    var _direction = Utils.strtolower(direction) == 'asc' ? 'asc' : 'desc';
 
     //this.{$property}[] = compact('column', 'direction');
-    var map = {'column': column, 'direction': direction};
+    var map = {'column': column, 'direction': _direction};
     if (this.unionsProp.isNotEmpty) {
       this.unionOrdersProp.add(map);
     } else {
@@ -1450,8 +1445,8 @@ class QueryBuilder {
   /// @param  String  $column
   /// @return mixed
   ///
-  dynamic value(String column) {
-    var result = this.first([column]);
+  Future<dynamic> value(String column) async {
+    var result = await this.first([column]);
 
     return Utils.count(result) > 0 ? Utils.reset(result) : null;
   }
@@ -1462,8 +1457,8 @@ class QueryBuilder {
   /// @param  array   $columns
   /// @return mixed|static
   ///
-  dynamic first([List<String> columns = const ['*']]) {
-    var results = this.take(1).get(columns);
+  Future<dynamic> first([List<String> columns = const ['*']]) async {
+    var results = await this.take(1).get(columns);
 
     return Utils.count(results) > 0 ? Utils.reset(results) : null;
   }
@@ -1474,19 +1469,18 @@ class QueryBuilder {
   /// @param  array  $columns
   /// @return array|static[]
   ///
-  dynamic get([List<String> columnsP = const ['*']]) {
+  Future<dynamic> get([List<String> columnsP = const ['*']]) async {
     var original = this.columnsProp != null ? [...this.columnsProp!] : null;
 
     if (Utils.is_null(original)) {
       this.columnsProp = columnsP;
     }
 
-    var resultRunSelect = this.runSelect();
+    var resultRunSelect = await this.runSelect();
+    //print('query_builder@get $resultRunSelect');
 
     var results = this.processor.processSelect(this, resultRunSelect);
-
     this.columnsProp = original;
-
     return results;
   }
 
@@ -1495,14 +1489,16 @@ class QueryBuilder {
   ///
   /// @return array
   ///
-  dynamic runSelect() {
+  Future<dynamic> runSelect() async {
     var sqlStr = this.toSql();
-    print('QueryGrammar@runSelect sql: $sqlStr');
+    //print('QueryGrammar@runSelect sql: $sqlStr');
     var bid = this.getBindings();
-    print('QueryGrammar@runSelect getBindings: $bid');
+    // print('QueryGrammar@runSelect getBindings: $bid');
     var com = this.connection;
 
-    return com.select(sqlStr, bid, !this.useWritePdoProp);
+    var results = await com.select(sqlStr, bid, !this.useWritePdoProp);
+    // print('QueryGrammar@runSelect results: $results');
+    return results;
   }
 
   ///
@@ -1734,13 +1730,13 @@ class QueryBuilder {
   /// @param  String  $columns
   /// @return int
   ///
-  int count([columns = '*']) {
+  Future<int> count([columns = '*']) async {
     if (!Utils.is_array(columns)) {
       columns = [columns];
     }
     //__FUNCTION__	The function name, or {closure} for anonymous functions.
     //a constant __FUNCTION__  retorna o nome da corrent função https://www.php.net/manual/en/language.constants.magic.php
-    return this.aggregate(count, columns);
+    return await this.aggregate(count, columns);
   }
 
   ///
@@ -1807,7 +1803,7 @@ class QueryBuilder {
   /// @param  array   $columns
   /// @return float|int
   ///
-  dynamic aggregate(function, [columnsP = const ['*']]) {
+  Future<dynamic> aggregate(function, [columnsP = const ['*']]) async {
     this.aggregateProp = {'function': function, 'columns': columnsP};
 
     var previousColumns = [...this.columnsProp!];
@@ -1820,7 +1816,7 @@ class QueryBuilder {
 
     this.bindings['select'] = [];
 
-    var results = this.get(columnsP);
+    var results = await this.get(columnsP);
 
     // Once we have executed the query, we will reset the aggregate property so
     // that more select queries can be executed against the database without
@@ -1844,7 +1840,7 @@ class QueryBuilder {
   /// @param  Map  $values
   /// @return bool
   ///
-  dynamic insert(dynamic values) {
+  Future<dynamic> insert(Map<String, dynamic> values) {
     // if (empty($values)) {
     //     return true;
     // }
@@ -1894,14 +1890,12 @@ class QueryBuilder {
   /// @param  String  $sequence
   /// @return int
   ///
-  // dynamic insertGetId(array $values, $sequence = null)
-  // {
-  //     $sql = this.grammar->compileInsertGetId($this, $values, $sequence);
-
-  //     $values = this.cleanBindings($values);
-
-  //     return this.processor->processInsertGetId($this, $sql, $values, $sequence);
-  // }
+  Future<dynamic> insertGetId(Map<String, dynamic> keyValues,
+      [String sequence = 'id']) {
+    var sql = this.grammar.compileInsertGetId(this, keyValues, sequence);
+    var values = this.cleanBindings(keyValues.values.toList());
+    return this.processor.processInsertGetId(this, sql, values, sequence);
+  }
 
   ///
   /// Update a record in the database.
@@ -1909,14 +1903,13 @@ class QueryBuilder {
   /// @param  array  $values
   /// @return int
   ///
-  // dynamic update(array $values)
-  // {
-  //     $bindings = array_values(array_merge($values, this.getBindings()));
-
-  //     $sql = this.grammar->compileUpdate($this, $values);
-
-  //     return this.connection->update($sql, this.cleanBindings($bindings));
-  // }
+  Future<dynamic> update(Map<String, dynamic> keyValues) {
+    var curentBindings = this.getBindings();
+    var values = keyValues.values.toList();    
+    var bindings = Utils.array_merge(values, curentBindings); 
+    var sql = this.grammar.compileUpdate(this, keyValues);
+    return this.connection.update(sql, this.cleanBindings(bindings));
+  }
 
   ///
   /// Increment a column's value by a given amount.
@@ -1958,7 +1951,7 @@ class QueryBuilder {
   /// @param  mixed  $id
   /// @return int
   ///
-  int delete([dynamic id]) {
+  Future<int> delete([dynamic id]) {
     // If an ID is passed to the method, we will set the where clause to check
     // the ID to allow developers to simply and quickly remove a single row
     // from their database without manually specifying the where clauses.
@@ -2017,7 +2010,7 @@ class QueryBuilder {
   ///
   List cleanBindings(List bindings) {
     return Utils.array_filter(bindings, (binding) {
-      return !binding is QueryExpression;
+      return !(binding is QueryExpression);
     });
   }
 

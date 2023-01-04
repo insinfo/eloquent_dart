@@ -46,7 +46,7 @@ class DatabaseManager implements ConnectionResolverInterface {
   /// @param  string  $name
   /// @return \Illuminate\Database\Connection
   ///
-  Connection connection([String? nameP]) {
+  Future<Connection> connection([String? nameP])async {
     var re = this.parseConnectionName(nameP);
 
     var name = re[0];
@@ -56,7 +56,7 @@ class DatabaseManager implements ConnectionResolverInterface {
     // set the "fetch mode" for PDO which determines the query return types.
 
     if (!Utils.isset(this.connectionsProp[name])) {
-      var connection = this.makeConnection(name);
+      var connection =await this.makeConnection(name);
 
       this.setPdoForType(connection, type);
 
@@ -98,7 +98,7 @@ class DatabaseManager implements ConnectionResolverInterface {
   /// @param  string  $name
   /// @return void
   ///
-  void disconnect([String? name]) {
+  Future<void> disconnect([String? name])async {
     name = name ?? this.getDefaultConnection();
 
     if (Utils.isset(this.connectionsProp[name])) {
@@ -112,7 +112,7 @@ class DatabaseManager implements ConnectionResolverInterface {
   /// @param  string  $name
   /// @return \Illuminate\Database\Connection
   ///
-  Connection reconnect([String? name]) {
+  Future<Connection> reconnect([String? name]) {
     name = name ?? this.getDefaultConnection();
     this.disconnect(name);
 
@@ -129,8 +129,8 @@ class DatabaseManager implements ConnectionResolverInterface {
   /// @param  string  $name
   /// @return \Illuminate\Database\Connection
   ///
-  Connection refreshPdoConnections(String name) {
-    var fresh = this.makeConnection(name);
+ Future<Connection>   refreshPdoConnections(String name)async {
+    var fresh =await this.makeConnection(name);
 
     return this
         .connectionsProp[name]
@@ -144,7 +144,7 @@ class DatabaseManager implements ConnectionResolverInterface {
   /// @param  string  $name
   /// @return \Illuminate\Database\Connection
   ///
-  Connection makeConnection(String name) {
+  Future<Connection>  makeConnection(String name) {
     var config = this.getConfig(name);
 
     // First we will check by the connection name to see if an extension has been

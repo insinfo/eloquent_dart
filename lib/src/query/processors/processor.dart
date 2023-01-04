@@ -21,14 +21,13 @@ class Processor {
   /// @param  string  $sequence
   /// @return int
   ///
-  int processInsertGetId(QueryBuilder query, String sql, List values,
-      [String? sequence]) {
-    //query.getConnection().insert(sql, values);
-
+  Future<dynamic> processInsertGetId(
+      QueryBuilder query, String sql, List values,
+      [String sequence ='id']) async {
+    return query.getConnection().insert(sql, values);
     //var id = query.getConnection().getPdo().lastInsertId(sequence);
-
     //return is_numeric($id) ? (int) $id : $id;
-    return -1;
+    //return -1;
   }
 
   ///

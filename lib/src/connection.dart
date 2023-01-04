@@ -1,6 +1,9 @@
 import 'package:eloquent/eloquent.dart';
 import 'package:eloquent/src/schema/schema_builder.dart';
 
+import 'pdo/pdo_constants.dart';
+import 'pdo/pdo_execution_context.dart';
+
 /// posgresql Connection implementation
 class Connection implements ConnectionInterface {
   ///
@@ -8,14 +11,14 @@ class Connection implements ConnectionInterface {
   ///
   /// @var PDO
   ///
-  PDO? pdo;
+  PDOExecutionContext pdo;
 
   ///
   /// The active PDO connection used for reads.
   ///
   /// @var PDO
   ///
-  PDO? readPdo;
+  PDOExecutionContext? readPdo;
 
   ///
   /// The reconnector instance for the connection.
@@ -57,7 +60,7 @@ class Connection implements ConnectionInterface {
   ///
   /// @var int
   ///
-  int fetchMode = 0; // PDO::FETCH_OBJ;
+  int fetchMode = PDO_FETCH_ASSOC;
 
   ///
   /// The number of active transactions.
@@ -92,7 +95,7 @@ class Connection implements ConnectionInterface {
   ///
   /// @var string
   ///
-  late String databaseProp;
+  late String _databaseName;
 
   ///
   /// The instance of Doctrine connection.
@@ -106,42 +109,38 @@ class Connection implements ConnectionInterface {
   ///
   /// @var string
   ///
-  String tablePrefix = '';
+  String _tablePrefix = '';
 
   ///
   /// The database connection configuration options.
   ///
   /// @var array
   ///
-  Map<String, dynamic> config = {};
+  Map<String, dynamic> _config = {};
 
   ///
   /// Create a new database connection instance.
   ///
-  /// @param  \PDO     $pdo
-  /// @param  String   $database
-  /// @param  String   $tablePrefix
-  /// @param  array    $config
+  /// @param  \PDO     pdo
+  /// @param  String   database
+  /// @param  String   tablePrefix
+  /// @param  array    config
   /// @return void
   ///
-  Connection(PDO pdoP,
-      [String databaseNameP = '',
-      String tablePrefixP = '',
-      Map<String, dynamic> configP = const {}]) {
-    this.pdo = pdoP;
-
+  Connection(this.pdo,
+      [this._databaseName = '',
+      this._tablePrefix = '',
+      this._config = const <String, dynamic>{}]) {
+    //this.pdo = pdoP;
+    // print('call Connection construct');
     // First we will setup the default properties. We keep track of the DB
     // name we are connected to since it is needed when some reflective
     // type commands are run such as checking whether a table exists.
-    this.databaseProp = databaseNameP;
-    this.tablePrefix = tablePrefixP;
-    this.config = configP;
 
     // We need to initialize a query grammar and the query post processors
     // which are both very important parts of the database abstractions
     // so we initialize these to their default values while starting.
     useDefaultQueryGrammar();
-
     useDefaultPostProcessor();
   }
 
@@ -206,7 +205,6 @@ class Connection implements ConnectionInterface {
     if (Utils.is_null(schemaGrammar)) {
       useDefaultSchemaGrammar();
     }
-
     return SchemaBuilder(this);
   }
 
@@ -235,8 +233,8 @@ class Connection implements ConnectionInterface {
   /// @param  mixed  $value
   /// @return \Illuminate\Database\Query\Expression
   ///
-  QueryExpression raw($value) {
-    return QueryExpression($value);
+  QueryExpression raw(dynamic value) {
+    return QueryExpression(value);
   }
 
   ///
@@ -246,8 +244,8 @@ class Connection implements ConnectionInterface {
   /// @param  array   $bindings
   /// @return mixed
   ///
-  dynamic selectOne(String query, [bindings = const []]) {
-    var records = this.select(query, bindings);
+  Future<dynamic> selectOne(String query, [bindings = const []]) async {
+    var records = await this.select(query, bindings);
     return Utils.count(records) > 0 ? Utils.reset(records) : null;
   }
 
@@ -258,7 +256,7 @@ class Connection implements ConnectionInterface {
   /// @param  array   $bindings
   /// @return array
   ///
-  dynamic selectFromWriteConnection(query, [bindings = const []]) {
+  Future<dynamic> selectFromWriteConnection(query, [bindings = const []]) {
     return this.select(query, bindings, false);
   }
 
@@ -270,9 +268,11 @@ class Connection implements ConnectionInterface {
   /// @param  bool  $useReadPdo
   /// @return array
   ///
-  dynamic select(String query,
-      [List bindings = const [], bool useReadPdo = true]) {
-    return this.run(query, bindings, (me, query, bindings) {
+  Future<dynamic> select(String query,
+      [List bindings = const [], bool useReadPdo = true]) async {
+    //print('Connection@select');
+
+    return this.run(query, bindings, (me, query, bindings) async {
       if (me.pretending()) {
         return [];
       }
@@ -280,14 +280,16 @@ class Connection implements ConnectionInterface {
       // For select statements, we'll simply execute the query and return an array
       // of the database result set. Each element in the array will be a single
       // row from the database table, and will either be an array or objects.
-      var pdo = this.getPdoForSelect(useReadPdo);
-
-      var statement = pdo!.prepare(query);
-
-      statement.execute(me.prepareBindings(bindings));
-
-      return statement.fetchAll(me.getFetchMode());
+      var pdoL = me.getPdoForSelect(useReadPdo);
+      var params = me.prepareBindings(bindings);
+      print('Connection@select inside callback');
+      var statement = await pdoL.prepareStatement(query, params);
+      return pdoL.executeStatement(statement, me.getFetchMode());
     });
+    // var pdoL = this.getPdoForSelect(useReadPdo);
+    // var params = this.prepareBindings(bindings);  
+    // var statement = await pdoL.prepareStatement(query, params);
+    // return pdoL.executeStatement(statement, this.getFetchMode());
   }
 
   ///
@@ -296,7 +298,7 @@ class Connection implements ConnectionInterface {
   /// @param  bool  $useReadPdo
   /// @return \PDO
   ///
-  PDO? getPdoForSelect([bool useReadPdo = true]) {
+  PDOExecutionContext getPdoForSelect([bool useReadPdo = true]) {
     return useReadPdo ? this.getReadPdo() : this.getPdo();
   }
 
@@ -307,7 +309,7 @@ class Connection implements ConnectionInterface {
   /// @param  array   $bindings
   /// @return bool
   ///
-  bool insert(query, [bindings = const []]) {
+  Future<dynamic> insert(query, [bindings = const []]) async {
     return this.statement(query, bindings);
   }
 
@@ -318,7 +320,7 @@ class Connection implements ConnectionInterface {
   /// @param  array   $bindings
   /// @return int
   ///
-  int update(String query, [List bindings = const []]) {
+  Future<int> update(String query, [List bindings = const []]) {
     return this.affectingStatement(query, bindings);
   }
 
@@ -329,7 +331,7 @@ class Connection implements ConnectionInterface {
   /// @param  array   $bindings
   /// @return int
   ///
-  int delete(String query, [List bindings = const []]) {
+  Future<int> delete(String query, [List bindings = const []]) {
     return this.affectingStatement(query, bindings);
   }
 
@@ -340,15 +342,18 @@ class Connection implements ConnectionInterface {
   /// @param  array   $bindings
   /// @return bool
   ///
-  bool statement(String query, [bindingsP = const []]) {
-    return this.run(query, bindingsP, (me, query, bindings) {
+  Future<dynamic> statement(String query, [bindingsP = const []]) {
+    return this.run(query, bindingsP, (me, query, bindings) async {
       if (me.pretending()) {
         return true;
       }
-
-      var bindi = me.prepareBindings(bindings);
-
-      return me.getPdo().prepare(query).execute(bindi);
+      // var pdo = me.getPdo()!;
+      // var statement = await pdo.prepare(query);
+      // return await statement.execute(bindi);
+      var pdoL = me.getPdo();
+      var params = me.prepareBindings(bindings);
+      var statement = await pdoL.prepareStatement(query, params);
+      return await pdoL.executeStatement(statement, me.getFetchMode());
     });
   }
 
@@ -359,8 +364,9 @@ class Connection implements ConnectionInterface {
   /// @param  array   $bindings
   /// @return int
   ///
-  int affectingStatement(String query, [bindingsP = const []]) {
-    return this.run(query, bindingsP, (me, query, bindings) {
+  Future<int> affectingStatement(String query,
+      [List<dynamic> bindingsP = const []]) async {
+    var res = await this.run(query, bindingsP, (me, query, bindings) async {
       if (me.pretending()) {
         return 0;
       }
@@ -368,12 +374,14 @@ class Connection implements ConnectionInterface {
       // For update or delete statements, we want to get the number of rows affected
       // by the statement and return that back to the developer. We'll first need
       // to execute the statement and then we'll use PDO to fetch the affected.
-      var statement = me.getPdo().prepare(query);
-
-      statement.execute(me.prepareBindings(bindings));
-
-      return statement.rowCount();
+      var _pdo = me.getPdo();
+      var params = me.prepareBindings(bindings);
+      var statement = await _pdo.prepareStatement(query, params);
+      await _pdo.executeStatement(statement);
+      return await statement.rowsAffected;
     });
+
+    return res as int;
   }
 
   ///
@@ -382,20 +390,20 @@ class Connection implements ConnectionInterface {
   /// @param  String  $query
   /// @return bool
   ///
-  bool unprepared(String query) {
-    return this.run(query, [], (me, query) {
+  Future<dynamic> unprepared(String query) async {
+    return this.run(query, [], (me, query, bindings) async {
       if (me.pretending()) {
         return true;
       }
 
-      return me.getPdo().exec(query);
+      return me.getPdo().execute(query);
     });
   }
 
   ///
   /// Prepare the query bindings for execution.
   ///
-  /// @param  array  $bindings
+  /// @param  array  bindings
   /// @return array
   ///
   dynamic prepareBindings(List<dynamic> bindings) {
@@ -420,30 +428,31 @@ class Connection implements ConnectionInterface {
   ///
   /// Execute a Closure within a transaction.
   ///
-  /// @param  \Closure  $callback
+  /// @param  Function  callback
   /// @return mixed
   ///
   /// @throws \Throwable
-  ///
-  dynamic transaction(Function callback) {
-    this.beginTransaction();
-    var result;
+  /////Future<T> runInTransaction<T>(  Future<T> operation(TransactionContext ctx))
+  Future<dynamic> transaction(
+      Future<dynamic> Function(Connection ctx) callback) async {
+    final transa = await this.pdo.pdoInstance.beginTransaction();
+
     // We'll simply execute the given callback within a try / catch block
     // and if we catch any exception we can rollback the transaction
     // so that none of the changes are persisted to the database.
     try {
-      result = callback(this);
-
-      this.commit();
+      final newConnection = Connection(
+          transa, this._databaseName, this._tablePrefix, this._config);
+      final result = await callback(newConnection);
+      await this.pdo.pdoInstance.commit(transa);
+      return result;
     } catch (ex) {
       // If we catch an exception, we will roll back so nothing gets messed
       // up in the database. Then we'll re-throw the exception so it can
       // be handled how the developer sees fit for their applications.
-      this.rollBack();
-      throw ex;
+      await this.pdo.pdoInstance.rollBack(transa);
+      rethrow;
     }
-
-    return result;
   }
 
   ///
@@ -451,55 +460,56 @@ class Connection implements ConnectionInterface {
   ///
   /// @return void
   ///
-  dynamic beginTransaction() {
-    this.transactions++;
-
-    if (this.transactions == 1) {
-      this.pdo!.beginTransaction();
-    } else if (this.transactions > 1 &&
-        this.queryGrammar.supportsSavepoints()) {
-      this.pdo!.exec(this
-          .queryGrammar
-          .compileSavepoint('trans' + this.transactions.toString()));
-    }
-
-    this.fireConnectionEvent('beganTransaction');
-  }
+  // Future<dynamic> beginTransaction() async {
+  // this.transactions++;
+  // if (this.transactions == 1) {
+  //   this.pdo!.beginTransaction();
+  // } else if (this.transactions > 1 &&
+  //     this.queryGrammar.supportsSavepoints()) {
+  //   this.pdo!.exec(this
+  //       .queryGrammar
+  //       .compileSavepoint('trans' + this.transactions.toString()));
+  // }
+  // this.fireConnectionEvent('beganTransaction');
+  //throw UnimplementedError();
+  // this.pdo!.beginTransaction();
+  // }
 
   ///
   /// Commit the active database transaction.
   ///
   /// @return void
   ///
-  dynamic commit() {
-    if (this.transactions == 1) {
-      this.pdo!.commit();
-    }
-
-    --this.transactions;
-
-    this.fireConnectionEvent('committed');
-  }
+  // Future<dynamic> commit([dynamic transaction]) async {
+  // if (this.transactions == 1) {
+  //   this.pdo!.commit();
+  // }
+  // --this.transactions;
+  // this.fireConnectionEvent('committed');
+  //throw UnimplementedError();
+  // return this.pdo!.commit(transaction);
+  //}
 
   ///
   /// Rollback the active database transaction.
   ///
   /// @return void
   ///
-  dynamic rollBack() {
-    if (this.transactions == 1) {
-      this.pdo!.rollBack();
-    } else if (this.transactions > 1 &&
-        this.queryGrammar.supportsSavepoints()) {
-      this.pdo!.exec(this
-          .queryGrammar
-          .compileSavepointRollBack('trans' + this.transactions.toString()));
-    }
+  //Future<dynamic> rollBack([dynamic transaction]) async {
+  // if (this.transactions == 1) {
+  //   await this.pdo!.rollBack();
+  // } else if (this.transactions > 1 &&
+  //     this.queryGrammar.supportsSavepoints()) {
+  //   //  await this.pdo!.exec(this
+  //   //       .queryGrammar
+  //   //       .compileSavepointRollBack('trans' + this.transactions.toString()));
+  //   throw UnimplementedError();
+  // }
 
-    this.transactions = Utils.int_max(0, this.transactions - 1);
-
-    this.fireConnectionEvent('rollingBack');
-  }
+  // this.transactions = Utils.int_max(0, this.transactions - 1);
+  // this.fireConnectionEvent('rollingBack');
+  //return this.pdo!.rollBack(transaction);
+  //}
 
   ///
   /// Get the number of active transactions.
@@ -516,7 +526,7 @@ class Connection implements ConnectionInterface {
   /// @param  \Closure  $callback
   /// @return array
   ///
-  dynamic pretend(Function callback) {
+  Future<dynamic> pretend(Function callback) async {
     var loggingQueries = this.loggingQueries;
 
     this.enableQueryLog();
@@ -547,16 +557,20 @@ class Connection implements ConnectionInterface {
   ///
   /// @throws \Illuminate\Database\QueryException
   ///
-  dynamic run(String query, dynamic bindings, Function callback) {
+  Future<dynamic> run(
+      String query,
+      dynamic bindings,
+      Future<dynamic> Function(Connection con, String query, dynamic bindings)
+          callback) async {
     //this.reconnectIfMissingConnection();
 
-    var start = Utils.microtime();
+    //var start = Utils.microtime();
     var result;
     // Here we will run this query. If an exception occurs we'll determine if it was
     // caused by a connection that has been lost. If that is the cause, we'll try
     // to re-establish connection and re-run the query with a fresh connection.
     // try {
-    result = this.runQueryCallback(query, bindings, callback);
+    result = await this.runQueryCallback(query, bindings, callback);
     // } catch (e) {
     //   result =
     //       this.tryAgainIfCausedByLostConnection(e, query, bindings, callback);
@@ -565,9 +579,9 @@ class Connection implements ConnectionInterface {
     // Once we have run the query we will calculate the time that it took to run and
     // then log the query, bindings, and execution time so we will report them on
     // the event that the developer needs them. We'll log time in milliseconds.
-    var time = this.getElapsedTime(start);
+    //var time = this.getElapsedTime(start);
 
-    this.logQuery(query, bindings, time);
+    //this.logQuery(query, bindings, time);
 
     return result;
   }
@@ -582,13 +596,17 @@ class Connection implements ConnectionInterface {
   ///
   /// @throws \Illuminate\Database\QueryException
   ///
-  dynamic runQueryCallback(String query, bindings, Function callback) {
+  Future<dynamic> runQueryCallback(
+      String query,
+      bindings,
+      Future<dynamic> Function(Connection con, String query, dynamic bindings)
+          callback) async {
     // To execute the statement, we'll simply call the callback, which will actually
     // run the SQL against the PDO connection. Then we can calculate the time it
     // took to execute and log the query SQL, bindings and time in our memory.
     var result;
     //try {
-    result = callback(this, query, bindings);
+    result = await callback(this, query, bindings);
     //}
 
     // If an exception occurs when attempting to run a query, we'll format the error
@@ -630,7 +648,8 @@ class Connection implements ConnectionInterface {
   /// @return void
   ///
   dynamic disconnect() {
-    this.setPdo(null).setReadPdo(null);
+    // this.setPdo(null).setReadPdo(null);
+    throw UnimplementedError();
   }
 
   ///
@@ -780,7 +799,7 @@ class Connection implements ConnectionInterface {
   ///
   /// @return \PDO
   ///
-  PDO? getPdo() {
+  PDOExecutionContext getPdo() {
     return this.pdo;
   }
 
@@ -789,7 +808,7 @@ class Connection implements ConnectionInterface {
   ///
   /// @return \PDO
   ///
-  PDO? getReadPdo() {
+  PDOExecutionContext getReadPdo() {
     if (this.transactions >= 1) {
       return this.getPdo();
     }
@@ -803,7 +822,7 @@ class Connection implements ConnectionInterface {
   /// @param  \PDO|null  $pdo
   /// @return $this
   ///
-  dynamic setPdo(PDO? pdo) {
+  dynamic setPdo(PDOExecutionContext pdo) {
     if (this.transactions >= 1) {
       //RuntimeException
       throw Exception("Can't swap PDO instance while within transaction.");
@@ -822,7 +841,6 @@ class Connection implements ConnectionInterface {
   ///
   dynamic setReadPdo($pdo) {
     this.readPdo = $pdo;
-
     return this;
   }
 
@@ -921,8 +939,8 @@ class Connection implements ConnectionInterface {
   /// @param  \Illuminate\Database\Query\Processors\Processor  $processor
   /// @return void
   ///
-  dynamic setPostProcessor(Processor $processor) {
-    this.postProcessor = $processor;
+  dynamic setPostProcessor(Processor processor) {
+    this.postProcessor = processor;
   }
 
   ///
@@ -943,7 +961,7 @@ class Connection implements ConnectionInterface {
   ///
   dynamic setEventDispatcher($events) {
     //this.events = $events;
-    //throw UnimplementedError();
+    throw UnimplementedError();
   }
 
   ///
@@ -960,7 +978,7 @@ class Connection implements ConnectionInterface {
   ///
   /// @return int
   ///
-  dynamic getFetchMode() {
+  int getFetchMode() {
     return this.fetchMode;
   }
 
@@ -970,8 +988,8 @@ class Connection implements ConnectionInterface {
   /// @param  int  $fetchMode
   /// @return int
   ///
-  dynamic setFetchMode($fetchMode) {
-    this.fetchMode = $fetchMode;
+  dynamic setFetchMode(int fetchModeP) {
+    this.fetchMode = fetchModeP;
   }
 
   ///
@@ -1025,7 +1043,7 @@ class Connection implements ConnectionInterface {
   /// @return string
   ///
   String getDatabaseName() {
-    return this.databaseProp;
+    return this._databaseName;
   }
 
   ///
@@ -1035,7 +1053,7 @@ class Connection implements ConnectionInterface {
   /// @return string
   ///
   void setDatabaseName(String database) {
-    this.databaseProp = database;
+    this._databaseName = database;
   }
 
   ///
@@ -1044,7 +1062,7 @@ class Connection implements ConnectionInterface {
   /// @return string
   ///
   dynamic getTablePrefix() {
-    return this.tablePrefix;
+    return this._tablePrefix;
   }
 
   ///
@@ -1054,7 +1072,7 @@ class Connection implements ConnectionInterface {
   /// @return void
   ///
   dynamic setTablePrefix(String prefix) {
-    this.tablePrefix = prefix;
+    this._tablePrefix = prefix;
 
     this.getQueryGrammar().setTablePrefix(prefix);
   }
@@ -1066,7 +1084,7 @@ class Connection implements ConnectionInterface {
   /// @return \Illuminate\Database\Grammar
   ///
   dynamic withTablePrefix(BaseGrammar grammar) {
-    grammar.setTablePrefix(this.tablePrefix);
+    grammar.setTablePrefix(this._tablePrefix);
 
     return grammar;
   }

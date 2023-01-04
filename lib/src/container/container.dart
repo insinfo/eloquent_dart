@@ -214,7 +214,8 @@ class Container {
   Function getClosure(String abstract, String concrete) {
     return ($c, [parameters = const []]) {
       var methodName = (abstract == concrete) ? 'build' : 'make';
-      return Utils.call_method($c, methodName, [concrete, parameters]);
+      //return Utils.call_method($c, methodName, [concrete, parameters]);
+      throw UnimplementedError();
       // return $c->$method(concrete, parameters);
     };
   }
@@ -423,7 +424,8 @@ class Container {
   dynamic refresh(abstract, target, String methodName) {
     return this.rebinding(this.normalize(abstract), (app, instance) {
       // target->{$method}($instance);
-      Utils.call_method(target, methodName, [instance]);
+      //Utils.call_method(target, methodName, [instance]);
+      throw UnimplementedError();
     });
   }
 

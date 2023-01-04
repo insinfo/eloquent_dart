@@ -26,7 +26,7 @@ abstract class ConnectionInterface {
   /// [bindings]  List
   /// @return dynamic
   ///
-  dynamic selectOne(String query, [List bindings = listVoid]);
+  Future<dynamic> selectOne(String query, [List bindings = listVoid]);
 
   ///
   /// Run a select statement against the database.
@@ -35,7 +35,7 @@ abstract class ConnectionInterface {
   /// [bindings]  List
   /// @return array
   ///
-  dynamic select(String query,
+  Future<dynamic> select(String query,
       [List bindings = listVoid, bool useReadPdo = true]);
 
   ///
@@ -45,7 +45,7 @@ abstract class ConnectionInterface {
   /// [bindings]  List
   /// @return bool
   ///
-  bool insert(String query, [List bindings = listVoid]);
+  Future<dynamic> insert(String query, [List bindings = listVoid]);
 
   ///
   /// Run an update statement against the database.
@@ -54,7 +54,7 @@ abstract class ConnectionInterface {
   /// [bindings]  List
   /// @return int
   ///
-  int update(String query, [List bindings = listVoid]);
+  Future<dynamic> update(String query, [List bindings = listVoid]);
 
   ///
   /// Run a delete statement against the database.
@@ -63,7 +63,7 @@ abstract class ConnectionInterface {
   /// [bindings]  List
   /// @return int
   ///
-  int delete(String query, [List bindings = listVoid]);
+  Future<int> delete(String query, [List bindings = listVoid]);
 
   ///
   /// Execute an SQL statement and return the boolean result.
@@ -72,7 +72,7 @@ abstract class ConnectionInterface {
   /// [bindings]  List
   /// @return bool
   ///
-  bool statement(String query, [List bindings = listVoid]);
+  Future<dynamic> statement(String query, [List bindings = listVoid]);
 
   ///
   /// Run an SQL statement and get the number of rows affected.
@@ -81,7 +81,7 @@ abstract class ConnectionInterface {
   /// [bindings]  List
   /// @return int
   ///
-  int affectingStatement(String query, [List bindings = listVoid]);
+  Future<dynamic> affectingStatement(String query, [List bindings = listVoid]);
 
   ///
   /// Run a raw, unprepared query against the PDO connection.
@@ -89,7 +89,7 @@ abstract class ConnectionInterface {
   /// [query]  String
   /// @return bool
   ///
-  bool unprepared(String query);
+  Future<dynamic> unprepared(String query);
 
   ///
   /// Prepare the query bindings for execution.
@@ -107,28 +107,29 @@ abstract class ConnectionInterface {
   ///
   /// @throws \Throwable
   ///
-  dynamic transaction(Function callback);
+  Future<dynamic> transaction(
+      Future<dynamic> Function(Connection ctx) callback);
 
   ///
   /// Start a new database transaction.
   ///
   /// Returns `void`
   ///
-  void beginTransaction();
+  //Future<dynamic> beginTransaction();
 
   ///
   /// Commit the active database transaction.
   ///
   /// Returns `void`
   ///
-  void commit();
+  //Future<dynamic> commit([dynamic transaction]);
 
   ///
   /// Rollback the active database transaction.
   ///
   /// Returns `void`
   ///
-  void rollBack();
+  //Future<dynamic> rollBack([dynamic transaction]);
 
   ///
   /// Get the number of active transactions.
@@ -143,5 +144,5 @@ abstract class ConnectionInterface {
   /// [callback]  Function
   /// Returns `List`
   ///
-  dynamic pretend(Function callback);
+  Future<dynamic> pretend(Function callback);
 }

@@ -14,7 +14,7 @@ class PostgresConnector extends Connector implements ConnectorInterface {
   /// [config] Map<String, dynamic>
   /// @return PostgreSQLConnection \PDO
   ///
-  PDO connect(Map<String, dynamic> config) {
+  Future<PDO> connect(Map<String, dynamic> config) async{
     // First we'll create the basic DSN and connection instance connecting to the
     // using the configuration option specified by the developer. We will also
     // set the default character set on the connections to UTF-8 by default.
@@ -22,11 +22,11 @@ class PostgresConnector extends Connector implements ConnectorInterface {
 
     var options = getOptions(config);
 
-    var connection = createConnection(dsn, config, options);
+    var connection = await createConnection(dsn, config, options);
 
     if (config.containsKey('charset') && config['charset'] != null) {
       var charset = config['charset'];
-      connection.exec("set names '$charset'");
+   await   connection.execute("set names '$charset'");
     }
 
     // Next, we will check to see if a timezone has been specified in this config
@@ -35,7 +35,7 @@ class PostgresConnector extends Connector implements ConnectorInterface {
 
     if (config.containsKey('timezone') && config['timezone'] != null) {
       var timezone = config['timezone'];
-      connection.exec("set time zone '$timezone'");
+    await  connection.execute("set time zone '$timezone'");
     }
 
     // Unlike MySQL, Postgres allows the concept of "schema" and a default schema
@@ -44,7 +44,7 @@ class PostgresConnector extends Connector implements ConnectorInterface {
     if (config.containsKey('schema') && config['schema'] != null) {
       var schema = formatSchema(config['schema']);
 
-      connection.exec("set search_path to $schema");
+    await  connection.execute("set search_path to $schema");
     }
 
     // Postgres allows an application_name to be set by the user and this name is
@@ -54,7 +54,7 @@ class PostgresConnector extends Connector implements ConnectorInterface {
     if (config.containsKey('application_name') &&
         config['application_name'] != null) {
       var applicationName = config['application_name'];
-      connection.exec("set application_name to '$applicationName'");
+     await connection.execute("set application_name to '$applicationName'");
     }
 
     return connection;
@@ -111,8 +111,8 @@ class PostgresConnector extends Connector implements ConnectorInterface {
   /// @return \PDO
   /// Aqui que cria a conexão com o Banco de Dados de fato
   ///
-  PDO createConnection(
-      String dsn, Map<String, dynamic> config, Map<String, dynamic> options) {
+ Future<PDO> createConnection(
+      String dsn, Map<String, dynamic> config, Map<String, dynamic> options) async{
     var username = config['username'];
     var password = config['password'];
     // var host = config['host'];
@@ -126,8 +126,8 @@ class PostgresConnector extends Connector implements ConnectorInterface {
     //     );
     // }
 
-    var pdo = PDO(dsn, username, password, options);
-    //await connection.open();
+    var pdo = new PDO(dsn, username, password, options);
+    await pdo.connect();
 
     return pdo;
   }

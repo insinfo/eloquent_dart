@@ -1,6 +1,81 @@
 import 'package:eloquent/eloquent.dart';
 
+import '../join_clause.dart';
+
 class QueryGrammar extends BaseGrammar {
+  /// chama um determinado metodo com base no nome
+  /// este metodo é para evitar reflexão dart:mirror
+  dynamic callMethod(
+    String methodName,
+    List<dynamic> positionalArguments, [
+    Map<Symbol, dynamic> namedArguments = const <Symbol, dynamic>{},
+  ]) {
+    switch (methodName) {
+      case 'compileColumns':
+        return compileColumns(positionalArguments[0], positionalArguments[1]);
+      case 'compileFrom':
+        return compileFrom(positionalArguments[0], positionalArguments[1]);
+      case 'compileWheres':
+        return compileWheres(positionalArguments[0]);
+      case 'compileLimit':
+        return compileLimit(positionalArguments[0], positionalArguments[1]);
+      case 'compileOffset':
+        return compileOffset(positionalArguments[0], positionalArguments[1]);
+      //
+      case 'compileGroups':
+        return compileGroups(positionalArguments[0], positionalArguments[1]);
+      case 'compileHaving':
+        return compileHaving(positionalArguments[0]);
+      case 'compileOrders':
+        return compileOrders(positionalArguments[0], positionalArguments[1]);
+      case 'compileAggregate':
+        return compileAggregate(positionalArguments[0], positionalArguments[1]);
+      case 'compileJoins':
+        return compileJoins(positionalArguments[0], positionalArguments[1]);
+
+      //wheres
+      case 'whereNested':
+        return whereNested(positionalArguments[0], positionalArguments[1]);
+      case 'whereSub':
+        return whereSub(positionalArguments[0], positionalArguments[1]);
+      case 'whereSub':
+        return whereSub(positionalArguments[0], positionalArguments[1]);
+      case 'whereBasic':
+        return whereBasic(positionalArguments[0], positionalArguments[1]);
+      case 'whereBetween':
+        return whereBetween(positionalArguments[0], positionalArguments[1]);
+      case 'whereExists':
+        return whereExists(positionalArguments[0], positionalArguments[1]);
+      case 'whereNotExists':
+        return whereNotExists(positionalArguments[0], positionalArguments[1]);
+      case 'whereIn':
+        return whereIn(positionalArguments[0], positionalArguments[1]);
+      case 'whereNotIn':
+        return whereNotIn(positionalArguments[0], positionalArguments[1]);
+      case 'whereInSub':
+        return whereInSub(positionalArguments[0], positionalArguments[1]);
+      case 'whereNotInSub':
+        return whereNotInSub(positionalArguments[0], positionalArguments[1]);
+      case 'whereNull':
+        return whereNull(positionalArguments[0], positionalArguments[1]);
+      case 'whereNotNull':
+        return whereNotNull(positionalArguments[0], positionalArguments[1]);
+      case 'whereDate':
+        return whereDate(positionalArguments[0], positionalArguments[1]);
+      case 'whereDay':
+        return whereDay(positionalArguments[0], positionalArguments[1]);
+      case 'whereMonth':
+        return whereMonth(positionalArguments[0], positionalArguments[1]);
+      case 'whereYear':
+        return whereYear(positionalArguments[0], positionalArguments[1]);
+      case 'whereRaw':
+        return whereRaw(positionalArguments[0], positionalArguments[1]);
+
+      default:
+        throw Exception("method '$methodName' not exist in QueryGrammar class");
+    }
+  }
+
   ///
   ///  The components that make up a select clause.
   ///
@@ -57,17 +132,16 @@ class QueryGrammar extends BaseGrammar {
       // see if that component exists. If it does we'll just call the compiler
       // function for the component which is responsible for making the SQL.
       if (!Utils.is_null_or_empty(query.getProperty(component))) {
-        var methodName = 'compile' + Utils.ucfirst(component);
+        final methodName = 'compile' + Utils.ucfirst(component);
 
-        print('QueryGrammar@compileComponents methodName: $methodName');
-        print('QueryGrammar@compileComponents this: ${this}');
-        print('QueryGrammar@compileComponents property: ${component}');
+        //  print('QueryGrammar@compileComponents methodName: $methodName');
+        //print('QueryGrammar@compileComponents this: ${this}');
+        //print('QueryGrammar@compileComponents property: ${component}');
         var extraParam = query.getProperty(component);
-        print('QueryGrammar@compileComponents extraParam $extraParam');
+        //print('QueryGrammar@compileComponents extraParam $extraParam');
 
-        sql[component] =
-            Utils.call_method(this, methodName, [query, extraParam]);
-        // this.$method($query, $query->$component);
+        //sql[component] = Utils.call_method(this, methodName, [query, extraParam]);
+        sql[component] = callMethod(methodName, [query, extraParam]);
       }
     }
 
@@ -132,38 +206,38 @@ class QueryGrammar extends BaseGrammar {
   ///  @param  array  $joins
   ///  @return String
   ///
-  String compileJoins(QueryBuilder $query, $joins) {
-    // $sql = [];
+  String compileJoins(QueryBuilder query, List<JoinClause> joins) {
+    //print('compileJoins joins: $joins');
+    var sql = [];
 
-    // foreach ($joins as $join) {
-    //     $table = this.wrapTable($join->table);
+    for (var join in joins) {
+      var table = this.wrapTable(join.table);
 
-    //     // First we need to build all of the "on" clauses for the join. There may be many
-    //     // of these clauses so we will need to iterate through each one and build them
-    //     // separately, then we'll join them up into a single string when we're done.
-    //     $clauses = [];
+      // First we need to build all of the "on" clauses for the join. There may be many
+      // of these clauses so we will need to iterate through each one and build them
+      // separately, then we'll join them up into a single string when we're done.
+      dynamic clauses = [];
 
-    //     foreach ($join->clauses as $clause) {
-    //         $clauses[] = this.compileJoinConstraint($clause);
-    //     }
+      for (var clause in join.clauses) {
+        clauses.add(this.compileJoinConstraint(clause));
+      }
 
-    //     // Once we have constructed the clauses, we'll need to take the boolean connector
-    //     // off of the first clause as it obviously will not be required on that clause
-    //     // because it leads the rest of the clauses, thus not requiring any boolean.
-    //     $clauses[0] = this.removeLeadingBoolean($clauses[0]);
+      // Once we have constructed the clauses, we'll need to take the boolean connector
+      // off of the first clause as it obviously will not be required on that clause
+      // because it leads the rest of the clauses, thus not requiring any boolean.
+      clauses[0] = this.removeLeadingBoolean(clauses[0]);
 
-    //     $clauses = implode(' ', $clauses);
+      clauses = Utils.implode(' ', clauses);
 
-    //     $type = $join->type;
+      var type = join.type;
 
-    //     // Once we have everything ready to go, we will just concatenate all the parts to
-    //     // build the final join statement SQL for the query and we can then return the
-    //     // final clause back to the callers as a single, stringified join statement.
-    //     $sql[] = "$type join $table on $clauses";
-    // }
+      // Once we have everything ready to go, we will just concatenate all the parts to
+      // build the final join statement SQL for the query and we can then return the
+      // final clause back to the callers as a single, stringified join statement.
+      sql.add("$type join $table on $clauses");
+    }
 
-    // return Utils.implode(' ', $sql);
-    return '';
+    return Utils.implode(' ', sql);
   }
 
   ///
@@ -172,26 +246,26 @@ class QueryGrammar extends BaseGrammar {
   ///  @param  array  $clause
   ///  @return String
   ///
-  String compileJoinConstraint(dynamic $clause) {
-    // if ($clause['nested']) {
-    //     return this.compileNestedJoinConstraint($clause);
-    // }
+  String compileJoinConstraint(Map<String, dynamic> clause) {
+    if (clause['nested']) {
+      return this.compileNestedJoinConstraint(clause);
+    }
+   
+    var first = this.wrap(clause['first']);
+    var second;
+    if (clause['where']) {       
+      if (clause['operator'] == 'in' || clause['operator'] == 'not in') {
+        second = '(' +
+            Utils.implode(', ', Utils.array_fill(0, clause['second'], '?')) +
+            ')';
+      } else {
+        second = '?';
+      }
+    } else {
+      second = this.wrap(clause['second']);
+    }
 
-    // $first = this.wrap($clause['first']);
-
-    // if ($clause['where']) {
-    //     if ($clause['operator'] === 'in' || $clause['operator'] === 'not in') {
-    //         $second = '('.implode(', ', array_fill(0, $clause['second'], '?')).')';
-    //     } else {
-    //         $second = '?';
-    //     }
-    // } else {
-    //     $second = this.wrap($clause['second']);
-    // }
-
-    // return "{$clause['boolean']} $first {$clause['operator']} $second";
-
-    return '';
+    return "${clause['boolean']} $first ${clause['operator']} $second";
   }
 
   ///
@@ -200,7 +274,7 @@ class QueryGrammar extends BaseGrammar {
   ///  @param  array  $clause
   ///  @return String
   ///
-  String compileNestedJoinConstraint(dynamic $clause) {
+  String compileNestedJoinConstraint(dynamic clause) {
     // $clauses = [];
 
     // foreach ($clause['join']->clauses as $nestedClause) {
@@ -222,6 +296,7 @@ class QueryGrammar extends BaseGrammar {
   ///  @return String
   ///
   String compileWheres(QueryBuilder query) {
+    //print('QueryGrammar@compileWheres');
     var sql = <String>[];
 
     if (Utils.array_is_empty(query.wheresProp)) {
@@ -232,11 +307,12 @@ class QueryGrammar extends BaseGrammar {
     // for actually creating the where clauses SQL. This helps keep the code nice
     // and maintainable since each clause has a very small method that it uses.
     for (var where in query.wheresProp) {
-      var methodName = "where${where['type']}";
+      final methodName = "where${where['type']}";
+      //print('QueryGrammar@compileWheres methodName: $methodName');
       //call whereBasic
-      sql.add(where['boolean'] +
-          ' ' +
-          Utils.call_method(this, methodName, [query, where]));
+      //sql.add(where['boolean'] +  ' ' +  Utils.call_method(this, methodName, [query, where]));
+
+      sql.add(where['boolean'] + ' ' + callMethod(methodName, [query, where]));
     }
 
     // If we actually have some where clauses, we will strip off the first boolean
@@ -490,8 +566,8 @@ class QueryGrammar extends BaseGrammar {
   ///  @param  array  $groups
   ///  @return String
   ///
-  String compileGroups(QueryBuilder $query, $groups) {
-    return 'group by ' + this.columnize($groups);
+  String compileGroups(QueryBuilder query, groups) {
+    return 'group by ' + this.columnize(groups);
   }
 
   ///
@@ -506,7 +582,7 @@ class QueryGrammar extends BaseGrammar {
     //TODO implementar havings
     // var sql = implode(' ', array_map([$this, 'compileHaving'], $havings));
     // return 'having '+this.removeLeadingBoolean(sql);
-    return '';
+    throw UnimplementedError();
   }
 
   ///
@@ -613,7 +689,7 @@ class QueryGrammar extends BaseGrammar {
 
     // return ltrim($sql);
 
-    return '';
+    throw UnimplementedError();
   }
 
   ///
@@ -647,32 +723,21 @@ class QueryGrammar extends BaseGrammar {
   ///  @param [values] List<Map<String,dynamic>> | Map<String,dynamic>
   ///  @return String
   ///
-  String compileInsert(QueryBuilder query, dynamic values) {
+  String compileInsert(QueryBuilder query, Map<String, dynamic> values) {
     // Essentially we will force every insert to be treated as a batch insert which
     // simply makes creating the SQL easier for us since we can utilize the same
     // basic routine regardless of an amount of records given to us to insert.
     var table = this.wrapTable(query.fromProp);
 
-    if (!Utils.is_array(values)) {
-      values = [values];
-    }
-
-    //TODO checar isso
-
-    // var columns = this.columnize(array_keys(values));
-
-    // // We need to build a list of parameter place-holders of values that are bound
-    // // to the query. Each insert should have the exact same amount of parameter
-    // // bindings so we will loop through the record and parameterize them all.
-    // $parameters = [];
-
-    // foreach ($values as $record) {
-    //     $parameters[] = '('.this.parameterize($record).')';
+    // if (!Utils.is_array(values)) {
+    //   values = [values];
     // }
-
-    // var parameters = Utils.implode(', ', parameters);
-
-    return "insert into $table (columns) values parameters";
+    var columns = this.columnize(values.keys.toList());
+    // We need to build a list of parameter place-holders of values that are bound
+    // to the query. Each insert should have the exact same amount of parameter
+    // bindings so we will loop through the record and parameterize them all.
+    var parameters = this.parameterize(values.values.toList());
+    return "insert into $table ($columns) values ($parameters)";
   }
 
   ///
@@ -683,7 +748,8 @@ class QueryGrammar extends BaseGrammar {
   ///  @param  String  $sequence
   ///  @return String
   ///
-  String compileInsertGetId(QueryBuilder query, values, String? sequence) {
+  String compileInsertGetId(
+      QueryBuilder query, Map<String, dynamic> values, String? sequence) {
     return this.compileInsert(query, values);
   }
 
@@ -694,36 +760,30 @@ class QueryGrammar extends BaseGrammar {
   ///  @param  array  $values
   ///  @return String
   ///
-  String compileUpdate(QueryBuilder query, List values) {
-    var table = this.wrapTable(query.from);
+  String compileUpdate(QueryBuilder query, Map<String, dynamic> values) {
+    var table = this.wrapTable(query.fromProp);
 
     // Each one of the columns in the update statements needs to be wrapped in the
     // keyword identifiers, also a place-holder needs to be created for each of
     // the values in the list of bindings so we can make the sets statements.
-    var columns = [];
-
-    // foreach ($values as $key => $value) {
-    //     $columns[] = this.wrap($key).' = '.this.parameter($value);
-    // }
-
-    // $columns = implode(', ', $columns);
-
+    dynamic columns = [];
+    for (var entry in values.entries) {
+      columns.add(this.wrap(entry.key) + ' = ' + this.parameter(entry.value));
+    }
+    columns = Utils.implode(', ', columns);
     // // If the query has any "join" clauses, we will setup the joins on the builder
     // // and compile them so we can attach them to this update, as update queries
     // // can get join statements to attach to other tables when they're needed.
-    // if (isset($query->joins)) {
-    //     $joins = ' '.this.compileJoins($query, $query->joins);
-    // } else {
-    //     $joins = '';
-    // }
+    var joins = '';
+    if (query.joinsProp.isNotEmpty) {
+      joins = ' ' + this.compileJoins(query, query.joinsProp);
+    }
 
     // // Of course, update queries may also be constrained by where clauses so we'll
     // // need to compile the where clauses and attach it to the query so only the
     // // intended records are updated by the SQL statements we generate to run.
-    // $where = this.compileWheres($query);
-
-    // returnUtils.trim("update {$table}{$joins} set $columns $where");
-    return '';
+    var where = this.compileWheres(query);
+    return Utils.trim("update $table$joins set $columns $where");
   }
 
   ///
@@ -734,10 +794,8 @@ class QueryGrammar extends BaseGrammar {
   ///
   String compileDelete(QueryBuilder query) {
     var table = this.wrapTable(query.fromProp);
-
     var where =
         Utils.is_array(query.wheresProp) ? this.compileWheres(query) : '';
-
     return Utils.trim("delete from $table " + where);
   }
 

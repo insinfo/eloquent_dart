@@ -1,9 +1,10 @@
 //
 import 'package:eloquent/eloquent.dart';
 import 'package:eloquent/src/container/container.dart';
+import 'package:eloquent/src/pdo/pdo_constants.dart';
 import 'package:eloquent/src/schema/schema_builder.dart';
 
-import '../support/traits/capsule_manager_trait.dart';
+
 
 //with CapsuleManagerTrait
 class Manager {
@@ -83,7 +84,6 @@ class Manager {
     // options in the container "config" binding. This will make the database
     // manager behave correctly since all the correct binding are in place.
     this.setupDefaultConfiguration();
-
     this.setupManager();
   }
 
@@ -93,7 +93,7 @@ class Manager {
   ///  @return void
   ///
   void setupDefaultConfiguration() {
-    this.container['config']['database.fetch'] = 5; //'PDO::FETCH_OBJ';
+    this.container['config']['database.fetch'] = PDO_FETCH_ASSOC; 
     this.container['config']['database.default'] = 'default';
   }
 
@@ -104,7 +104,6 @@ class Manager {
   ///
   void setupManager() {
     var factory = ConnectionFactory(this.container);
-
     this.manager = DatabaseManager(this.container, factory);
   }
 
@@ -114,7 +113,7 @@ class Manager {
   ///  @param  string  $connection
   ///  @return \Illuminate\Database\Connection
   ///
-  Connection connection([String? connection]) {
+  Future<Connection> connection([String? connection]) {
     return instance!.getConnection(connection);
   }
 
@@ -125,8 +124,8 @@ class Manager {
   ///  @param  string  $connection
   ///  @return \Illuminate\Database\Query\Builder
   ///
-  QueryBuilder table(String table, [String? connectionP]) {
-    var com = instance!.connection(connectionP);
+  Future<QueryBuilder> table(String table, [String? connectionP]) async {
+    var com = await instance!.connection(connectionP);
     return com.table(table);
   }
 
@@ -136,8 +135,9 @@ class Manager {
   ///  @param  string  $connection
   ///  @return \Illuminate\Database\Schema\Builder
   ///
-  SchemaBuilder schema([String? connection]) {
-    return instance!.connection(connection).getSchemaBuilder();
+  Future<SchemaBuilder> schema([String? connectionP]) async {
+    var com = await instance!.connection(connectionP);
+    return com.getSchemaBuilder();
   }
 
   ///
@@ -146,7 +146,7 @@ class Manager {
   ///  @param  string  $name
   ///  @return \Illuminate\Database\Connection
   ///
-  Connection getConnection([String? name]) {
+  Future<Connection> getConnection([String? name]) {
     return this.manager.connection(name);
   }
 

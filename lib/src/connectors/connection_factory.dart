@@ -24,7 +24,8 @@ class ConnectionFactory {
   /// @param  string  $name
   /// @return \Illuminate\Database\Connection
   ///
-  Connection make(Map<String, dynamic> configP, [String name = 'default']) {
+  Future<Connection> make(Map<String, dynamic> configP,
+      [String name = 'default']) {
     var config = parseConfig(configP, name);
 
     if (config['read'] != null) {
@@ -40,10 +41,10 @@ class ConnectionFactory {
   /// @param  array  $config
   /// @return \Illuminate\Database\Connection
   ///
-  Connection createSingleConnection(Map<String, dynamic> config) {
+  Future<Connection> createSingleConnection(Map<String, dynamic> config) async {
     var conC = createConnector(config);
 
-    var pdo = conC.connect(config);
+    var pdo = await conC.connect(config);
 
     return createConnection(
         config['driver'], pdo, config['database'], config['prefix'], config);
@@ -55,9 +56,10 @@ class ConnectionFactory {
   /// @param  array  $config
   /// @return \Illuminate\Database\Connection
   ///
-  Connection createReadWriteConnection(Map<String, dynamic> config) {
-    var connection = createSingleConnection(getWriteConfig(config));
-    var pdo = createReadPdo(config);
+  Future<Connection> createReadWriteConnection(
+      Map<String, dynamic> config) async {
+    var connection = await createSingleConnection(getWriteConfig(config));
+    var pdo = await createReadPdo(config);
     connection.setReadPdo(pdo);
     return connection;
   }
@@ -68,7 +70,7 @@ class ConnectionFactory {
   /// @param  array  $config
   /// @return \PDO
   ///
-  dynamic createReadPdo(Map<String, dynamic> config) async {
+  Future<PDO> createReadPdo(Map<String, dynamic> config) async {
     var readConfig = getReadConfig(config);
 
     return createConnector(readConfig).connect(readConfig);
