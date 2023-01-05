@@ -8,6 +8,7 @@ eloquent 5.2 query builder port from PHP Laravel to dart
 
 https://laravel.com/docs/5.2/queries
 
+for now it only works with PostgreSQL
 
 
 ## Creating a connection executing a simple select

@@ -1,6 +1,6 @@
 name: eloquent
-version: 1.0.0
-descriptio: eloquent query builder port from PHP Laravel
+version: 1.1.0
+description: eloquent query builder port from PHP Laravel
 homepage: https://github.com/insinfo/eloquent_dart
 
 environment:
@@ -8,7 +8,7 @@ environment:
 
 dependencies:  
   intl: '>=0.18.0 <3.0.0'
-  dargres: ^2.2.1 
+  dargres: ^2.2.2 
   #dargres: 
     #path: ../dargres
 

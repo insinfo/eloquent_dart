@@ -11,4 +11,7 @@ abstract class PDOExecutionContext {
   Future<PDOStatement> prepareStatement(String query, dynamic params);
   Future<dynamic> executeStatement(PDOStatement statement, [int? fetchMode]);
   Future<dynamic> query(String query, [int? fetchMode]);
+
+
+  Future<dynamic> queryUnnamed(String query, dynamic params, [int? fetchMode]);
 }

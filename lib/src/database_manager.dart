@@ -46,7 +46,7 @@ class DatabaseManager implements ConnectionResolverInterface {
   /// @param  string  $name
   /// @return \Illuminate\Database\Connection
   ///
-  Future<Connection> connection([String? nameP])async {
+  Future<Connection> connection([String? nameP]) async {
     var re = this.parseConnectionName(nameP);
 
     var name = re[0];
@@ -56,7 +56,7 @@ class DatabaseManager implements ConnectionResolverInterface {
     // set the "fetch mode" for PDO which determines the query return types.
 
     if (!Utils.isset(this.connectionsProp[name])) {
-      var connection =await this.makeConnection(name);
+      var connection = await this.makeConnection(name);
 
       this.setPdoForType(connection, type);
 
@@ -98,11 +98,11 @@ class DatabaseManager implements ConnectionResolverInterface {
   /// @param  string  $name
   /// @return void
   ///
-  Future<void> disconnect([String? name])async {
+  Future<void> disconnect([String? name]) async {
     name = name ?? this.getDefaultConnection();
 
     if (Utils.isset(this.connectionsProp[name])) {
-      this.connectionsProp[name].disconnect();
+      await this.connectionsProp[name].disconnect();
     }
   }
 
@@ -129,8 +129,8 @@ class DatabaseManager implements ConnectionResolverInterface {
   /// @param  string  $name
   /// @return \Illuminate\Database\Connection
   ///
- Future<Connection>   refreshPdoConnections(String name)async {
-    var fresh =await this.makeConnection(name);
+  Future<Connection> refreshPdoConnections(String name) async {
+    var fresh = await this.makeConnection(name);
 
     return this
         .connectionsProp[name]
@@ -144,7 +144,7 @@ class DatabaseManager implements ConnectionResolverInterface {
   /// @param  string  $name
   /// @return \Illuminate\Database\Connection
   ///
-  Future<Connection>  makeConnection(String name) {
+  Future<Connection> makeConnection(String name) {
     var config = this.getConfig(name);
 
     // First we will check by the connection name to see if an extension has been
@@ -183,8 +183,8 @@ class DatabaseManager implements ConnectionResolverInterface {
     // Here we'll set a reconnector callback. This reconnector can be any callable
     // so we will set a Closure to reconnect from this manager with the name of
     // the connection, which will allow us to reconnect from the connections.
-    connection.setReconnector(($connection) {
-      this.reconnect($connection.getName());
+    connection.setReconnector((con) async {
+      await this.reconnect(con.getName());
     });
 
     return connection;

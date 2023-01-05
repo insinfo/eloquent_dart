@@ -5,7 +5,7 @@ import 'pdo/pdo_constants.dart';
 import 'pdo/pdo_execution_context.dart';
 
 /// posgresql Connection implementation
-class Connection implements ConnectionInterface {
+class Connection with DetectsLostConnections implements ConnectionInterface {
   ///
   /// The active PDO connection.
   ///
@@ -25,7 +25,7 @@ class Connection implements ConnectionInterface {
   ///
   /// @var callable
   ///
-  Function? reconnector;
+  Future<dynamic> Function(Connection)? reconnector;
 
   ///
   /// The query grammar implementation.
@@ -276,20 +276,16 @@ class Connection implements ConnectionInterface {
       if (me.pretending()) {
         return [];
       }
-
       // For select statements, we'll simply execute the query and return an array
       // of the database result set. Each element in the array will be a single
       // row from the database table, and will either be an array or objects.
       var pdoL = me.getPdoForSelect(useReadPdo);
       var params = me.prepareBindings(bindings);
       //print('Connection@select inside callback');
-      var statement = await pdoL.prepareStatement(query, params);
-      return pdoL.executeStatement(statement, me.getFetchMode());
+      // var statement = await pdoL.prepareStatement(query, params);
+      // return pdoL.executeStatement(statement, me.getFetchMode());
+      return await pdoL.queryUnnamed(query, params, me.getFetchMode());
     });
-    // var pdoL = this.getPdoForSelect(useReadPdo);
-    // var params = this.prepareBindings(bindings);  
-    // var statement = await pdoL.prepareStatement(query, params);
-    // return pdoL.executeStatement(statement, this.getFetchMode());
   }
 
   ///
@@ -569,12 +565,15 @@ class Connection implements ConnectionInterface {
     // Here we will run this query. If an exception occurs we'll determine if it was
     // caused by a connection that has been lost. If that is the cause, we'll try
     // to re-establish connection and re-run the query with a fresh connection.
-    // try {
-    result = await this.runQueryCallback(query, bindings, callback);
-    // } catch (e) {
-    //   result =
-    //       this.tryAgainIfCausedByLostConnection(e, query, bindings, callback);
-    // }
+    try {
+     // print('Connection@run');
+      result = await this.runQueryCallback(query, bindings, callback);
+      //print('Connection@run $result');
+    } catch (e) {
+      //print('Connection@run error');
+      result = await this
+          .tryAgainIfCausedByLostConnection(e, query, bindings, callback);
+    }
 
     // Once we have run the query we will calculate the time that it took to run and
     // then log the query, bindings, and execution time so we will report them on
@@ -630,16 +629,18 @@ class Connection implements ConnectionInterface {
   ///
   /// @throws \Illuminate\Database\QueryException
   ///
-  dynamic tryAgainIfCausedByLostConnection(
-      dynamic e, String query, bindings, Function callback) {
-    // if (this.causedByLostConnection($e->getPrevious())) {
-    //     this.reconnect();
-
-    //     return this.runQueryCallback(query, bindings, callback);
-    // }
-
-    // throw e;
-    throw UnimplementedError();
+  Future<dynamic> tryAgainIfCausedByLostConnection(dynamic e, String query,
+      bindings, Future<dynamic> Function(Connection, String, dynamic) callback,
+      {int delay = 2000}) async {
+    if (this.causedByLostConnection(e)) {
+      await Future.delayed(Duration(milliseconds: delay));
+      //print('tentando reconectar');
+      await this.reconnect();
+      return await this.runQueryCallback(query, bindings, callback);
+    }
+    //print('tryAgainIfCausedByLostConnection');
+    throw e;
+ 
   }
 
   ///
@@ -647,9 +648,10 @@ class Connection implements ConnectionInterface {
   ///
   /// @return void
   ///
-  dynamic disconnect() {
+  Future<void> disconnect() async {
     // this.setPdo(null).setReadPdo(null);
-    throw UnimplementedError();
+    //throw UnimplementedError();
+    //print('Connection@disconnect');
   }
 
   ///
@@ -659,9 +661,10 @@ class Connection implements ConnectionInterface {
   ///
   /// @throws \LogicException
   ///
-  dynamic reconnect() {
-    if (this.reconnector is Function) {
-      return this.reconnector!(this);
+  Future<void> reconnect() async {
+    //print('Connection@reconnect() ${this.reconnector}');
+    if (this.reconnector != null) {
+      return await this.reconnector!(this);
     }
 
     throw LogicException('Lost connection and no reconnector available.');
@@ -672,9 +675,9 @@ class Connection implements ConnectionInterface {
   ///
   /// @return void
   ///
-  void reconnectIfMissingConnection() {
+  Future<void> reconnectIfMissingConnection() async {
     if (Utils.is_null(this.getPdo()) || Utils.is_null(this.getReadPdo())) {
-      this.reconnect();
+      await this.reconnect();
     }
   }
 
@@ -850,9 +853,8 @@ class Connection implements ConnectionInterface {
   /// @param  callable  $reconnector
   /// @return $this
   ///
-  dynamic setReconnector(Function reconnectorP) {
+  dynamic setReconnector(Future<dynamic> Function(Connection) reconnectorP) {
     this.reconnector = reconnectorP;
-
     return this;
   }
 
@@ -871,9 +873,11 @@ class Connection implements ConnectionInterface {
   /// @param  String  $option
   /// @return mixed
   ///
-  dynamic getConfig($option) {
+  dynamic getConfig(String option) {
     //return Arr::get(this.config, $option);
-    throw UnimplementedError();
+    //print('getConfig ${this._config}');
+    //throw UnimplementedError();
+    return this._config[option];
   }
 
   ///

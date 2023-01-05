@@ -21,6 +21,8 @@ class PDO extends PDOExecutionContext {
   String host = 'localhost';
   dynamic attributes;
 
+  int rowsAffected = 0;
+
   /// Creates a PDO instance representing a connection to a database
   /// Example
   ///
@@ -139,7 +141,7 @@ class PDO extends PDOExecutionContext {
   /// and meta information. Also, calling PDO::prepare() and PDOStatement::execute()
   /// helps to prevent SQL injection attacks by eliminating the need to
   /// manually quote and escape the parameters.
-  Future<PDOStatement> prepareStatement(String query, dynamic params) async {    
+  Future<PDOStatement> prepareStatement(String query, dynamic params) async {
     final postgresQuery = await connection!.prepareStatement(query, params,
         placeholderIdentifier: PlaceholderIdentifier.onlyQuestionMark);
     return PDOStatement(postgresQuery);
@@ -149,6 +151,20 @@ class PDO extends PDOExecutionContext {
       [int? fetchMode]) async {
     var results = await connection!.executeStatement(statement.postgresQuery!);
     statement.rowsAffected = results.rowsAffected.value;
+    switch (fetchMode) {
+      case PDO_FETCH_ASSOC:
+        return results.toMaps();
+      case PDO_FETCH_ASSOC:
+        return results;
+    }
+    return results;
+  }
+
+  Future<dynamic> queryUnnamed(String query, dynamic params,
+      [int? fetchMode]) async {
+    var results = await connection!.queryUnnamed(query, params,
+        placeholderIdentifier: PlaceholderIdentifier.onlyQuestionMark);        
+    rowsAffected = results.rowsAffected.value;
     switch (fetchMode) {
       case PDO_FETCH_ASSOC:
         return results.toMaps();
