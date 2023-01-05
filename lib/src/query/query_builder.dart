@@ -1454,12 +1454,11 @@ class QueryBuilder {
   ///
   /// Execute the query and get the first result.
   ///
-  /// @param  array   $columns
-  /// @return mixed|static
+  /// [columns] columns 
+  /// `Return` Map<String,dynamic> or List<dynamic>
   ///
   Future<dynamic> first([List<String> columns = const ['*']]) async {
-    var results = await this.take(1).get(columns);
-
+    var results = await this.take(1).get(columns);  
     return Utils.count(results) > 0 ? Utils.reset(results) : null;
   }
 

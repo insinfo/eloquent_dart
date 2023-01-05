@@ -282,7 +282,7 @@ class Connection implements ConnectionInterface {
       // row from the database table, and will either be an array or objects.
       var pdoL = me.getPdoForSelect(useReadPdo);
       var params = me.prepareBindings(bindings);
-      print('Connection@select inside callback');
+      //print('Connection@select inside callback');
       var statement = await pdoL.prepareStatement(query, params);
       return pdoL.executeStatement(statement, me.getFetchMode());
     });

@@ -2,6 +2,11 @@ library eloquent;
 
 export 'src/query/expression.dart';
 export 'src/query/query_builder.dart';
+
+export 'src/query/join_clause.dart';
+
+
+
 export 'src/grammar.dart'; //BaseGrammar
 export 'src/query/grammars/query_grammar.dart';
 export 'src/query/processors/processor.dart';

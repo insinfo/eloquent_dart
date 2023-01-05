@@ -1,0 +1,78 @@
+# This workflow uses actions that are not certified by GitHub.
+# They are provided by a third-party and are governed by
+# separate terms of service, privacy policy, and support
+# documentation.
+name: Dart
+run-name: ${{ github.actor }} is testing Dart
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+#env: 
+  #DB_HOST: localhost
+  #DB_USERNAME: sisadmin
+  #DB_PASSWORD: s1sadm1n    
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        os: [ubuntu-22.04]
+        sdk: [2.12.4]
+
+    #services:
+      #postgres:
+        #image: postgres:11
+        #env:
+          #POSTGRES_DB: banco_teste
+          #POSTGRES_PASSWORD: sisadmin
+          #POSTGRES_USER: s1sadm1n
+        #ports:
+          #- 5432:5432
+        # Set health checks to wait until postgres has started
+        #options: >-
+         # --health-cmd pg_isready
+          #--health-interval 10s
+          #--health-timeout 5s
+         # --health-retries 5
+   # sudo cp ci/pg_hba.conf /etc/postgresql/9.6/main/pg_hba.conf
+    steps:
+      - name: Start PostgreSQL on Ubuntu
+        run: |
+          sudo lsb_release -a
+          sudo systemctl start postgresql.service          
+          pg_isready
+      - name: Create additional user
+        run: |
+          sudo -u postgres psql --version 
+          sudo -u postgres psql -t -P format=unaligned -c 'show hba_file';
+          sudo -u postgres psql --command="SELECT * FROM pg_hba_file_rules();"
+          sudo -u postgres psql --command="SHOW password_encryption;"   
+          sudo -u postgres psql --command="CREATE ROLE sisadmin WITH LOGIN SUPERUSER PASSWORD 's1sadm1n'" --command="\du"
+          sudo -u postgres psql --command="SET password_encryption = 'md5';" --command="CREATE ROLE usermd5 WITH LOGIN SUPERUSER PASSWORD 's1sadm1n'" --command="\du"
+          sudo -u postgres psql --command="SET password_encryption = 'scram-sha-256';" --command="CREATE ROLE userscram WITH LOGIN SUPERUSER PASSWORD 's1sadm1n'" --command="\du"
+          sudo -u postgres psql --command="SELECT rolname,rolpassword FROM pg_authid" 
+      - name: Create additional database
+        run: |
+          sudo -u postgres createdb banco_teste --owner=sisadmin 
+          sudo -u postgres createdb sistemas --owner=sisadmin 
+          PGPASSWORD=s1sadm1n     
+      - uses: actions/checkout@v2
+      - name: Copy pg_hba
+        run: |          
+          sudo ls          
+          sudo cp ci/pg_hba.conf /etc/postgresql/14/main/pg_hba.conf
+          sudo systemctl restart postgresql.service
+          pg_isready
+
+      - uses: dart-lang/setup-dart@v1.3
+        with:
+          sdk: ${{ matrix.sdk }}
+      - name: Install dependencies
+        run: dart pub get
+    
+      - name: Run tests
+        run: dart run test --concurrency 1  --chain-stack-traces
