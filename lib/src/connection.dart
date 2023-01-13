@@ -284,7 +284,7 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
       //print('Connection@select inside callback');
       // var statement = await pdoL.prepareStatement(query, params);
       // return pdoL.executeStatement(statement, me.getFetchMode());
-      return await pdoL.queryUnnamed(query, params, me.getFetchMode());
+      return pdoL.queryUnnamed(query, params, me.getFetchMode());
     });
   }
 
@@ -566,7 +566,7 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
     // caused by a connection that has been lost. If that is the cause, we'll try
     // to re-establish connection and re-run the query with a fresh connection.
     try {
-     // print('Connection@run');
+      // print('Connection@run');
       result = await this.runQueryCallback(query, bindings, callback);
       //print('Connection@run $result');
     } catch (e) {
@@ -640,7 +640,6 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
     }
     //print('tryAgainIfCausedByLostConnection');
     throw e;
- 
   }
 
   ///

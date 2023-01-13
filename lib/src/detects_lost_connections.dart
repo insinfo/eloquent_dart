@@ -9,14 +9,14 @@ mixin DetectsLostConnections {
   ///
   bool causedByLostConnection(Exception e) {
     final message = '$e';
-    //TODO checar isso para outros cenarios
+    //TODO revise isso para outros cenários
     final isR = Utils.string_contains(message, [
       '57P',//for posgresql restart
-      'server has gone away',
-      'no connection to the server',
-      'Lost connection',
-      'is dead or not enabled',
-      'Error while sending',
+      // 'server has gone away',
+      // 'no connection to the server',
+      // 'Lost connection',
+      // 'is dead or not enabled',
+      // 'Error while sending',
     ]);
     //print('causedByLostConnection $isR');
     return isR;
