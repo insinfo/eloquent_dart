@@ -110,9 +110,9 @@ class QueryGrammar extends BaseGrammar {
       query.columnsProp = ['*'];
     }
     var compiledComps = compileComponents(query);
-    print('compileSelect compiledComps $compiledComps');
+   // print('compileSelect compiledComps $compiledComps');
     var sql = Utils.trim(concatenate(compiledComps));
-     print('compileSelect sql $sql');
+    // print('compileSelect sql $sql');
 
     query.setColumns(original);
 
@@ -142,8 +142,8 @@ class QueryGrammar extends BaseGrammar {
 
         //sql[component] = Utils.call_method(this, methodName, [query, extraParam]);
         sql[component] = callMethod(methodName, [query, extraParam]);
-        print('QueryGrammar@compileComponents methodName: $methodName');
-        print('QueryGrammar@compileComponents sql: $sql');
+        // print('QueryGrammar@compileComponents methodName: $methodName');
+        // print('QueryGrammar@compileComponents sql: $sql');
       }
     }
 
@@ -159,8 +159,8 @@ class QueryGrammar extends BaseGrammar {
   ///
   String compileAggregate(QueryBuilder query, Map<String, dynamic> aggregate) {
     var column = columnize(aggregate['columns']);
-    print('compileAggregate aggregate: $aggregate');
-    print('compileAggregate column: $column');
+    // print('compileAggregate aggregate: $aggregate');
+    // print('compileAggregate column: $column');
 
     // If the query has a "distinct" constraint and we're not asking for all columns
     // we need to prepend "distinct" onto the column name so that the query takes
@@ -191,7 +191,7 @@ class QueryGrammar extends BaseGrammar {
     var select = query.distinctProp ? 'select distinct ' : 'select ';
 
     final result = select + this.columnize(columns);
-    print('compileColumns $result');
+   // print('compileColumns $result');
     return result;
   }
 
@@ -857,7 +857,7 @@ class QueryGrammar extends BaseGrammar {
   }
 
   ///
-  ///  Concatenate an array of segments, removing empties.
+  ///  Concatenate an array of segments, removing empties and nulls
   ///
   ///  @param  array   $segments
   ///  @return String
@@ -867,7 +867,7 @@ class QueryGrammar extends BaseGrammar {
     //     return value != '';
     // }));
 
-    return segments.values.where((value) => value != '').join(' ');
+    return segments.values.where((value) => value != '' && value != null ).join(' ');
   }
 
   ///
