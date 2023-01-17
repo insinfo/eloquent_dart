@@ -27,6 +27,7 @@ class PDO extends PDOExecutionContext {
   /// Example
   ///
   /// var dsn = "pgsql:host=$host;port=5432;dbname=$db;";
+  /// Example: "pgsql:host=$host;dbname=$db;charset=utf8";
   /// var pdo = new PDO($dsn, $user, $password, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
   /// await pdo.connect();
   ///
@@ -36,12 +37,13 @@ class PDO extends PDOExecutionContext {
   }
 
   CoreConnection? connection;
-
+  
   //called from postgres_connector.dart
   Future<PDO> connect() async {
     // var sslContext = SslContext.createDefaultContext();
     //print('PDO@connect dsn: $dsn');
     final parser = DSNParser(dsn, DsnType.pdoPostgreSql);
+    //print('PDO@connect parser.charset: ${parser.charset}');
 
     connection = CoreConnection(
       user,
@@ -51,6 +53,7 @@ class PDO extends PDOExecutionContext {
       password: password,
       allowAttemptToReconnect: false,
       // sslContext: sslContext,
+       textCharset : parser.charset
     );
 
     await connection!.connect();

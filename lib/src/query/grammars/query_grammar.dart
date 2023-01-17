@@ -110,8 +110,9 @@ class QueryGrammar extends BaseGrammar {
       query.columnsProp = ['*'];
     }
     var compiledComps = compileComponents(query);
-
+    print('compileSelect compiledComps $compiledComps');
     var sql = Utils.trim(concatenate(compiledComps));
+     print('compileSelect sql $sql');
 
     query.setColumns(original);
 
@@ -134,7 +135,6 @@ class QueryGrammar extends BaseGrammar {
       if (!Utils.is_null_or_empty(query.getProperty(component))) {
         final methodName = 'compile' + Utils.ucfirst(component);
 
-        //  print('QueryGrammar@compileComponents methodName: $methodName');
         //print('QueryGrammar@compileComponents this: ${this}');
         //print('QueryGrammar@compileComponents property: ${component}');
         var extraParam = query.getProperty(component);
@@ -142,6 +142,8 @@ class QueryGrammar extends BaseGrammar {
 
         //sql[component] = Utils.call_method(this, methodName, [query, extraParam]);
         sql[component] = callMethod(methodName, [query, extraParam]);
+        print('QueryGrammar@compileComponents methodName: $methodName');
+        print('QueryGrammar@compileComponents sql: $sql');
       }
     }
 
@@ -157,6 +159,8 @@ class QueryGrammar extends BaseGrammar {
   ///
   String compileAggregate(QueryBuilder query, Map<String, dynamic> aggregate) {
     var column = columnize(aggregate['columns']);
+    print('compileAggregate aggregate: $aggregate');
+    print('compileAggregate column: $column');
 
     // If the query has a "distinct" constraint and we're not asking for all columns
     // we need to prepend "distinct" onto the column name so that the query takes
@@ -176,16 +180,19 @@ class QueryGrammar extends BaseGrammar {
   ///  @return String|null
   ///
   String? compileColumns(QueryBuilder query, columns) {
+
     // If the query is actually performing an aggregating select, we will let that
     // compiler handle the building of the select clauses, as it will need some
     // more syntax that is best handled by that function to keep things neat.
-    if (!Utils.is_null(query.aggregateProp)) {
+    if (query.aggregateProp != null) {
       return null;
     }
 
     var select = query.distinctProp ? 'select distinct ' : 'select ';
 
-    return select + this.columnize(columns);
+    final result = select + this.columnize(columns);
+    print('compileColumns $result');
+    return result;
   }
 
   ///
@@ -250,10 +257,10 @@ class QueryGrammar extends BaseGrammar {
     if (clause['nested']) {
       return this.compileNestedJoinConstraint(clause);
     }
-   
+
     var first = this.wrap(clause['first']);
     var second;
-    if (clause['where']) {       
+    if (clause['where']) {
       if (clause['operator'] == 'in' || clause['operator'] == 'not in') {
         second = '(' +
             Utils.implode(', ', Utils.array_fill(0, clause['second'], '?')) +

@@ -35,6 +35,7 @@ class DSNParser {
     'host': null,
     'port': null,
     'database': null,
+    'charset': 'utf8',
     'params': {}
   };
 
@@ -42,8 +43,10 @@ class DSNParser {
   String get user => dsnParts['user'];
   String get host => dsnParts['host'];
   String get driver => dsnParts['driver'];
-  int get port =>  dsnParts['port'] != null ? int.parse(dsnParts['port']) : 0;
+  int get port => dsnParts['port'] != null ? int.parse(dsnParts['port']) : 0;
   String get database => dsnParts['database'];
+  String get charset => dsnParts['charset'];
+
   Map<String, dynamic> get params => dsnParts['params'];
 
   DSNParser(this.dsn, [this.dsnType = DsnType.pdoPostgreSql]) {
@@ -73,6 +76,12 @@ class DSNParser {
           parts.lastWhere((p) => p.startsWith('port')).split('=').last;
       dsnParts['database'] =
           parts.lastWhere((p) => p.startsWith('dbname')).split('=').last;
+         // print('dsn_parser $parts');
+
+      if (parts.join().contains('charset=')) {
+        dsnParts['charset'] =
+            parts.lastWhere((p) => p.startsWith('charset')).split('=').last;
+      }
     } else if (dsnType == DsnType.heroku) {
       var patternString = '^' +
           '(?:' +

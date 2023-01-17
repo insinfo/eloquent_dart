@@ -383,12 +383,12 @@ class QueryBuilder {
   ///
   /// Add a join clause to the query.
   ///
-  /// [table] String name of table 
+  /// [table] String name of table
   /// [one]  String | Function(JoinClause)
   /// [operator] String  Example: '=', 'in', 'not in'
   /// @param  String  $two
   /// [type]  String  Example: 'inner', 'left'
-  /// [where]  bool   
+  /// [where]  bool
   /// `Return` this QueryBuilder
   ///
   QueryBuilder join(String table, dynamic one,
@@ -401,7 +401,7 @@ class QueryBuilder {
     // one condition, so we'll add the join and call a Closure with the query.
     if (one is Function) {
       var join = JoinClause(type, table);
-      one(join);      
+      one(join);
       this.joinsProp.add(join);
       this.addBinding(join.bindings, 'join');
     }
@@ -1454,11 +1454,11 @@ class QueryBuilder {
   ///
   /// Execute the query and get the first result.
   ///
-  /// [columns] columns 
+  /// [columns] columns
   /// `Return` Map<String,dynamic> or List<dynamic>
   ///
   Future<dynamic> first([List<String> columns = const ['*']]) async {
-    var results = await this.take(1).get(columns);  
+    var results = await this.take(1).get(columns);
     return Utils.count(results) > 0 ? Utils.reset(results) : null;
   }
 
@@ -1475,8 +1475,7 @@ class QueryBuilder {
       this.columnsProp = columnsP;
     }
 
-    var resultRunSelect = await this.runSelect();
-    //print('query_builder@get $resultRunSelect');
+    var resultRunSelect = await this.runSelect(); 
 
     var results = this.processor.processSelect(this, resultRunSelect);
     this.columnsProp = original;
@@ -1726,16 +1725,18 @@ class QueryBuilder {
   ///
   /// Retrieve the "count" result of the query.
   ///
-  /// @param  String  $columns
+  /// @param  String|List<String>  $columns
   /// @return int
   ///
-  Future<int> count([columns = '*']) async {
+  Future<int> count([dynamic columns = '*']) async {
     if (!Utils.is_array(columns)) {
-      columns = [columns];
+      columns = <String>[columns];
     }
+    //var cols = (columns as List).map((e) => e.toString()).toList();
+
     //__FUNCTION__	The function name, or {closure} for anonymous functions.
     //a constant __FUNCTION__  retorna o nome da corrent função https://www.php.net/manual/en/language.constants.magic.php
-    return await this.aggregate(count, columns);
+    return await this.aggregate('count', columns);
   }
 
   ///
@@ -1802,17 +1803,20 @@ class QueryBuilder {
   /// @param  array   $columns
   /// @return float|int
   ///
-  Future<dynamic> aggregate(function, [columnsP = const ['*']]) async {
+  Future<dynamic> aggregate(String function,
+      [List<String> columnsP = const <String>['*']]) async {
     this.aggregateProp = {'function': function, 'columns': columnsP};
 
-    var previousColumns = [...this.columnsProp!];
+    List<String>? cols =
+        this.columnsProp != null ? <String>[...this.columnsProp!] : null;
+    var previousColumns = cols;
 
     // We will also back up the select bindings since the select clause will be
     // removed when performing the aggregate function. Once the query is run
     // we will add the bindings back onto this query so they can get used.
     // ignore: unused_local_variable
-    var previousSelectBindings = {...(this.bindings['select'] as List)};
-
+    var previousSelectBindings = [...(this.bindings['select'] as List)];
+  
     this.bindings['select'] = [];
 
     var results = await this.get(columnsP);
@@ -1904,8 +1908,8 @@ class QueryBuilder {
   ///
   Future<dynamic> update(Map<String, dynamic> keyValues) {
     var curentBindings = this.getBindings();
-    var values = keyValues.values.toList();    
-    var bindings = Utils.array_merge(values, curentBindings); 
+    var values = keyValues.values.toList();
+    var bindings = Utils.array_merge(values, curentBindings);
     var sql = this.grammar.compileUpdate(this, keyValues);
     return this.connection.update(sql, this.cleanBindings(bindings));
   }
