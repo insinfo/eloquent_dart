@@ -10,65 +10,64 @@ class QueryGrammar extends BaseGrammar {
     List<dynamic> positionalArguments, [
     Map<Symbol, dynamic> namedArguments = const <Symbol, dynamic>{},
   ]) {
-    switch (methodName) {
-      case 'compileColumns':
+    switch (methodName.toLowerCase()) {
+      case 'compilecolumns':
         return compileColumns(positionalArguments[0], positionalArguments[1]);
-      case 'compileFrom':
+      case 'compilefrom':
         return compileFrom(positionalArguments[0], positionalArguments[1]);
-      case 'compileWheres':
+      case 'compilewheres':
         return compileWheres(positionalArguments[0]);
-      case 'compileLimit':
+      case 'compilelimit':
         return compileLimit(positionalArguments[0], positionalArguments[1]);
-      case 'compileOffset':
+      case 'compileoffset':
         return compileOffset(positionalArguments[0], positionalArguments[1]);
       //
-      case 'compileGroups':
+      case 'compilegroups':
         return compileGroups(positionalArguments[0], positionalArguments[1]);
-      case 'compileHaving':
+      case 'compilehaving':
         return compileHaving(positionalArguments[0]);
-      case 'compileOrders':
+      case 'compileorders':
         return compileOrders(positionalArguments[0], positionalArguments[1]);
-      case 'compileAggregate':
+      case 'compileaggregate':
         return compileAggregate(positionalArguments[0], positionalArguments[1]);
-      case 'compileJoins':
+      case 'compilejoins':
         return compileJoins(positionalArguments[0], positionalArguments[1]);
 
       //wheres
-      case 'whereNested':
+      case 'wherenested':
         return whereNested(positionalArguments[0], positionalArguments[1]);
-      case 'whereSub':
+      case 'wheresub':
         return whereSub(positionalArguments[0], positionalArguments[1]);
-      case 'whereSub':
-        return whereSub(positionalArguments[0], positionalArguments[1]);
-      case 'whereBasic':
+     
+      case 'wherebasic':
         return whereBasic(positionalArguments[0], positionalArguments[1]);
-      case 'whereBetween':
+      case 'wherebetween':
         return whereBetween(positionalArguments[0], positionalArguments[1]);
-      case 'whereExists':
+      case 'whereexists':
         return whereExists(positionalArguments[0], positionalArguments[1]);
-      case 'whereNotExists':
+      case 'wherenotexists':
         return whereNotExists(positionalArguments[0], positionalArguments[1]);
-      case 'whereIn':
+      case 'wherein':
         return whereIn(positionalArguments[0], positionalArguments[1]);
-      case 'whereNotIn':
+      case 'wherenotin':
         return whereNotIn(positionalArguments[0], positionalArguments[1]);
-      case 'whereInSub':
+      case 'whereinsub':
         return whereInSub(positionalArguments[0], positionalArguments[1]);
-      case 'whereNotInSub':
+      case 'wherenotinsub':
         return whereNotInSub(positionalArguments[0], positionalArguments[1]);
-      case 'whereNull':
+      case 'wherenull':
         return whereNull(positionalArguments[0], positionalArguments[1]);
-      case 'whereNotNull':
+      case 'wherenotnull':
         return whereNotNull(positionalArguments[0], positionalArguments[1]);
-      case 'whereDate':
+      case 'wheredate':
         return whereDate(positionalArguments[0], positionalArguments[1]);
-      case 'whereDay':
+      case 'whereday':
         return whereDay(positionalArguments[0], positionalArguments[1]);
-      case 'whereMonth':
+      case 'wheremonth':
         return whereMonth(positionalArguments[0], positionalArguments[1]);
-      case 'whereYear':
+      case 'whereyear':
         return whereYear(positionalArguments[0], positionalArguments[1]);
-      case 'whereRaw':
+      case 'whereraw':
         return whereRaw(positionalArguments[0], positionalArguments[1]);
 
       default:
@@ -175,8 +174,8 @@ class QueryGrammar extends BaseGrammar {
   ///
   ///  Compile the "select *" portion of the query.
   ///
-  ///  @param  \Illuminate\Database\Query\Builder  $query
-  ///  @param  array  $columns
+  ///  [query] QueryBuilder \Illuminate\Database\Query\Builder 
+  ///  [columns] List<String> | List<dynamic> | List<QueryExpression> 
   ///  @return String|null
   ///
   String? compileColumns(QueryBuilder query, columns) {
@@ -191,7 +190,7 @@ class QueryGrammar extends BaseGrammar {
     var select = query.distinctProp ? 'select distinct ' : 'select ';
 
     final result = select + this.columnize(columns);
-   // print('compileColumns $result');
+
     return result;
   }
 

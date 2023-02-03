@@ -362,15 +362,14 @@ class Utils {
 
   /// array1 => ['A', 'B']  and array2 => ['C', 'D'] return ['A', 'B', 'C', 'D']
   static List array_merge(List? array1, List? array2) {
-    if (array1 == null) {
-      throw Exception(
-          'array_merge(): Expected parameter 1 to be an array, null given');
+    var a1 =array1;var a2 = array2;
+    if (a1 == null) {
+      a1 = [];
     }
-    if (array2 == null) {
-      throw Exception(
-          'array_merge(): Expected parameter 2 to be an array, null given');
+    if (a2 == null) {
+      a2=[];
     }
-    return [...array1, ...array2];
+    return [...a1, ...a2];
   }
 
   /// mescla duas List de String Null Safety

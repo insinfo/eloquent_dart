@@ -24,10 +24,10 @@ class PostgresConnector extends Connector implements ConnectorInterface {
 
     var connection = await createConnection(dsn, config, options);
 
-    if (config.containsKey('charset') && config['charset'] != null) {
-      var charset = config['charset'];
-      await connection.execute("set names '$charset'");
-    }
+    // if (config.containsKey('charset') && config['charset'] != null) {
+    //   var charset = config['charset'];
+    //   //await connection.execute("set names '$charset'");
+    // }
 
     // Next, we will check to see if a timezone has been specified in this config
     // and if it has we will issue a statement to modify the timezone with the

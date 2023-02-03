@@ -109,13 +109,13 @@ class QueryBuilder {
   /// Propriedade da class QueryBuilder que armazena as colunas da tabela a serem retornadas
   /// @var array
   ///
-  List<String>? columnsProp;
+  List<dynamic>? columnsProp;
 
-  List<String>? getColumns() {
+  List<dynamic>? getColumns() {
     return columnsProp;
   }
 
-  void setColumns(List<String>? cols) {
+  void setColumns(List<dynamic>? cols) {
     columnsProp = cols;
   }
 
@@ -347,14 +347,13 @@ class QueryBuilder {
   ///
   /// Add a new select column to the query.
   ///
-  /// @param  array|mixed  $column
+  /// [columnP]  QueryExpression List | dynamic
   /// @return $this
   ///
   QueryBuilder addSelect(dynamic columnP) {
     //var column = is_array(column) ? column : func_get_args();
-
-    this.columnsProp = Utils.array_merge_sa(columnsProp, columnP);
-
+    var col = columnP is List ? columnP : [columnP];    
+    this.columnsProp = Utils.array_merge(columnsProp, col);    
     return this;
   }
 
@@ -604,11 +603,8 @@ class QueryBuilder {
   QueryBuilder whereRaw(String sql,
       [List bindings = const [], boolean = 'and']) {
     var type = 'raw';
-
     this.wheresProp.add({'type': type, 'sql': sql, 'boolean': boolean});
-
     this.addBinding(bindings, 'where');
-
     return this;
   }
 
@@ -1475,7 +1471,7 @@ class QueryBuilder {
       this.columnsProp = columnsP;
     }
 
-    var resultRunSelect = await this.runSelect(); 
+    var resultRunSelect = await this.runSelect();
 
     var results = this.processor.processSelect(this, resultRunSelect);
     this.columnsProp = original;
@@ -1807,8 +1803,8 @@ class QueryBuilder {
       [List<String> columnsP = const <String>['*']]) async {
     this.aggregateProp = {'function': function, 'columns': columnsP};
 
-    List<String>? cols =
-        this.columnsProp != null ? <String>[...this.columnsProp!] : null;
+    List<dynamic>? cols =
+        this.columnsProp != null ? [...this.columnsProp!] : null;
     var previousColumns = cols;
 
     // We will also back up the select bindings since the select clause will be
@@ -1816,7 +1812,7 @@ class QueryBuilder {
     // we will add the bindings back onto this query so they can get used.
     // ignore: unused_local_variable
     var previousSelectBindings = [...(this.bindings['select'] as List)];
-  
+
     this.bindings['select'] = [];
 
     var results = await this.get(columnsP);
@@ -1840,8 +1836,8 @@ class QueryBuilder {
   ///
   /// Insert a new record into the database.
   ///
-  /// @param  Map  $values
-  /// @return bool
+  /// [values]  values Map<String, dynamic>  
+  /// Return bool
   ///
   Future<dynamic> insert(Map<String, dynamic> values) {
     // if (empty($values)) {
@@ -2091,8 +2087,8 @@ class QueryBuilder {
   ///
   /// Add a binding to the query.
   ///
-  /// @param  mixed   $value
-  /// @param  String  $type
+  /// [value]  dynamic   
+  /// [type]  String 
   /// @return $this
   ///
   /// @throws \InvalidArgumentException

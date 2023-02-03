@@ -94,10 +94,10 @@ abstract class BaseGrammar {
   ///
   /// Convert an array of column names into a delimited string.
   ///
-  /// @param  array   $columns
+  /// [columns] List<dynamic> | List<String> | List<QueryExpression>
   /// @return string
   ///
-  String columnize(List<String> columns) {
+  String columnize(List<dynamic> columns) {
     return Utils.implode(', ', Utils.array_map(wrap, columns));
   }
 

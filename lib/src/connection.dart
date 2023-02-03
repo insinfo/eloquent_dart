@@ -118,6 +118,9 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   ///
   Map<String, dynamic> _config = {};
 
+  int tryReconnectLimit = 10;
+  int tryReconnectCount = 0;
+
   ///
   /// Create a new database connection instance.
   ///
@@ -350,6 +353,18 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
       var params = me.prepareBindings(bindings);
       var statement = await pdoL.prepareStatement(query, params);
       return await pdoL.executeStatement(statement, me.getFetchMode());
+    });
+  }
+  /// simple execute command on database
+  ///  Executa uma instrução SQL e retornar o número de linhas afetadas
+  Future<dynamic> execute(String query) {
+    return this.run(query, [], (me, query, bindings) async {
+      if (me.pretending()) {
+        return true;
+      }
+
+      var pdoL = me.getPdo();
+      return await pdoL.execute(query);
     });
   }
 
@@ -632,10 +647,13 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   Future<dynamic> tryAgainIfCausedByLostConnection(dynamic e, String query,
       bindings, Future<dynamic> Function(Connection, String, dynamic) callback,
       {int delay = 2000}) async {
-    if (this.causedByLostConnection(e)) {
+    if (this.causedByLostConnection(e) &&
+        tryReconnectCount < tryReconnectLimit) {
       await Future.delayed(Duration(milliseconds: delay));
-      //print('tentando reconectar');
+      print('Eloquent@tryAgainIfCausedByLostConnection try reconnect...');
+      tryReconnectLimit++;
       await this.reconnect();
+      tryReconnectLimit = 0;
       return await this.runQueryCallback(query, bindings, callback);
     }
     //print('tryAgainIfCausedByLostConnection');

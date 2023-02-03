@@ -37,7 +37,7 @@ class PDO extends PDOExecutionContext {
   }
 
   CoreConnection? connection;
-  
+
   //called from postgres_connector.dart
   Future<PDO> connect() async {
     // var sslContext = SslContext.createDefaultContext();
@@ -45,16 +45,14 @@ class PDO extends PDOExecutionContext {
     final parser = DSNParser(dsn, DsnType.pdoPostgreSql);
     //print('PDO@connect parser.charset: ${parser.charset}');
 
-    connection = CoreConnection(
-      user,
-      database: parser.database,
-      host: parser.host,
-      port: parser.port,
-      password: password,
-      allowAttemptToReconnect: false,
-      // sslContext: sslContext,
-       textCharset : parser.charset
-    );
+    connection = CoreConnection(user,
+        database: parser.database,
+        host: parser.host,
+        port: parser.port,
+        password: password,
+        allowAttemptToReconnect: false,
+        // sslContext: sslContext,
+        textCharset: parser.charset);
 
     await connection!.connect();
     return this;
@@ -165,8 +163,10 @@ class PDO extends PDOExecutionContext {
 
   Future<dynamic> queryUnnamed(String query, dynamic params,
       [int? fetchMode]) async {
+   
     var results = await connection!.queryUnnamed(query, params,
-        placeholderIdentifier: PlaceholderIdentifier.onlyQuestionMark);        
+        placeholderIdentifier: PlaceholderIdentifier.onlyQuestionMark);
+
     rowsAffected = results.rowsAffected.value;
     switch (fetchMode) {
       case PDO_FETCH_ASSOC:
