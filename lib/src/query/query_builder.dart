@@ -816,12 +816,12 @@ class QueryBuilder {
   /// Add a "where in" clause to the query.
   ///
   /// @param  String  $column
-  /// @param  mixed   $values
+  /// [values] List<dynamic> | QueryBuilder | Function  
   /// @param  String  $boolean
   /// @param  bool    $not
   /// @return $this
   ///
-  QueryBuilder whereIn(String column, dynamic values,
+  QueryBuilder whereIn(String column,dynamic values,
       [String boolean = 'and', bool not = false]) {
     var type = not ? 'NotIn' : 'In';
     //TODO check isso if (values is static) {

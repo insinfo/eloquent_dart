@@ -419,10 +419,13 @@ class QueryGrammar extends BaseGrammar {
     if (Utils.empty(where['values'])) {
       return '0 = 1';
     }
+    //print('whereIn ${where['values'].runtimeType}' );
+    List<dynamic> values = where['values'];
+    
 
-    var values = this.parameterize(where['values']);
+    var valuesString = this.parameterize(values);
 
-    return this.wrap(where['column']) + ' in (' + values + ')';
+    return this.wrap(where['column']) + ' in (' + valuesString + ')';
   }
 
   ///
