@@ -569,13 +569,12 @@ class QueryBuilder {
 
   ///
   /// Add an "or where" clause to the query.
-  ///
-  /// @param  String  $column
+  /// [column] String|Map|Function 
   /// @param  String  $operator
   /// @param  mixed   $value
   /// @return \Illuminate\Database\Query\Builder|static
   ///
-  QueryBuilder orWhere(String column, [String? operator, dynamic value]) {
+  QueryBuilder orWhere(dynamic column, [String? operator, dynamic value]) {
     return this.where(column, operator, value, 'or');
   }
 

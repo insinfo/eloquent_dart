@@ -13,3 +13,7 @@
 ## 1.2.0
 
 - fix bugs and update dargres to 2.2.4
+
+## 1.2.1
+
+- fix parameter type of column orWhere
