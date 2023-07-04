@@ -18,6 +18,7 @@ class PostgresConnector extends Connector implements ConnectorInterface {
     // First we'll create the basic DSN and connection instance connecting to the
     // using the configuration option specified by the developer. We will also
     // set the default character set on the connections to UTF-8 by default.
+
     var dsn = getDsn(config);
 
     var options = getOptions(config);
@@ -54,7 +55,12 @@ class PostgresConnector extends Connector implements ConnectorInterface {
     if (config.containsKey('application_name') &&
         config['application_name'] != null) {
       var applicationName = config['application_name'];
-      await connection.execute("set application_name to '$applicationName'");
+      try {
+        await connection.execute("set application_name to '$applicationName'");
+      } catch (e) {
+        print(
+            'Eloquent: Unable to set the application_name for this PostgreSQL driver.');
+      }
     }
 
     return connection;
@@ -85,9 +91,27 @@ class PostgresConnector extends Connector implements ConnectorInterface {
       dsn += ";sslmode=${config['sslmode']}";
     }
 
+    //print('postgres_connector@connect config: $config');
+
     // add charset to DSN
     if (config.containsKey('charset') && config['charset'] != null) {
       dsn = "$dsn;charset=${config['charset']}";
+    }
+    // add Pool opttions to DSN
+    if (config['pool'] != null) {
+      dsn += ";pool=${config['pool']}";
+    }
+
+    if (config['poolsize'] != null) {
+      dsn += ";poolsize=${config['poolsize']}";
+    }
+
+    if (config['allowreconnect'] != null) {
+      dsn += ";allowreconnect=${config['allowreconnect']}";
+    }
+
+    if (config['application_name'] != null) {
+      dsn += ";application_name=${config['application_name']}";
     }
 
     return dsn;

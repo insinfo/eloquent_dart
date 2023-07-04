@@ -7,9 +7,9 @@ void main(List<String> args) async {
   manager.addConnection({
     'driver': 'pgsql',
     'host': 'localhost',
-    'port': '5432',
+    'port': '5433',
     'database': 'sistemas',
-    'username': 'postgres',
+    'username': 'sisadmin',
     'password': 's1sadm1n',
     'charset': 'utf8',
     'prefix': '',

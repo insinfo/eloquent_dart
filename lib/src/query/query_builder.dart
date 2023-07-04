@@ -1,3 +1,4 @@
+import 'package:eloquent/src/connection.dart';
 import 'package:eloquent/src/connection_interface.dart';
 import 'package:eloquent/src/query/expression.dart';
 import 'package:eloquent/src/query/grammars/query_grammar.dart';
@@ -352,8 +353,8 @@ class QueryBuilder {
   ///
   QueryBuilder addSelect(dynamic columnP) {
     //var column = is_array(column) ? column : func_get_args();
-    var col = columnP is List ? columnP : [columnP];    
-    this.columnsProp = Utils.array_merge(columnsProp, col);    
+    var col = columnP is List ? columnP : [columnP];
+    this.columnsProp = Utils.array_merge(columnsProp, col);
     return this;
   }
 
@@ -489,14 +490,32 @@ class QueryBuilder {
   ///
   /// Add a basic where clause to the query.
   ///
-  /// [column] String|Map|Function
-  /// @param  String  $operator
+  /// [column] String | Map | Function(QueryBuilder)
+  /// [operator]  String Examples: '=', '<', '>', '<>'
   /// @param  mixed   $value
   /// @param  String  $boolean
   /// @return $this
   ///
-  /// @throws \InvalidArgumentException
+  /// throws \InvalidArgumentException
   ///
+  /// Example:
+  /// ```dart
+  ///  query.where((QueryBuilder qw1) {
+  ///         for (var i = 0; i < processos.length; i++) {
+  ///           var proc = processos[i];
+  ///           if (i == 0) {
+  ///             qw1.where((QueryBuilder q) {
+  ///               q.where('sw_processo.cod_processo', '=', proc.keys.first);
+  ///               q.where('sw_processo.ano_exercicio', '=', proc.values.first);
+  ///             });
+  ///           } else {
+  ///             qw1.orWhere((QueryBuilder q) {
+  ///               q.where('sw_processo.cod_processo', '=', proc.keys.first);
+  ///               q.where('sw_processo.ano_exercicio', '=', proc.values.first);
+  ///             });
+  ///           }
+  ///         }
+  /// ```
   QueryBuilder where(dynamic column,
       [String? operator, dynamic value, String boolean = 'and']) {
     // If the column is an array, we will assume it is an array of key-value pairs
@@ -569,7 +588,7 @@ class QueryBuilder {
 
   ///
   /// Add an "or where" clause to the query.
-  /// [column] String|Map|Function 
+  /// [column] String|Map|Function
   /// @param  String  $operator
   /// @param  mixed   $value
   /// @return \Illuminate\Database\Query\Builder|static
@@ -815,12 +834,12 @@ class QueryBuilder {
   /// Add a "where in" clause to the query.
   ///
   /// @param  String  $column
-  /// [values] List<dynamic> | QueryBuilder | Function  
+  /// [values] List<dynamic> | QueryBuilder | Function
   /// @param  String  $boolean
   /// @param  bool    $not
   /// @return $this
   ///
-  QueryBuilder whereIn(String column,dynamic values,
+  QueryBuilder whereIn(String column, dynamic values,
       [String boolean = 'and', bool not = false]) {
     var type = not ? 'NotIn' : 'In';
     //TODO check isso if (values is static) {
@@ -1452,8 +1471,10 @@ class QueryBuilder {
   /// [columns] columns
   /// `Return` Map<String,dynamic> or List<dynamic>
   ///
-  Future<dynamic> first([List<String> columns = const ['*']]) async {
-    var results = await this.take(1).get(columns);
+  Future<dynamic> first(
+      [List<String> columns = const ['*'],
+      Duration? timeout = Connection.defaultTimeout]) async {
+    var results = await this.take(1).get(columns, timeout);
     return Utils.count(results) > 0 ? Utils.reset(results) : null;
   }
 
@@ -1463,14 +1484,16 @@ class QueryBuilder {
   /// @param  array  $columns
   /// @return array|static[]
   ///
-  Future<dynamic> get([List<String> columnsP = const ['*']]) async {
+  Future<dynamic> get(
+      [List<String> columnsP = const ['*'],
+      Duration? timeout = Connection.defaultTimeout]) async {
     var original = this.columnsProp != null ? [...this.columnsProp!] : null;
 
     if (Utils.is_null(original)) {
       this.columnsProp = columnsP;
     }
 
-    var resultRunSelect = await this.runSelect();
+    var resultRunSelect = await this.runSelect(timeout);
 
     var results = this.processor.processSelect(this, resultRunSelect);
     this.columnsProp = original;
@@ -1482,14 +1505,15 @@ class QueryBuilder {
   ///
   /// @return array
   ///
-  Future<dynamic> runSelect() async {
+  Future<dynamic> runSelect(
+      [Duration? timeout = Connection.defaultTimeout]) async {
     var sqlStr = this.toSql();
     //print('QueryGrammar@runSelect sql: $sqlStr');
     var bid = this.getBindings();
     // print('QueryGrammar@runSelect getBindings: $bid');
     var com = this.connection;
 
-    var results = await com.select(sqlStr, bid, !this.useWritePdoProp);
+    var results = await com.select(sqlStr, bid, !this.useWritePdoProp, timeout);
     // print('QueryGrammar@runSelect results: $results');
     return results;
   }
@@ -1835,10 +1859,10 @@ class QueryBuilder {
   ///
   /// Insert a new record into the database.
   ///
-  /// [values]  values Map<String, dynamic>  
+  /// [values]  values Map<String, dynamic>
   /// Return bool
   ///
-  Future<dynamic> insert(Map<String, dynamic> values) {
+  Future<dynamic> insert(Map<String, dynamic> values, [Duration? timeout = Connection.defaultTimeout]) {
     // if (empty($values)) {
     //     return true;
     // }
@@ -1878,7 +1902,7 @@ class QueryBuilder {
     // is the same type of result returned by the raw connection instance.
     bindings = this.cleanBindings(bindings);
 
-    return this.connection.insert(sql, bindings);
+    return this.connection.insert(sql, bindings,timeout);
   }
 
   ///
@@ -1901,12 +1925,13 @@ class QueryBuilder {
   /// @param  array  $values
   /// @return int
   ///
-  Future<dynamic> update(Map<String, dynamic> keyValues) {
+  Future<dynamic> update(Map<String, dynamic> keyValues,
+      [Duration? timeout = Connection.defaultTimeout]) {
     var curentBindings = this.getBindings();
     var values = keyValues.values.toList();
     var bindings = Utils.array_merge(values, curentBindings);
     var sql = this.grammar.compileUpdate(this, keyValues);
-    return this.connection.update(sql, this.cleanBindings(bindings));
+    return this.connection.update(sql, this.cleanBindings(bindings), timeout);
   }
 
   ///
@@ -1949,7 +1974,8 @@ class QueryBuilder {
   /// @param  mixed  $id
   /// @return int
   ///
-  Future<int> delete([dynamic id]) {
+  Future<int> delete(
+      [dynamic id, Duration? timeout = Connection.defaultTimeout]) {
     // If an ID is passed to the method, we will set the where clause to check
     // the ID to allow developers to simply and quickly remove a single row
     // from their database without manually specifying the where clauses.
@@ -1959,7 +1985,7 @@ class QueryBuilder {
 
     var sql = this.grammar.compileDelete(this);
 
-    return this.connection.delete(sql, this.getBindings());
+    return this.connection.delete(sql, this.getBindings(), timeout);
   }
 
   ///
@@ -2086,8 +2112,8 @@ class QueryBuilder {
   ///
   /// Add a binding to the query.
   ///
-  /// [value]  dynamic   
-  /// [type]  String 
+  /// [value]  dynamic
+  /// [type]  String
   /// @return $this
   ///
   /// @throws \InvalidArgumentException

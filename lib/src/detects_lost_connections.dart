@@ -13,10 +13,9 @@ mixin DetectsLostConnections {
     final isR = Utils.string_contains(message, [
       '57P',//for posgresql restart
       // 'Can't create a connection',
-       'Connection is closed',
-  
+       'Connection is closed',  
     ]);
-    //print('causedByLostConnection $isR');
+    print('causedByLostConnection $isR');
     return isR;
   }
 }

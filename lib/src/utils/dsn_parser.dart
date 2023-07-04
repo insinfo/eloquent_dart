@@ -47,6 +47,11 @@ class DSNParser {
   String get database => dsnParts['database'];
   String get charset => dsnParts['charset'];
 
+  bool get pool => dsnParts['pool'].toString() == 'true';
+  int get poolSize => int.tryParse(dsnParts['poolsize'] ?? '') ?? 1;
+  bool get allowReconnect => dsnParts['allowreconnect'].toString() == 'true';
+  String? get applicationName => dsnParts['application_name'] ?? 'eloquent';
+
   Map<String, dynamic> get params => dsnParts['params'];
 
   DSNParser(this.dsn, [this.dsnType = DsnType.pdoPostgreSql]) {
@@ -55,6 +60,7 @@ class DSNParser {
 
   DSNParser parse() {
     //dado isso: pgsql:host=localhost;port=5432;dbname=dvdrental;
+    //dsn: pgsql:host=localhost;dbname=siamweb;port=5433;charset=latin1;pool=true;poolsize=1;allowreconnect=true
     if (dsnType == DsnType.pdoPostgreSql) {
       if (dsn.contains(':')) {
         dsnParts['driver'] = dsn.split(':').first.trim();
@@ -70,17 +76,50 @@ class DSNParser {
         parts.removeLast();
       }
 
-      dsnParts['host'] =
-          parts.lastWhere((p) => p.startsWith('host')).split('=').last;
-      dsnParts['port'] =
-          parts.lastWhere((p) => p.startsWith('port')).split('=').last;
-      dsnParts['database'] =
-          parts.lastWhere((p) => p.startsWith('dbname')).split('=').last;
-         // print('dsn_parser $parts');
+      //dsnParts['host'] = parts.lastWhere((p) => p == 'host').split('=').last;
+      //dsnParts['port'] = parts.lastWhere((p) => p == 'port').split('=').last;
+      //dsnParts['database'] = parts.lastWhere((p) => p == 'dbname').split('=').last;
+
+      if (parts.join().contains('dbname=')) {
+        dsnParts['database'] =
+            parts.lastWhere((p) => p.contains('dbname=')).split('=').last;
+      }
+
+      if (parts.join().contains('port=')) {
+        dsnParts['port'] =
+            parts.lastWhere((p) => p.contains('port=')).split('=').last;
+      }
+
+      //print('dsn_parser $parts');
+      if (parts.join().contains('host=')) {
+        dsnParts['host'] =
+            parts.lastWhere((p) => p.contains('host=')).split('=').last;
+      }
 
       if (parts.join().contains('charset=')) {
         dsnParts['charset'] =
-            parts.lastWhere((p) => p.startsWith('charset')).split('=').last;
+            parts.lastWhere((p) => p.contains('charset=')).split('=').last;
+      }
+      if (parts.join().contains('pool=')) {
+        dsnParts['pool'] =
+            parts.lastWhere((p) => p.contains('pool=')).split('=').last;
+       
+      }
+      if (parts.join().contains('poolsize=')) {
+        dsnParts['poolsize'] =
+            parts.lastWhere((p) => p.contains('poolsize=')).split('=').last;
+      }
+      if (parts.join().contains('allowreconnect=')) {
+        dsnParts['allowreconnect'] = parts
+            .lastWhere((p) => p.contains('allowreconnect='))
+            .split('=')
+            .last;
+      }
+      if (parts.join().contains('application_name=')) {
+        dsnParts['application_name'] = parts
+            .lastWhere((p) => p.contains('application_name='))
+            .split('=')
+            .last;
       }
     } else if (dsnType == DsnType.heroku) {
       var patternString = '^' +

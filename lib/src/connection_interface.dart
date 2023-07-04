@@ -26,7 +26,7 @@ abstract class ConnectionInterface {
   /// [bindings]  List
   /// @return dynamic
   ///
-  Future<dynamic> selectOne(String query, [List bindings = listVoid]);
+  Future<dynamic> selectOne(String query, [List bindings = listVoid,Duration? timeout = Connection.defaultTimeout]);
 
   ///
   /// Run a select statement against the database.
@@ -36,7 +36,7 @@ abstract class ConnectionInterface {
   /// @return array
   ///
   Future<dynamic> select(String query,
-      [List bindings = listVoid, bool useReadPdo = true]);
+      [List bindings = listVoid, bool useReadPdo = true,Duration? timeout = Connection.defaultTimeout]);
 
   ///
   /// Run an insert statement against the database.
@@ -45,7 +45,7 @@ abstract class ConnectionInterface {
   /// [bindings]  List
   /// @return bool
   ///
-  Future<dynamic> insert(String query, [List bindings = listVoid]);
+  Future<dynamic> insert(String query, [List bindings = listVoid,Duration? timeout = Connection.defaultTimeout]);
 
   ///
   /// Run an update statement against the database.
@@ -54,7 +54,7 @@ abstract class ConnectionInterface {
   /// [bindings]  List
   /// @return int
   ///
-  Future<dynamic> update(String query, [List bindings = listVoid]);
+  Future<dynamic> update(String query, [List bindings = listVoid,Duration? timeout = Connection.defaultTimeout]);
 
   ///
   /// Run a delete statement against the database.
@@ -63,7 +63,7 @@ abstract class ConnectionInterface {
   /// [bindings]  List
   /// @return int
   ///
-  Future<int> delete(String query, [List bindings = listVoid]);
+  Future<int> delete(String query, [List bindings = listVoid,Duration? timeout = Connection.defaultTimeout]);
 
   ///
   /// Execute an SQL statement and return the boolean result.
@@ -72,7 +72,7 @@ abstract class ConnectionInterface {
   /// [bindings]  List
   /// @return bool
   ///
-  Future<dynamic> statement(String query, [List bindings = listVoid]);
+  Future<dynamic> statement(String query, [List bindings = listVoid,Duration? timeout = Connection.defaultTimeout]);
 
   ///
   /// Run an SQL statement and get the number of rows affected.
@@ -81,7 +81,7 @@ abstract class ConnectionInterface {
   /// [bindings]  List
   /// @return int
   ///
-  Future<dynamic> affectingStatement(String query, [List bindings = listVoid]);
+  Future<dynamic> affectingStatement(String query, [List bindings = listVoid,Duration? timeout = Connection.defaultTimeout]);
 
   ///
   /// Run a raw, unprepared query against the PDO connection.
@@ -89,7 +89,7 @@ abstract class ConnectionInterface {
   /// [query]  String
   /// @return bool
   ///
-  Future<dynamic> unprepared(String query);
+  Future<dynamic> unprepared(String query,[Duration? timeout = Connection.defaultTimeout]);
 
   ///
   /// Prepare the query bindings for execution.
@@ -108,7 +108,10 @@ abstract class ConnectionInterface {
   /// @throws \Throwable
   ///
   Future<dynamic> transaction(
-      Future<dynamic> Function(Connection ctx) callback);
+      Future<dynamic> Function(Connection ctx) callback, [
+    Duration? timeout =  Connection.defaultTimeout,
+    Duration? timeoutInner =  Connection.defaultTimeout,
+  ]);
 
   ///
   /// Start a new database transaction.

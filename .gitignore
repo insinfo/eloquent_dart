@@ -27,3 +27,4 @@ doc/api/
 .flutter-plugins-dependencies
 
 main.exe
+teste_concorrencia.dart

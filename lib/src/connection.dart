@@ -6,6 +6,9 @@ import 'pdo/pdo_execution_context.dart';
 
 /// posgresql Connection implementation
 class Connection with DetectsLostConnections implements ConnectionInterface {
+  /// default query Timeout =  300 seconds
+  static const defaultTimeout = const Duration(seconds: 300);
+
   ///
   /// The active PDO connection.
   ///
@@ -247,7 +250,8 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   /// @param  array   $bindings
   /// @return mixed
   ///
-  Future<dynamic> selectOne(String query, [bindings = const []]) async {
+  Future<dynamic> selectOne(String query,
+      [bindings = const [], Duration? timeout = defaultTimeout]) async {
     var records = await this.select(query, bindings);
     return Utils.count(records) > 0 ? Utils.reset(records) : null;
   }
@@ -259,8 +263,9 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   /// @param  array   $bindings
   /// @return array
   ///
-  Future<dynamic> selectFromWriteConnection(query, [bindings = const []]) {
-    return this.select(query, bindings, false);
+  Future<dynamic> selectFromWriteConnection(query,
+      [bindings = const [], Duration? timeout = defaultTimeout]) {
+    return this.select(query, bindings, false, timeout);
   }
 
   ///
@@ -272,10 +277,13 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   /// @return array
   ///
   Future<dynamic> select(String query,
-      [List bindings = const [], bool useReadPdo = true]) async {
-    //print('Connection@select');
+      [List bindings = const [],
+      bool useReadPdo = true,
+      Duration? timeout = defaultTimeout]) async {
+    //print('Connection@select timeout $timeout');
 
-    return this.run(query, bindings, (me, query, bindings) async {
+    return this.run(query, bindings, (me, query, bindings,
+        {Duration? timeout}) async {
       if (me.pretending()) {
         return [];
       }
@@ -287,8 +295,8 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
       //print('Connection@select inside callback');
       // var statement = await pdoL.prepareStatement(query, params);
       // return pdoL.executeStatement(statement, me.getFetchMode());
-      return pdoL.queryUnnamed(query, params, me.getFetchMode());
-    });
+      return pdoL.queryUnnamed(query, params, me.getFetchMode(), timeout);
+    }, timeout: timeout);
   }
 
   ///
@@ -308,8 +316,9 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   /// @param  array   $bindings
   /// @return bool
   ///
-  Future<dynamic> insert(query, [bindings = const []]) async {
-    return this.statement(query, bindings);
+  Future<dynamic> insert(query,
+      [bindings = const [], Duration? timeout = defaultTimeout]) async {
+    return this.statement(query, bindings, timeout);
   }
 
   ///
@@ -319,8 +328,9 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   /// @param  array   $bindings
   /// @return int
   ///
-  Future<int> update(String query, [List bindings = const []]) {
-    return this.affectingStatement(query, bindings);
+  Future<int> update(String query,
+      [List bindings = const [], Duration? timeout = defaultTimeout]) {
+    return this.affectingStatement(query, bindings, timeout);
   }
 
   ///
@@ -330,8 +340,9 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   /// @param  array   $bindings
   /// @return int
   ///
-  Future<int> delete(String query, [List bindings = const []]) {
-    return this.affectingStatement(query, bindings);
+  Future<int> delete(String query,
+      [List bindings = const [], Duration? timeout = defaultTimeout]) {
+    return this.affectingStatement(query, bindings, timeout);
   }
 
   ///
@@ -341,8 +352,10 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   /// @param  array   $bindings
   /// @return bool
   ///
-  Future<dynamic> statement(String query, [bindingsP = const []]) {
-    return this.run(query, bindingsP, (me, query, bindings) async {
+  Future<dynamic> statement(String query,
+      [bindingsP = const [], Duration? timeout = defaultTimeout]) {
+    return this.run(query, bindingsP, (me, query, bindings,
+        {Duration? timeout}) async {
       if (me.pretending()) {
         return true;
       }
@@ -351,21 +364,24 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
       // return await statement.execute(bindi);
       var pdoL = me.getPdo();
       var params = me.prepareBindings(bindings);
-      var statement = await pdoL.prepareStatement(query, params);
-      return await pdoL.executeStatement(statement, me.getFetchMode());
-    });
+      // var statement = await pdoL.prepareStatement(query, params);
+      // return await pdoL.executeStatement(statement, me.getFetchMode());
+      return await pdoL.queryUnnamed(query, params, me.getFetchMode(), timeout);
+    }, timeout: timeout);
   }
+
   /// simple execute command on database
   ///  Executa uma instrução SQL e retornar o número de linhas afetadas
-  Future<dynamic> execute(String query) {
-    return this.run(query, [], (me, query, bindings) async {
+  Future<dynamic> execute(String query, [Duration? timeout = defaultTimeout]) {
+    return this.run(query, [], (me, query, bindings,
+        {Duration? timeout}) async {
       if (me.pretending()) {
         return true;
       }
 
       var pdoL = me.getPdo();
       return await pdoL.execute(query);
-    });
+    }, timeout: timeout);
   }
 
   ///
@@ -376,8 +392,10 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   /// @return int
   ///
   Future<int> affectingStatement(String query,
-      [List<dynamic> bindingsP = const []]) async {
-    var res = await this.run(query, bindingsP, (me, query, bindings) async {
+      [List<dynamic> bindingsP = const [],
+      Duration? timeout = defaultTimeout]) async {
+    var res = await this.run(query, bindingsP, (me, query, bindings,
+        {Duration? timeout}) async {
       if (me.pretending()) {
         return 0;
       }
@@ -387,10 +405,11 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
       // to execute the statement and then we'll use PDO to fetch the affected.
       var _pdo = me.getPdo();
       var params = me.prepareBindings(bindings);
-      var statement = await _pdo.prepareStatement(query, params);
-      await _pdo.executeStatement(statement);
+      var statement = await _pdo.prepareStatement(query, params, timeout);
+      await _pdo.executeStatement(statement, null, timeout);
       return await statement.rowsAffected;
-    });
+      //var resSult =await _pdo.queryUnnamed(query, params, me.getFetchMode());
+    }, timeout: timeout);
 
     return res as int;
   }
@@ -401,14 +420,16 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   /// @param  String  $query
   /// @return bool
   ///
-  Future<dynamic> unprepared(String query) async {
-    return this.run(query, [], (me, query, bindings) async {
+  Future<dynamic> unprepared(String query,
+      [Duration? timeout = defaultTimeout]) async {
+    return this.run(query, [], (me, query, bindings,
+        {Duration? timeout}) async {
       if (me.pretending()) {
         return true;
       }
 
-      return me.getPdo().execute(query);
-    });
+      return me.getPdo().execute(query, timeout);
+    }, timeout: timeout);
   }
 
   ///
@@ -443,27 +464,35 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   /// @return mixed
   ///
   /// @throws \Throwable
-  /////Future<T> runInTransaction<T>(  Future<T> operation(TransactionContext ctx))
   Future<dynamic> transaction(
-      Future<dynamic> Function(Connection ctx) callback) async {
-    final transa = await this.pdo.pdoInstance.beginTransaction();
-
+    Future<dynamic> Function(Connection ctx) callback, [
+    Duration? timeout = defaultTimeout,
+    Duration? timeoutInner = defaultTimeout,
+  ]) async {
+    //final transa = await this.pdo.pdoInstance.beginTransaction();
     // We'll simply execute the given callback within a try / catch block
     // and if we catch any exception we can rollback the transaction
     // so that none of the changes are persisted to the database.
-    try {
-      final newConnection = Connection(
-          transa, this._databaseName, this._tablePrefix, this._config);
-      final result = await callback(newConnection);
-      await this.pdo.pdoInstance.commit(transa);
-      return result;
-    } catch (ex) {
-      // If we catch an exception, we will roll back so nothing gets messed
-      // up in the database. Then we'll re-throw the exception so it can
-      // be handled how the developer sees fit for their applications.
-      await this.pdo.pdoInstance.rollBack(transa);
-      rethrow;
-    }
+    // try {
+    //   final newConnection = Connection(
+    //       transa, this._databaseName, this._tablePrefix, this._config);
+    //   final result = await callback(newConnection);
+    //   await this.pdo.pdoInstance.commit(transa);
+    //   return result;
+    // } catch (ex) {
+    //   // If we catch an exception, we will roll back so nothing gets messed
+    //   // up in the database. Then we'll re-throw the exception so it can
+    //   // be handled how the developer sees fit for their applications.
+    //   await this.pdo.pdoInstance.rollBack(transa);
+    //   rethrow;
+    // }
+
+    final result = await this.pdo.pdoInstance.runInTransaction((ctx) async {
+      final newConnection =
+          Connection(ctx, this._databaseName, this._tablePrefix, this._config);
+      return await callback(newConnection);
+    }, timeout: timeout, timeoutInner: timeoutInner);
+    return result;
   }
 
   ///
@@ -569,10 +598,13 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   /// @throws \Illuminate\Database\QueryException
   ///
   Future<dynamic> run(
-      String query,
-      dynamic bindings,
-      Future<dynamic> Function(Connection con, String query, dynamic bindings)
-          callback) async {
+    String query,
+    dynamic bindings,
+    Future<dynamic> Function(Connection con, String query, dynamic bindings,
+            {Duration? timeout})
+        callback, {
+    Duration? timeout = defaultTimeout,
+  }) async {
     //this.reconnectIfMissingConnection();
 
     //var start = Utils.microtime();
@@ -580,15 +612,16 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
     // Here we will run this query. If an exception occurs we'll determine if it was
     // caused by a connection that has been lost. If that is the cause, we'll try
     // to re-establish connection and re-run the query with a fresh connection.
-    try {
-      // print('Connection@run');
-      result = await this.runQueryCallback(query, bindings, callback);
-      //print('Connection@run $result');
-    } catch (e) {
-      //print('Connection@run error');
-      result = await this
-          .tryAgainIfCausedByLostConnection(e, query, bindings, callback);
-    }
+    // try {
+    // print('Connection@run');
+    result = await this
+        .runQueryCallback(query, bindings, callback, timeout: timeout);
+    //print('Connection@run $result');
+    // } catch (e) {
+    //   //print('Connection@run error');
+    //   result = await this
+    //       .tryAgainIfCausedByLostConnection(e, query, bindings, callback);
+    // }
 
     // Once we have run the query we will calculate the time that it took to run and
     // then log the query, bindings, and execution time so we will report them on
@@ -613,14 +646,16 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   Future<dynamic> runQueryCallback(
       String query,
       bindings,
-      Future<dynamic> Function(Connection con, String query, dynamic bindings)
-          callback) async {
+      Future<dynamic> Function(Connection con, String query, dynamic bindings,
+              {Duration? timeout})
+          callback,
+      {Duration? timeout = defaultTimeout}) async {
     // To execute the statement, we'll simply call the callback, which will actually
     // run the SQL against the PDO connection. Then we can calculate the time it
     // took to execute and log the query SQL, bindings and time in our memory.
     var result;
     //try {
-    result = await callback(this, query, bindings);
+    result = await callback(this, query, bindings, timeout: timeout);
     //}
 
     // If an exception occurs when attempting to run a query, we'll format the error
@@ -644,15 +679,20 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   ///
   /// @throws \Illuminate\Database\QueryException
   ///
-  Future<dynamic> tryAgainIfCausedByLostConnection(dynamic e, String query,
-      bindings, Future<dynamic> Function(Connection, String, dynamic) callback,
+  Future<dynamic> tryAgainIfCausedByLostConnection(
+      dynamic e,
+      String query,
+      bindings,
+      Future<dynamic> Function(Connection, String, dynamic, {Duration? timeout})
+          callback,
       {int delay = 2000}) async {
     if (this.causedByLostConnection(e) &&
         tryReconnectCount < tryReconnectLimit) {
       await Future.delayed(Duration(milliseconds: delay));
-      print('Eloquent@tryAgainIfCausedByLostConnection try reconnect...');
+      //print('Eloquent@tryAgainIfCausedByLostConnection try reconnect...');
       tryReconnectLimit++;
       await this.reconnect();
+      await Future.delayed(Duration(milliseconds: 1000));
       tryReconnectLimit = 0;
       return await this.runQueryCallback(query, bindings, callback);
     }

@@ -17,3 +17,24 @@
 ## 1.2.1
 
 - fix parameter type of column orWhere
+
+## 2.0.0
+
+- implemented Connection pool with option to automatically reconnect in case of connection drop
+```dart
+final manager = Manager();
+  manager.addConnection({
+    'driver': 'pgsql',
+    'host': 'localhost',
+    'port': '5432',
+    'database': 'database',
+    'username': 'username',
+    'password': 'password',
+    'charset': 'latin1',  
+    'schema': ['public'],
+    'pool': true, //new
+    'poolsize': 2, //new
+    'allowreconnect': true, //new   
+  });
+
+```
