@@ -213,7 +213,7 @@ class Container {
   ///
   Function getClosure(String abstract, String concrete) {
     return ($c, [parameters = const []]) {
-      var methodName = (abstract == concrete) ? 'build' : 'make';
+      //var methodName = (abstract == concrete) ? 'build' : 'make';
       //return Utils.call_method($c, methodName, [concrete, parameters]);
       throw UnimplementedError();
       // return $c->$method(concrete, parameters);

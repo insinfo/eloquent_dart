@@ -40,7 +40,7 @@ class PDO extends PDOExecutionContext {
   }
 
   /// CoreConnection
-  ExecutionContext? connection;
+  ConnectionInterface? connection;
 
   //called from postgres_connector.dart
   Future<PDO> connect() async {
@@ -71,8 +71,7 @@ class PDO extends PDOExecutionContext {
           allowAttemptToReconnect: false,
           // sslContext: sslContext,
           textCharset: dsnParser.charset);
-      await connection!.connect();
-      // final conn = CoreConnection.fromSettings(settings);
+      await connection!.connect();      
     }
 
     return this;
@@ -80,37 +79,35 @@ class PDO extends PDOExecutionContext {
 
   /// Inicia uma transação
   /// Retorna true em caso de sucesso ou false em caso de falha.
-  // Future<PDOTransaction> beginTransaction() async {
-  //   final ctx = await connection!.beginTransaction();
-  //   return PDOTransaction(ctx, this);
-  // }
+  Future<PDOTransaction> beginTransaction() async {
+    final ctx = await connection!.beginTransaction();
+    return PDOTransaction(ctx, this);
+  }
 
-  // /// Envia uma transação
-  // Future<void> commit(PDOTransaction transaction) {
-  //   return connection!.commit(transaction.transactionContext);
-  // }
+  /// Envia uma transação
+  Future<void> commit(PDOTransaction transaction) {
+    return connection!.commit(transaction.transactionContext);
+  }
 
-  // /// Rolls back a transaction
-  // Future<void> rollBack(PDOTransaction transaction) {
-  //   return connection!.rollBack(transaction.transactionContext);
-  // }
+  /// Rolls back a transaction
+  Future<void> rollBack(PDOTransaction transaction) {
+    return connection!.rollBack(transaction.transactionContext);
+  }
 
   Future<T> runInTransaction<T>(
-    Future<T> operation(PDOTransaction ctx), {
-    Duration? timeout = defaultTimeout,
-    Duration? timeoutInner = defaultTimeout,
-  }) async {
-    return await connection!.runInTransaction((ctx) async {
-      final pdoCtx = PDOTransaction(ctx, this);
-      return await operation(pdoCtx);
-    }, timeout: timeout, timeoutInner: timeoutInner);
+    Future<T> operation(PDOTransaction ctx)) async {
+    //print('PDO@runInTransaction ');
+    return connection!.runInTransaction((transaCtx) async {
+      final pdoCtx = PDOTransaction(transaCtx, this);
+      return operation(pdoCtx);
+    });
   }
 
   /// Executa uma instrução SQL e retornar o número de linhas afetadas
-  Future<int> execute(String statement, [Duration? timeout = defaultTimeout]) {
+  Future<int> execute(String statement) {
     // print('PDO@exec statement: $statement');
     // throw UnimplementedError();
-    return connection!.execute(statement, timeout: timeout);
+    return connection!.execute(statement);
   }
 
   /// Recuperar um atributo da conexão com o banco de dados
@@ -163,17 +160,18 @@ class PDO extends PDOExecutionContext {
   /// helps to prevent SQL injection attacks by eliminating the need to
   /// manually quote and escape the parameters.
   Future<PDOStatement> prepareStatement(String query, dynamic params,
-      [Duration? timeout = defaultTimeout]) async {
-    final postgresQuery = await connection!.prepareStatement(query, params,
-        placeholderIdentifier: PlaceholderIdentifier.onlyQuestionMark,
-        timeout: timeout);
+      [Duration? timeout]) async {
+    final postgresQuery = await connection!.prepareStatement(
+      query,
+      params,
+      placeholderIdentifier: PlaceholderIdentifier.onlyQuestionMark,
+    );
     return PDOStatement(postgresQuery);
   }
 
   Future<dynamic> executeStatement(PDOStatement statement,
-      [int? fetchMode, Duration? timeout = defaultTimeout]) async {
-    var results = await connection!
-        .executeStatement(statement.postgresQuery!, timeout: timeout);
+      [int? fetchMode, Duration? timeout]) async {
+    var results = await connection!.executeStatement(statement.postgresQuery!);
     statement.rowsAffected = results.rowsAffected.value;
     switch (fetchMode) {
       case PDO_FETCH_ASSOC:
@@ -184,44 +182,9 @@ class PDO extends PDOExecutionContext {
     return results;
   }
 
-  Future<dynamic> queryNamed(String query, dynamic params,
-      [int? fetchMode, Duration? timeout = defaultTimeout]) async {
-    //print('PDO@queryNamed timeout $timeout');
-    var results = await connection!.queryNamed(query, params,
-        placeholderIdentifier: PlaceholderIdentifier.onlyQuestionMark,
-        timeout: timeout);
-
-    rowsAffected = results.rowsAffected.value;
-    switch (fetchMode) {
-      case PDO_FETCH_ASSOC:
-        return results.toMaps();
-      case PDO_FETCH_ASSOC:
-        return results;
-    }
-    return results;
-  }
-
-  Future<dynamic> queryUnnamed(String query, dynamic params,
-      [int? fetchMode, Duration? timeout = defaultTimeout]) async {
-    // print('PDO@queryNamed timeout $timeout');
-    var results = await connection!.queryUnnamed(query, params,
-        placeholderIdentifier: PlaceholderIdentifier.onlyQuestionMark,
-        timeout: timeout);
-
-    rowsAffected = results.rowsAffected.value;
-    switch (fetchMode) {
-      case PDO_FETCH_ASSOC:
-        return results.toMaps();
-      case PDO_FETCH_ASSOC:
-        return results;
-    }
-    return results;
-  }
-
-  /// Prepares and executes an SQL statement without placeholders
-  Future<dynamic> query(String query,
-      [int? fetchMode, Duration? timeout = defaultTimeout]) async {
-    var results = await connection!.queryNamed(query, [], timeout: timeout);
+  /// Prepares and executes an SQL statement
+  Future<dynamic> query(String query, [dynamic params, int? fetchMode]) async {
+    var results = await connection!.queryNamed(query, params ?? [], placeholderIdentifier: PlaceholderIdentifier.onlyQuestionMark);
     switch (fetchMode) {
       case PDO_FETCH_ASSOC:
         return results.toMaps();

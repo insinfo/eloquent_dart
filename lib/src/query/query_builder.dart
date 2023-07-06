@@ -1513,7 +1513,7 @@ class QueryBuilder {
     // print('QueryGrammar@runSelect getBindings: $bid');
     var com = this.connection;
 
-    var results = await com.select(sqlStr, bid, !this.useWritePdoProp, timeout);
+    var results = await com.select(sqlStr, bid, !this.useWritePdoProp);
     // print('QueryGrammar@runSelect results: $results');
     return results;
   }
@@ -1862,7 +1862,7 @@ class QueryBuilder {
   /// [values]  values Map<String, dynamic>
   /// Return bool
   ///
-  Future<dynamic> insert(Map<String, dynamic> values, [Duration? timeout = Connection.defaultTimeout]) {
+  Future<dynamic> insert(Map<String, dynamic> values, [Duration? timeout ]) {
     // if (empty($values)) {
     //     return true;
     // }
@@ -1902,7 +1902,7 @@ class QueryBuilder {
     // is the same type of result returned by the raw connection instance.
     bindings = this.cleanBindings(bindings);
 
-    return this.connection.insert(sql, bindings,timeout);
+    return this.connection.insert(sql, bindings);
   }
 
   ///
@@ -1931,7 +1931,7 @@ class QueryBuilder {
     var values = keyValues.values.toList();
     var bindings = Utils.array_merge(values, curentBindings);
     var sql = this.grammar.compileUpdate(this, keyValues);
-    return this.connection.update(sql, this.cleanBindings(bindings), timeout);
+    return this.connection.update(sql, this.cleanBindings(bindings));
   }
 
   ///
@@ -1985,7 +1985,7 @@ class QueryBuilder {
 
     var sql = this.grammar.compileDelete(this);
 
-    return this.connection.delete(sql, this.getBindings(), timeout);
+    return this.connection.delete(sql, this.getBindings());
   }
 
   ///

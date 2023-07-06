@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:eloquent/eloquent.dart';
-import 'package:eloquent/src/query/join_clause.dart';
+//import 'package:eloquent/src/query/join_clause.dart';
 
 void main(List<String> args) async {
   var manager = new Manager();
