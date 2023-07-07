@@ -42,3 +42,8 @@ final manager = Manager();
 ## 2.0.1
 
 - fixes critical bug in version 2.0.0 that caused stack overflow, timeout parameters were removed from query execution methods
+
+
+## 2.0.2
+
+- fix bug on set application_name to postgresql < 8.2  

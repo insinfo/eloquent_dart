@@ -48,7 +48,7 @@ class PDO extends PDOExecutionContext {
     //print('PDO@connect dsn: $dsn');
     final dsnParser = DSNParser(dsn, DsnType.pdoPostgreSql);
     //print( 'PDO@connect parser.pool: ${dsnParser.pool} poolSize: ${dsnParser.poolSize} allowReconnect: ${dsnParser.allowReconnect} applicationName: ${dsnParser.applicationName}');
-
+//print( 'PDO@connect dsnParser.applicationName ${dsnParser.applicationName}');
     if (dsnParser.pool == true) {
       final settings = ConnectionSettings(
         user: user,

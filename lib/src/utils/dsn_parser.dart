@@ -50,7 +50,7 @@ class DSNParser {
   bool get pool => dsnParts['pool'].toString() == 'true';
   int get poolSize => int.tryParse(dsnParts['poolsize'] ?? '') ?? 1;
   bool get allowReconnect => dsnParts['allowreconnect'].toString() == 'true';
-  String? get applicationName => dsnParts['application_name'] ?? 'eloquent';
+  String? get applicationName => dsnParts['application_name'];
 
   Map<String, dynamic> get params => dsnParts['params'];
 
