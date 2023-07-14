@@ -160,12 +160,12 @@ class PostgresConnector extends Connector implements ConnectorInterface {
 
     if (config['driver_implementation'] == 'postgres') {
       pdo = PostgresPDO(dsn, username, password, options);
-      print('using postgres');
+      //print('using postgres');
     } else if (config['driver_implementation'] == 'dargres') {
       pdo = DargresPDO(dsn, username, password, options);
-      print('using dargres');
+     // print('using dargres');
     } else {
-      print('using postgres');
+     // print('using postgres');
       pdo = PostgresPDO(dsn, username, password, options);
     }
 
