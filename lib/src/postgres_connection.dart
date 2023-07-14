@@ -1,8 +1,10 @@
 import 'package:eloquent/eloquent.dart';
 import 'package:eloquent/src/query/processors/postgres_processor.dart';
 
+
+
 class PostgresConnection extends Connection {
-  PostgresConnection(PDO pdoP,
+  PostgresConnection(PDOInterface pdoP,
       [String databaseP = '',
       String tablePrefixP = '',
       Map<String, dynamic> configP = const {}])

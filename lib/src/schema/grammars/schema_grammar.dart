@@ -145,16 +145,17 @@ class SchemaGrammar extends BaseGrammar {
   /// @return string
   ///
   String addModifiers(sql, Blueprint blueprint, Fluent column) {
-    for (var modifier in this.modifiers) {
-      var method = "modify${modifier}";
-      // if (Utils.method_exists(this, method)) {
-      //   //sql += this.{$method}(blueprint, column);
-      //   sql += Utils.call_method(this, method, [blueprint, column]);
-      // }
-      throw UnimplementedError();
-    }
+    // for (var modifier in this.modifiers) {
+    //   var method = "modify${modifier}";
+    //   // if (Utils.method_exists(this, method)) {
+    //   //   //sql += this.{$method}(blueprint, column);
+    //   //   sql += Utils.call_method(this, method, [blueprint, column]);
+    //   // }
 
-    return sql;
+    // }
+    // return sql;
+
+    throw UnimplementedError();
   }
 
   ///

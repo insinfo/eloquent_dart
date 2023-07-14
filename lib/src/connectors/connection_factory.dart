@@ -1,6 +1,7 @@
 import 'package:eloquent/eloquent.dart';
 import 'package:eloquent/src/container/container.dart';
 
+
 class ConnectionFactory {
   /**
      * The IoC container instance.
@@ -70,7 +71,7 @@ class ConnectionFactory {
   /// @param  array  $config
   /// @return \PDO
   ///
-  Future<PDO> createReadPdo(Map<String, dynamic> config) async {
+  Future<PDOInterface> createReadPdo(Map<String, dynamic> config) async {
     var readConfig = getReadConfig(config);
 
     return createConnector(readConfig).connect(readConfig);
@@ -195,7 +196,7 @@ class ConnectionFactory {
   ///
   ///  @throws \InvalidArgumentException
   ///
-  Connection createConnection(String driver, PDO pdoP, String database,
+  Connection createConnection(String driver, PDOInterface pdoP, String database,
       [String prefix = '', Map<String, dynamic> config = const {}]) {
     // if ($this->container->bound($key = "db.connection.{$driver}")) {
     //     return $this->container->make($key, [$connection, $database, $prefix, $config]);

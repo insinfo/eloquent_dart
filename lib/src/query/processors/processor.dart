@@ -8,7 +8,7 @@ class Processor {
   /// @param  array  $results
   /// @return array
   ///
-  List processSelect(QueryBuilder query, List results) {
+  List<Map<String, dynamic>> processSelect(QueryBuilder query, List<Map<String, dynamic>> results) {
     return results;
   }
 

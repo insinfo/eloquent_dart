@@ -1,4 +1,6 @@
 import 'package:eloquent/eloquent.dart';
+import 'package:eloquent/src/pdo/dargres/dargres_pdo.dart';
+import 'package:eloquent/src/pdo/postgres/postgres_pdo.dart';
 
 class PostgresConnector extends Connector implements ConnectorInterface {
   ///
@@ -14,7 +16,7 @@ class PostgresConnector extends Connector implements ConnectorInterface {
   /// [config] Map<String, dynamic>
   /// @return PostgreSQLConnection \PDO
   ///
-  Future<PDO> connect(Map<String, dynamic> config) async {
+  Future<PDOInterface> connect(Map<String, dynamic> config) async {
     // First we'll create the basic DSN and connection instance connecting to the
     // using the configuration option specified by the developer. We will also
     // set the default character set on the connections to UTF-8 by default.
@@ -140,10 +142,10 @@ class PostgresConnector extends Connector implements ConnectorInterface {
   /// @return \PDO
   /// Aqui que cria a conexão com o Banco de Dados de fato
   ///
-  Future<PDO> createConnection(String dsn, Map<String, dynamic> config,
+  Future<PDOInterface> createConnection(String dsn, Map<String, dynamic> config,
       Map<String, dynamic> options) async {
-    var username = config['username'];
-    var password = config['password'];
+    final username = config['username'];
+    final password = config['password'];
     // var host = config['host'];
     // var port = config['port']; //5432
     // var database = config['database'];
@@ -154,8 +156,19 @@ class PostgresConnector extends Connector implements ConnectorInterface {
     //         $e, $dsn, $username, $password, $options
     //     );
     // }
+    late PDOInterface pdo;
 
-    var pdo = new PDO(dsn, username, password, options);
+    if (config['driver_implementation'] == 'postgres') {
+      pdo = PostgresPDO(dsn, username, password, options);
+      print('using postgres');
+    } else if (config['driver_implementation'] == 'dargres') {
+      pdo = DargresPDO(dsn, username, password, options);
+      print('using dargres');
+    } else {
+      print('using postgres');
+      pdo = PostgresPDO(dsn, username, password, options);
+    }
+
     await pdo.connect();
 
     return pdo;

@@ -85,28 +85,26 @@ class Blueprint {
   List toSql(Connection connection, SchemaGrammar grammar) {
     addImpliedCommands();
 
-    var statements = [];
-
+    // var statements = [];
     // Each type of command has a corresponding compiler function on the schema
     // grammar which is used to build the necessary SQL statements to build
     // the blueprint element, so we'll just call that compilers function.
     // Cada tipo de comando tem uma função de compilação correspondente no esquema
     // gramática que é usada para construir as instruções SQL necessárias para construir
     // o elemento blueprint, então vamos chamar essa função de compiladores.
-    for (var command in _commands) {
-      var method = 'compile' + Utils.ucfirst(command['name']);
-      throw UnimplementedError();
+    //for (var command in _commands) {
+    //  var method = 'compile' + Utils.ucfirst(command['name']);
 
-      // if (Utils.method_exists(grammar, method)) {
-      //   var sql =
-      //       Utils.call_method(grammar, method, [this, command, connection]);
-      //   if (!Utils.is_null(sql)) {
-      //     statements = Utils.array_merge(statements, sql as List);
-      //   }
-      // }
-    }
-
-    return statements;
+    // if (Utils.method_exists(grammar, method)) {
+    //   var sql =
+    //       Utils.call_method(grammar, method, [this, command, connection]);
+    //   if (!Utils.is_null(sql)) {
+    //     statements = Utils.array_merge(statements, sql as List);
+    //   }
+    // }
+    //}
+    // return statements;
+    throw UnimplementedError();
   }
 
   ///

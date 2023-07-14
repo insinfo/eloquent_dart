@@ -1,6 +1,6 @@
 import 'package:eloquent/eloquent.dart';
 
-import '../join_clause.dart';
+
 
 class QueryGrammar extends BaseGrammar {
   /// chama um determinado metodo com base no nome
@@ -678,7 +678,7 @@ class QueryGrammar extends BaseGrammar {
   ///  @return String
   ///
   String compileUnions(QueryBuilder query) {
-    var sql = '';
+   // var sql = '';
 
     // for(var union in query.unionsProp ) {
     //     sql += compileUnion(union);

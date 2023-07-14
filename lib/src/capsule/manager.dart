@@ -1,10 +1,6 @@
-//
 import 'package:eloquent/eloquent.dart';
 import 'package:eloquent/src/container/container.dart';
-import 'package:eloquent/src/pdo/pdo_constants.dart';
 import 'package:eloquent/src/schema/schema_builder.dart';
-
-
 
 //with CapsuleManagerTrait
 class Manager {
@@ -93,7 +89,7 @@ class Manager {
   ///  @return void
   ///
   void setupDefaultConfiguration() {
-    this.container['config']['database.fetch'] = PDO_FETCH_ASSOC; 
+    //this.container['config']['database.fetch'] = PDO_FETCH_ASSOC;
     this.container['config']['database.default'] = 'default';
   }
 

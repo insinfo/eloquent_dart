@@ -47,3 +47,8 @@ final manager = Manager();
 ## 2.0.2
 
 - fix bug on set application_name to postgresql < 8.2  
+
+## 2.0.2
+
+- add support to postgres driver https://github.com/insinfo/postgresql-dart-1.git
+- type correction and other improvements

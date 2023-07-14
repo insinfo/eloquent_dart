@@ -39,4 +39,8 @@ export 'src/exceptions/logic_exception.dart';
 export 'src/exceptions/query_exception.dart';
 
 //PDO
-export 'src/pdo/pdo.dart';
+
+
+export 'src/pdo/core/pdo_execution_context.dart';
+export 'src/pdo/core/pdo_result.dart';
+export 'src/pdo/core/pdo_interface.dart';

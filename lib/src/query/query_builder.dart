@@ -1460,22 +1460,20 @@ class QueryBuilder {
   /// @return mixed
   ///
   Future<dynamic> value(String column) async {
-    var result = await this.first([column]);
-
-    return Utils.count(result) > 0 ? Utils.reset(result) : null;
+    final result = await this.first([column]);
+    return result;
   }
 
   ///
   /// Execute the query and get the first result.
   ///
   /// [columns] columns
-  /// `Return` Map<String,dynamic> or List<dynamic>
+  /// `Return` Map<String,dynamic>
   ///
-  Future<dynamic> first(
-      [List<String> columns = const ['*'],
-      Duration? timeout = Connection.defaultTimeout]) async {
-    var results = await this.take(1).get(columns, timeout);
-    return Utils.count(results) > 0 ? Utils.reset(results) : null;
+  Future<Map<String, dynamic>?> first(
+      [List<String> columns = const ['*'], int? timeoutInSeconds]) async {
+    final results = await this.take(1).get(columns, timeoutInSeconds);
+    return results.isNotEmpty ?  results.first : null;
   }
 
   ///
@@ -1484,18 +1482,17 @@ class QueryBuilder {
   /// @param  array  $columns
   /// @return array|static[]
   ///
-  Future<dynamic> get(
-      [List<String> columnsP = const ['*'],
-      Duration? timeout = Connection.defaultTimeout]) async {
+  Future<List<Map<String, dynamic>>> get(
+      [List<String> columnsP = const ['*'], int? timeoutInSeconds]) async {
     var original = this.columnsProp != null ? [...this.columnsProp!] : null;
 
     if (Utils.is_null(original)) {
       this.columnsProp = columnsP;
     }
 
-    var resultRunSelect = await this.runSelect(timeout);
+    final resultRunSelect = await this.runSelect(timeoutInSeconds);
 
-    var results = this.processor.processSelect(this, resultRunSelect);
+    final results = this.processor.processSelect(this, resultRunSelect);
     this.columnsProp = original;
     return results;
   }
@@ -1505,15 +1502,14 @@ class QueryBuilder {
   ///
   /// @return array
   ///
-  Future<dynamic> runSelect(
-      [Duration? timeout = Connection.defaultTimeout]) async {
-    var sqlStr = this.toSql();
+  Future<List<Map<String, dynamic>>> runSelect([int? timeoutInSeconds]) async {
+    final sqlStr = this.toSql();
     //print('QueryGrammar@runSelect sql: $sqlStr');
-    var bid = this.getBindings();
+    final bid = this.getBindings();
     // print('QueryGrammar@runSelect getBindings: $bid');
-    var com = this.connection;
+    final com = this.connection;
 
-    var results = await com.select(sqlStr, bid, !this.useWritePdoProp);
+    final results = await com.select(sqlStr, bid, !this.useWritePdoProp);
     // print('QueryGrammar@runSelect results: $results');
     return results;
   }
@@ -1862,7 +1858,7 @@ class QueryBuilder {
   /// [values]  values Map<String, dynamic>
   /// Return bool
   ///
-  Future<dynamic> insert(Map<String, dynamic> values, [Duration? timeout ]) {
+  Future<dynamic> insert(Map<String, dynamic> values, [Duration? timeout]) {
     // if (empty($values)) {
     //     return true;
     // }

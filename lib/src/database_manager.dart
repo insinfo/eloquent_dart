@@ -174,7 +174,7 @@ class DatabaseManager implements ConnectionResolverInterface {
   /// @return \Illuminate\Database\Connection
   ///
   Connection prepare(Connection connection) {
-    connection.setFetchMode(this.app['config']['database.fetch']);
+ 
 
     if (this.app.bound('events')) {
       connection.setEventDispatcher(this.app['events']);

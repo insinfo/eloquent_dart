@@ -1,4 +1,6 @@
-import 'package:eloquent/eloquent.dart';
+
+
+import '../pdo/core/pdo_interface.dart';
 
 abstract class ConnectorInterface {
   ///
@@ -7,5 +9,5 @@ abstract class ConnectorInterface {
   /// @param  array  $config
   /// @return \PDO
   ///
-  Future<PDO> connect(Map<String, dynamic> config);
+  Future<PDOInterface> connect(Map<String, dynamic> config);
 }
