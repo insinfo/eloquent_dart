@@ -52,3 +52,8 @@ final manager = Manager();
 
 - add support to postgres driver https://github.com/insinfo/postgresql-dart-1.git
 - type correction and other improvements
+
+## 2.1.0
+
+- change dependencie postgres to my fork postgres_fork
+- add more tests

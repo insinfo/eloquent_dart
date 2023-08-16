@@ -2,12 +2,15 @@ import 'package:eloquent/eloquent.dart';
 
 import 'package:test/test.dart';
 
+/// test PostgresPDO
+/// config['driver_implementation'] == 'postgres'
 void main() {
   late Connection db;
   setUp(() async {
     var manager = new Manager();
     manager.addConnection({
       'driver': 'pgsql',
+      'driver_implementation': 'postgres',
       'host': 'localhost',
       'port': '5432',
       'database': 'banco_teste',
