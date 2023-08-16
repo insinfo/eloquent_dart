@@ -1,5 +1,5 @@
 import 'package:eloquent/eloquent.dart';
-import 'package:postgres/postgres.dart';
+import 'package:postgres_fork/postgres.dart';
 
 import 'postgres_pdo.dart';
 

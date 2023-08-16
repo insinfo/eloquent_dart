@@ -18,11 +18,12 @@ dependencies:
   
   #postgres:
     #path: ../postgresql-dart 
-
-  postgres:
-    git:
-      ref: master
-      url: https://github.com/insinfo/postgresql-dart-1.git
+  
+  postgres_fork: ^2.7.0
+  #postgres:
+    #git:
+      #ref: master
+      #url: https://github.com/insinfo/postgresql-dart-1.git
     
 
 dev_dependencies:

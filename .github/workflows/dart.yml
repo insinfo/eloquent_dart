@@ -21,7 +21,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-22.04]
-        sdk: [2.12.4]
+        sdk: [2.18.3]
 
     #services:
       #postgres:

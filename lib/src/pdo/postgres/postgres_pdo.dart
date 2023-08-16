@@ -3,7 +3,7 @@ import 'package:eloquent/src/utils/dsn_parser.dart';
 import 'package:eloquent/eloquent.dart';
 import 'package:enough_convert/windows.dart';
 import 'postgres_pdo_transaction.dart';
-import 'package:postgres/postgres.dart';
+import 'package:postgres_fork/postgres.dart';
 
 class PostgresPDO extends PDOInterface {
   /// default query Timeout =  30 seconds
