@@ -119,17 +119,17 @@ class PostgresPDO extends PDOInterface {
       placeholderIdentifier: PlaceholderIdentifier.onlyQuestionMark,
     );
 
-    final rows = rs.map((row) => row.toTableColumnMap()).toList();
+    final rows = rs.map((row) => row.toColumnMap()).toList();
 
-    final maps = <Map<String, dynamic>>[];
-    if (rows.isNotEmpty) {
-      for (var item in rows) {
-        //Combine/merge multiple maps into 1 map
-        maps.add(item.values.reduce((map1, map2) => map1..addAll(map2)));
-      }
-    }
+    // final maps = <Map<String, dynamic>>[];
+    // if (rows.isNotEmpty) {
+    //   for (var item in rows) {
+    //     //Combine/merge multiple maps into 1 map
+    //     maps.add(item.values.reduce((map1, map2) => map1..addAll(map2)));
+    //   }
+    // }
 
-    final pdoResult = PDOResults(maps, rs.affectedRowCount);
+    final pdoResult = PDOResults(rows, rs.affectedRowCount);
     return pdoResult;
   }
 

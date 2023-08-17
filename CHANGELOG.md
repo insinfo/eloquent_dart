@@ -57,3 +57,7 @@ final manager = Manager();
 
 - change dependencie postgres to my fork postgres_fork
 - add more tests
+
+## 2.1.1
+
+- small improvement and optimization in postgres PDO implementation
