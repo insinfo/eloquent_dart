@@ -109,9 +109,9 @@ class QueryGrammar extends BaseGrammar {
       query.columnsProp = ['*'];
     }
     var compiledComps = compileComponents(query);
-   // print('compileSelect compiledComps $compiledComps');
+ 
     var sql = Utils.trim(concatenate(compiledComps));
-    // print('compileSelect sql $sql');
+   
 
     query.setColumns(original);
 

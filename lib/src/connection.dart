@@ -688,7 +688,7 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   Future<void> disconnect() async {
     // this.setPdo(null).setReadPdo(null);
     //throw UnimplementedError();
-    print('Connection@disconnect');
+    //print('Connection@disconnect');
     try {
       await this.pdo.pdoInstance.close();
     } catch (e) {

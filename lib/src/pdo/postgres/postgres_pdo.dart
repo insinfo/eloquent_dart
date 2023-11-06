@@ -27,7 +27,6 @@ class PostgresPDO extends PDOInterface {
   /// await pdo.connect();
   ///
   PostgresPDO(this.dsn, this.user, this.password, [this.attributes]) {
-    //print('PDO@construct');
     super.pdoInstance = this;
   }
 
@@ -54,7 +53,6 @@ class PostgresPDO extends PDOInterface {
 
   //called from postgres_connector.dart
   Future<PostgresPDO> connect() async {
-    //print('PostgresPDO@connect dsn: $dsn');
     final dsnParser = DSNParser(dsn, DsnType.pdoPostgreSql);
 
     connection = PostgreSQLConnection(
@@ -67,13 +65,12 @@ class PostgresPDO extends PDOInterface {
     );
     await connection.open();
     await connection.query('''SET client_encoding = '${dsnParser.charset}';''');
-    //print('PostgresPDO@connect host: ${dsnParser.host}');
+
     return this;
   }
 
   Future<T> runInTransaction<T>(Future<T> operation(PostgresPDOTransaction ctx),
       [int? timeoutInSeconds]) async {
-    //print('PDO@runInTransaction ');
     if (timeoutInSeconds == null) {
       timeoutInSeconds = defaultTimeoutInSeconds;
     }
@@ -87,14 +84,13 @@ class PostgresPDO extends PDOInterface {
 
   /// Executa uma instrução SQL e retornar o número de linhas afetadas
   Future<int> execute(String statement, [int? timeoutInSeconds]) async {
-    // print( 'PostgresPDO@execute statement $statement | timeoutInSeconds $timeoutInSeconds');
     if (timeoutInSeconds == null) {
       timeoutInSeconds = defaultTimeoutInSeconds;
     }
     final result = await connection.execute(statement,
         timeoutInSeconds: timeoutInSeconds,
         placeholderIdentifier: PlaceholderIdentifier.onlyQuestionMark);
-    //print('PostgresPDO@execute result: $result');
+
     return result;
   }
 

@@ -25,7 +25,6 @@ class DargresPDO extends PDOInterface {
   /// await pdo.connect();
   ///
   DargresPDO(this.dsn, this.user, this.password, [this.attributes]) {
-    //print('PDO@construct');
     super.pdoInstance = this;
   }
 
@@ -34,10 +33,8 @@ class DargresPDO extends PDOInterface {
 
   //called from postgres_connector.dart
   Future<DargresPDO> connect() async {
-  //  print('DargresPDO@connect dsn: $dsn');
     final dsnParser = DSNParser(dsn, DsnType.pdoPostgreSql);
-    //print( 'PDO@connect parser.pool: ${dsnParser.pool} poolSize: ${dsnParser.poolSize} allowReconnect: ${dsnParser.allowReconnect} applicationName: ${dsnParser.applicationName}');
-//print( 'PDO@connect dsnParser.applicationName ${dsnParser.applicationName}');
+
     if (dsnParser.pool == true) {
       final settings = dargres.ConnectionSettings(
         user: user,
@@ -66,9 +63,8 @@ class DargresPDO extends PDOInterface {
     return this;
   }
 
-  Future<T> runInTransaction<T>(
-      Future<T> operation(DargresPDOTransaction ctx),[int? timeoutInSeconds]) async {
-    //print('PDO@runInTransaction ');
+  Future<T> runInTransaction<T>(Future<T> operation(DargresPDOTransaction ctx),
+      [int? timeoutInSeconds]) async {
     return connection!.runInTransaction((transaCtx) async {
       final pdoCtx = DargresPDOTransaction(transaCtx, this);
       return operation(pdoCtx);

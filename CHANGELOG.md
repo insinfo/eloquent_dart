@@ -61,3 +61,7 @@ final manager = Manager();
 ## 2.1.1
 
 - small improvement and optimization in postgres PDO implementation
+
+## 2.1.2
+
+- remove print from disconnect() in Connection class

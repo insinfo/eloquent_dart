@@ -93,7 +93,7 @@ class PostgresConnector extends Connector implements ConnectorInterface {
       dsn += ";sslmode=${config['sslmode']}";
     }
 
-    //print('postgres_connector@connect config: $config');
+  
 
     // add charset to DSN
     if (config.containsKey('charset') && config['charset'] != null) {
@@ -160,12 +160,12 @@ class PostgresConnector extends Connector implements ConnectorInterface {
 
     if (config['driver_implementation'] == 'postgres') {
       pdo = PostgresPDO(dsn, username, password, options);
-      //print('using postgres');
+    
     } else if (config['driver_implementation'] == 'dargres') {
       pdo = DargresPDO(dsn, username, password, options);
-      //print('using dargres');
+     
     } else {
-      //print('using postgres');
+     
       pdo = PostgresPDO(dsn, username, password, options);
     }
 
