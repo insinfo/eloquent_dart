@@ -12,7 +12,7 @@ void main() {
       'driver': 'pgsql',
       'driver_implementation': 'postgres',
       'host': 'localhost',
-      'port': '5432',
+      'port': '5435',
       'database': 'banco_teste',
       'username': 'usermd5',
       'password': 's1sadm1n',
@@ -23,16 +23,24 @@ void main() {
     });
     manager.setAsGlobal();
     db = await manager.connection();
-    await db.select('DROP SCHEMA IF EXISTS myschema CASCADE;');
-    await db.select('CREATE SCHEMA IF NOT EXISTS myschema;');
-    await db.select('SET search_path TO myschema;');
-    await db.select('''CREATE TABLE "temp_location" ( 
+    //await db.execute('set password_encryption to scram-sha-256;');
+    //await db.execute("set password_encryption to scram-sha-256; CREATE ROLE dart WITH LOGIN SUPERUSER PASSWORD 's1sadm1n';");
+    //await db.execute('set password_encryption to scram-sha-256;');
+    //await db.execute("set password_encryption to md5; CREATE ROLE usermd5 WITH LOGIN SUPERUSER PASSWORD 's1sadm1n';");
+    //IF EXISTS
+    try{
+    await db.execute('DROP SCHEMA  myschema CASCADE;');
+    }catch(e){}
+    // IF NOT EXISTS
+    await db.execute('CREATE SCHEMA myschema;');
+    await db.execute('SET search_path TO myschema;');
+    await db.execute('''CREATE TABLE "temp_location" ( 
           id int4,
           city VARCHAR(80),
           street VARCHAR(80),
           id_people int4
         );''');
-    await db.select('''CREATE TABLE "people" ( 
+    await db.execute('''CREATE TABLE "people" ( 
           id int4,
           name VARCHAR(80),
           profession VARCHAR(80)
@@ -42,7 +50,7 @@ void main() {
         .table('people')
         .insert({'id': 1, 'name': 'Isaque', 'profession': 'Personal Trainer'});
 
-    await db.select(
+    await db.execute(
         '''insert into "temp_location" ("id", "city", "street","id_people") values (1, 'Niteroi', 'Rua B',1)''');
   });
   group('query', () {

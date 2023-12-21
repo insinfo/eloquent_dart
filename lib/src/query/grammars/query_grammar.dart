@@ -197,11 +197,11 @@ class QueryGrammar extends BaseGrammar {
   ///
   ///  Compile the "from" portion of the query.
   ///
-  ///  @param  \Illuminate\Database\Query\Builder  $query
-  ///  @param  String  $table
-  ///  @return String
+  ///  [query]  QueryBuilder  
+  ///  [table] String|QueryExpression
+  ///  `Return` String
   ///
-  String compileFrom(QueryBuilder query, String table) {
+  String compileFrom(QueryBuilder query, dynamic table) {
     return 'from ' + this.wrapTable(table);
   }
 

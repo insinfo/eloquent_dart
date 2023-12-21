@@ -1,5 +1,5 @@
 name: eloquent
-version: 2.1.2
+version: 2.2.0
 description: eloquent query builder port from PHP Laravel
 homepage: https://github.com/insinfo/eloquent_dart
 #publish_to: none

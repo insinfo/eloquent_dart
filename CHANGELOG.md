@@ -65,3 +65,7 @@ final manager = Manager();
 ## 2.1.2
 
 - remove print from disconnect() in Connection class
+
+## 2.2.0
+
+- add fromRaw (sub-query as from), joinSub (method to join a query to a sub-query)

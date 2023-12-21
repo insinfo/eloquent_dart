@@ -1,5 +1,6 @@
 import 'package:eloquent/eloquent.dart';
 
+/// TODO implement extends QueryBuilder
 class JoinClause {
   ///
   /// The type of join being performed.
@@ -11,9 +12,9 @@ class JoinClause {
   ///
   /// The table the join clause is joining to.
   ///
-  /// @var string
+  /// @var string|QueryExpression
   ///
-  String table;
+  dynamic table;
 
   ///
   /// The "on" clauses for the join.
@@ -27,7 +28,7 @@ class JoinClause {
   ///
   /// @var array
   ///
-  List bindings = [];
+  List bindingsLocal = [];
 
   ///
   /// Create a new join clause instance.
@@ -35,7 +36,35 @@ class JoinClause {
   /// @param  String  $type
   /// @param  String  $table
   ///
-  JoinClause(this.type, this.table);
+  JoinClause(this.type, this.table, [QueryBuilder? parentQuery]) {
+    //: super(parentQuery.getConnection(), parentQuery.getGrammar(),  parentQuery.getProcessor())
+    //public function __construct(Builder $parentQuery, $type, $table)
+    /// TODO implement extends QueryBuilder
+    /// $this->parentQuery = $parentQuery;
+    //  super(
+    //         $parentQuery->getConnection(), $parentQuery->getGrammar(), $parentQuery->getProcessor()
+    //     );
+  }
+
+  // /**
+  //  * Get a new instance of the join clause builder.
+  //  *
+  //  * @return \Illuminate\Database\Query\JoinClause
+  //  */
+  // public function newQuery()
+  // {
+  //     return new static($this->parentQuery, $this->type, $this->table);
+  // }
+
+  // /**
+  //  * Create a new query instance for sub-query.
+  //  *
+  //  * @return \Illuminate\Database\Query\Builder
+  //  */
+  // protected function forSubQuery()
+  // {
+  //     return $this->parentQuery->newQuery();
+  // }
 
   ///
   /// Add an "on" clause to the join.
@@ -58,6 +87,14 @@ class JoinClause {
   ///
   /// @throws \InvalidArgumentException
   ///
+  //  dynamic on(first, [operator , second = null, boolean = 'and'])
+  //   {
+  //       if (first is Function) {
+  //           return this.whereNested(first, boolean);
+  //       }
+
+  //       return whereColumn(first, operator, second, boolean);
+  //   }
   JoinClause on(dynamic first,
       [String? operator,
       dynamic second,
@@ -67,12 +104,8 @@ class JoinClause {
       return this.nest(first, boolean);
     }
 
-    // if (func_num_args() < 3) {
-    //     throw new InvalidArgumentException('Not enough arguments for the on clause.');
-    // }
-
     if (where) {
-      this.bindings.add(second);
+      this.bindingsLocal.add(second);
     }
 
     if (where &&
@@ -171,7 +204,7 @@ class JoinClause {
   /// @param  String  $column
   /// @return \Illuminate\Database\Query\JoinClause
   ///
-  JoinClauseorWhereNotNull(String column) {
+  JoinClause orWhereNotNull(String column) {
     return this.whereNotNull(column, 'or');
   }
 
@@ -235,7 +268,8 @@ class JoinClause {
       var nested = true;
 
       this.clauses.add({'nested': nested, 'join': join, 'boolean': boolean});
-      this.bindings = Utils.array_merge(this.bindings, join.bindings);
+      this.bindingsLocal =
+          Utils.array_merge(this.bindingsLocal, join.bindingsLocal);
     }
 
     return this;

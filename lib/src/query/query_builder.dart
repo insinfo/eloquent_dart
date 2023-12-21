@@ -91,6 +91,7 @@ class QueryBuilder {
   ///
   Map<String, dynamic> bindings = {
     'select': [],
+    'from': [],
     'join': [],
     'where': [],
     'having': [],
@@ -130,9 +131,9 @@ class QueryBuilder {
   ///
   /// The table which the query is targeting.
   ///
-  /// @var string
+  /// @var string | QueryExpression
   ///
-  late String fromProp;
+  late dynamic fromProp;
 
   ///
   /// The table joins for the query.
@@ -299,6 +300,37 @@ class QueryBuilder {
   }
 
   ///
+  /// Add a subselect expression to the query.
+  ///
+  /// @param  Funcion|QueryBuilder|string $query
+  /// @param  String  $as
+  /// @return QueryBuilder
+  ///
+  QueryBuilder selectSub(dynamic query, String alias) {
+    // var bindings;
+    // if (query is Function) {
+    //   var callback = query;
+    //   callback(query = this.newQuery());
+    // }
+
+    // if (query is QueryBuilder) {
+    //   bindings = query.getBindings();
+    //   query = query.toSql();
+    // } else if (Utils.is_string(query)) {
+    //   bindings = [];
+    // } else {
+    //   throw InvalidArgumentException();
+    // }
+
+    final res = this.createSub(query);
+    final newQuery = res[0];
+    final bindings = res[1];
+
+    return this.selectRaw(
+        '(' + newQuery + ') as ' + this.grammar.wrap(alias), bindings);
+  }
+
+  ///
   /// Add a new "raw" select expression to the query.
   ///
   /// @param  String  $expression
@@ -306,7 +338,6 @@ class QueryBuilder {
   /// @return \Illuminate\Database\Query\Builder|static
   ///
   QueryBuilder selectRaw(String expression, [List? bindingsP = const []]) {
-    //TODO checar QueryExpression(expression)
     this.addSelect(QueryExpression(expression));
 
     if (bindingsP != null) {
@@ -317,32 +348,64 @@ class QueryBuilder {
   }
 
   ///
-  /// Add a subselect expression to the query.
+  /// Add a raw from clause to the query.
   ///
-  /// @param  \Closure|\Illuminate\Database\Query\Builder|string $query
-  /// @param  String  $as
+  /// @param  string  $expression
+  /// @param  mixed   $bindings
   /// @return \Illuminate\Database\Query\Builder|static
   ///
-  QueryBuilder selectSub(dynamic query, String $as) {
-    var bindings;
+  /// Example:
+  ///
+  ///  var map = await db
+  ///     .table('clientes')
+  ///     .selectRaw('clientes.*')
+  ///     .fromRaw('(SELECT * FROM public.clientes) AS clientes')
+  ///     .limit(1)
+  ///     .first();
+  ///
+  ///
+  QueryBuilder fromRaw(String expression, [List? $bindings = const []]) {
+    this.fromProp = QueryExpression(expression);
+
+    this.addBinding($bindings, 'from');
+
+    return this;
+  }
+
+  ///
+  /// Creates a subquery and parse it.
+  ///
+  /// [query]  Function|QueryBuilder|String
+  /// `Return` List [String query ,List Bindings]
+  ///
+  List createSub(dynamic query) {
+    // If the given query is a Closure, we will execute it while passing in a new
+    // query instance to the Closure. This will give the developer a chance to
+    // format and work with the query before we cast it to a raw SQL string.
     if (query is Function) {
       var callback = query;
-
-      callback(query = this.newQuery());
+      callback(query = this.forSubQuery());
     }
 
-    if (query is QueryBuilder) {
-      bindings = query.getBindings();
+    return this.parseSub(query);
+  }
 
-      query = query.toSql();
-    } else if (Utils.is_string(query)) {
-      bindings = [];
+  ///
+  /// Parse the subquery into SQL and bindings.
+  ///
+  /// [query] dynamic
+  /// `Return` List [String query ,List Bindings]
+  ///
+  List parseSub(dynamic query) {
+    //if (query is self || query is EloquentBuilder) {
+    if (query is QueryBuilder) {
+      return [query.toSql(), query.getBindings()];
+      // return [$query->toSql(), $query->getBindings()];
+    } else if (query is String) {
+      return [query, []];
     } else {
       throw InvalidArgumentException();
     }
-
-    return this
-        .selectRaw('(' + query + ') as ' + this.grammar.wrap($as), bindings);
   }
 
   ///
@@ -383,15 +446,15 @@ class QueryBuilder {
   ///
   /// Add a join clause to the query.
   ///
-  /// [table] String name of table
+  /// [table] String|QueryExpression name of table
   /// [one]  String | Function(JoinClause)
   /// [operator] String  Example: '=', 'in', 'not in'
-  /// @param  String  $two
+  /// [two]  string|null
   /// [type]  String  Example: 'inner', 'left'
   /// [where]  bool
   /// `Return` this QueryBuilder
   ///
-  QueryBuilder join(String table, dynamic one,
+  QueryBuilder join(dynamic table, dynamic one,
       [String? operator,
       dynamic two = null,
       String type = 'inner',
@@ -400,18 +463,18 @@ class QueryBuilder {
     // is trying to build a join with a complex "on" clause containing more than
     // one condition, so we'll add the join and call a Closure with the query.
     if (one is Function) {
-      var join = JoinClause(type, table);
+      var join = JoinClause(type, table, this);
       one(join);
       this.joinsProp.add(join);
-      this.addBinding(join.bindings, 'join');
+      this.addBinding(join.bindingsLocal, 'join');
     }
-    // If the column is simply a string, we can assume the join simply has a basic
-    // "on" clause with a single condition. So we will just build the join with
-    // this simple join clauses attached to it. There is not a join callback.
+// If the column is simply a string, we can assume the join simply has a basic
+// "on" clause with a single condition. So we will just build the join with
+// this simple join clauses attached to it. There is not a join callback.
     else {
-      var join = new JoinClause(type, table);
+      var join = new JoinClause(type, table, this);
       this.joinsProp.add(join.on(one, operator, two, 'and', where));
-      this.addBinding(join.bindings, 'join');
+      this.addBinding(join.bindingsLocal, 'join');
     }
 
     return this;
@@ -429,6 +492,55 @@ class QueryBuilder {
   ///
   QueryBuilder joinWhere(String table, one, operator, two, [type = 'inner']) {
     return this.join(table, one, operator, two, type, true);
+  }
+
+  ///
+  /// Add a subquery join clause to the query.
+  ///
+  /// [query]  QueryBuilder|String
+  /// [alias]  string
+  /// [first]  string
+  /// [operator]  string|null
+  /// [second] string|null
+  /// [type]  string  inner|left|right|outer
+  /// [where]  bool
+  /// `Return` QueryBuilder|static
+  ///
+  /// @throws \InvalidArgumentException
+  /// Example:
+  /// ```dart
+  ///
+  /// var subQuery = db.table('public.clientes')
+  ///  .selectRaw('clientes_grupos.numero_cliente as numero_cliente, json_agg(row_to_json(grupos.*)) as grupos')
+  ///  .join('public.clientes_grupos','clientes_grupos.numero_cliente','=','clientes.numero')
+  ///  .join('public.grupos','grupos.numero','=','clientes_grupos.numero_grupo')
+  ///  .groupBy('numero_cliente');
+  ///
+  ///  var map = await db
+  ///    .table('clientes')
+  ///    .selectRaw('clientes.*')
+  ///    .fromRaw('(SELECT * FROM public.clientes) AS clientes')
+  ///    .joinSub(subQuery, 'grupos',  (JoinClause join) {
+  ///        join.on('grupos.numero_cliente', '=', 'clientes.numero');
+  ///    })
+  ///    .limit(1)
+  ///    .first();
+  ///
+  /// ```
+  ///
+  QueryBuilder joinSub(dynamic query, alias, dynamic first,
+      [String? operator, dynamic second, type = 'inner', where = false]) {
+    final res = this.createSub(query);
+
+    final newQuery = res[0];
+    final bindings = res[1];
+
+    final expression = '(' + newQuery + ') as ' + this.grammar.wrap(alias);
+
+    this.addBinding(bindings, 'join');
+
+    return this.join(
+        QueryExpression(expression), first, operator, second, type, where);
   }
 
   ///
@@ -596,6 +708,44 @@ class QueryBuilder {
   QueryBuilder orWhere(dynamic column, [String? operator, dynamic value]) {
     return this.where(column, operator, value, 'or');
   }
+
+  /**
+     * Add a "where" clause comparing two columns to the query.
+     *
+     * @param  string|array  $first
+     * @param  string|null  $operator
+     * @param  string|null  $second
+     * @param  string|null  $boolean
+     * @return \Illuminate\Database\Query\Builder|static
+     */
+  // TODO implementar isso
+  //  whereColumn(first, [operator = null, second = null, boolean = 'and'])
+  // {
+  //     // If the column is an array, we will assume it is an array of key-value pairs
+  //     // and can add them each as a where clause. We will maintain the boolean we
+  //     // received when the method was called and pass it into the nested where.
+  //     if (first is List) {
+  //         return this.addArrayOfWheres($first, $boolean, 'whereColumn');
+  //     }
+
+  //     // If the given operator is not found in the list of valid operators we will
+  //     // assume that the developer is just short-cutting the '=' operators and
+  //     // we will set the operators to '=' and set the values appropriately.
+  //     if ($this->invalidOperator($operator)) {
+  //         list($second, $operator) = [$operator, '='];
+  //     }
+
+  //     // Finally, we will add this where clause into this array of clauses that we
+  //     // are building for the query. All of them will be compiled via a grammar
+  //     // once the query is about to be executed and run against the database.
+  //     $type = 'Column';
+
+  //     $this->wheres[] = compact(
+  //         'type', 'first', 'operator', 'second', 'boolean'
+  //     );
+
+  //     return $this;
+  // }
 
   ///
   /// Determine if the given operator and value combination is legal.
@@ -1473,7 +1623,7 @@ class QueryBuilder {
   Future<Map<String, dynamic>?> first(
       [List<String> columns = const ['*'], int? timeoutInSeconds]) async {
     final results = await this.take(1).get(columns, timeoutInSeconds);
-    return results.isNotEmpty ?  results.first : null;
+    return results.isNotEmpty ? results.first : null;
   }
 
   ///
@@ -1840,14 +1990,11 @@ class QueryBuilder {
     // that more select queries can be executed against the database without
     // the aggregate value getting in the way when the grammar builds it.
     this.aggregateProp = null;
-
     this.columnsProp = previousColumns;
-
     this.bindings['select'] = previousSelectBindings;
 
-    if (results[0] != null) {
+    if (results.isNotEmpty) {
       var result = Utils.map_change_key_case_sd(results[0]);
-
       return result['aggregate'];
     }
   }
@@ -2004,6 +2151,15 @@ class QueryBuilder {
   ///
   QueryBuilder newQuery() {
     return QueryBuilder(this.connection, this.grammar, this.processor);
+  }
+
+  ///
+  /// Create a new query instance for a sub-query.
+  ///
+  /// @return \Illuminate\Database\Query\Builder
+  ///
+  QueryBuilder forSubQuery() {
+    return this.newQuery();
   }
 
   ///

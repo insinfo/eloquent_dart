@@ -2,7 +2,6 @@
 [![CI](https://github.com/insinfo/eloquent_dart/actions/workflows/dart.yml/badge.svg)](https://github.com/insinfo/eloquent_dart/actions/workflows/dart.yml)
 [![Pub Package](https://img.shields.io/pub/v/eloquent.svg)](https://pub.dev/packages/eloquent)  
 
-this work is still in an initial state
 
 eloquent 5.2 query builder port from PHP Laravel to dart
 
@@ -40,6 +39,27 @@ for now it only works with PostgreSQL
       expect(res, [
         {'id': 1, 'city': 'Niteroi', 'street': 'Rua B'}
       ]);
+
+  // sub query example
+   var subQuery = db.table('public.clientes')
+    .selectRaw('clientes_grupos.numero_cliente as numero_cliente, json_agg(row_to_json(grupos.*)) as grupos')
+    .join('public.clientes_grupos','clientes_grupos.numero_cliente','=','clientes.numero')
+    .join('public.grupos','grupos.numero','=','clientes_grupos.numero_grupo')
+    .groupBy('numero_cliente');
+
+  var map = await db
+      .table('clientes')
+      .selectRaw('clientes.*, grupos.grupos ')
+      .fromRaw('(SELECT * FROM public.clientes) AS clientes')
+      .joinSub(subQuery, 'grupos',  (JoinClause join) {      
+        join.on('grupos.numero_cliente', '=', 'clientes.numero');
+      })
+      .join('public.clientes_grupos','clientes_grupos.numero_cliente','=','clientes.numero')
+      .where('clientes_grupos.numero_grupo','=','2')
+    //.whereRaw('clientes.numero in ( SELECT clientes_grupos.numero_cliente FROM public.clientes_grupos WHERE clientes_grupos.
+      .get();
+
+  print(map.length);   
 
 
 ```

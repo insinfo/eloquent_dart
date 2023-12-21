@@ -1,3 +1,4 @@
+/// class Expression
 class QueryExpression {
   ///
   ///  The value of the expression.
@@ -28,6 +29,7 @@ class QueryExpression {
   ///
   ///  @return string
   ///
+  @override
   String toString() {
     return getValue().toString();
   }
