@@ -1,7 +1,5 @@
 import 'package:eloquent/eloquent.dart';
 
-
-
 class QueryGrammar extends BaseGrammar {
   /// chama um determinado metodo com base no nome
   /// este metodo é para evitar reflexão dart:mirror
@@ -38,7 +36,7 @@ class QueryGrammar extends BaseGrammar {
         return whereNested(positionalArguments[0], positionalArguments[1]);
       case 'wheresub':
         return whereSub(positionalArguments[0], positionalArguments[1]);
-     
+
       case 'wherebasic':
         return whereBasic(positionalArguments[0], positionalArguments[1]);
       case 'wherebetween':
@@ -98,7 +96,7 @@ class QueryGrammar extends BaseGrammar {
   ///
   ///  Compile a select query into SQL.
   ///
-  ///  @param  \Illuminate\Database\Query\Builder  $query
+  ///  @param  QueryBuilder  $query
   ///  @return String
   ///
   String compileSelect(QueryBuilder query) {
@@ -109,9 +107,8 @@ class QueryGrammar extends BaseGrammar {
       query.columnsProp = ['*'];
     }
     var compiledComps = compileComponents(query);
- 
+
     var sql = Utils.trim(concatenate(compiledComps));
-   
 
     query.setColumns(original);
 
@@ -174,12 +171,11 @@ class QueryGrammar extends BaseGrammar {
   ///
   ///  Compile the "select *" portion of the query.
   ///
-  ///  [query] QueryBuilder \Illuminate\Database\Query\Builder 
-  ///  [columns] List<String> | List<dynamic> | List<QueryExpression> 
+  ///  [query] QueryBuilder \Illuminate\Database\Query\Builder
+  ///  [columns] List<String> | List<dynamic> | List<QueryExpression>
   ///  @return String|null
   ///
   String? compileColumns(QueryBuilder query, columns) {
-
     // If the query is actually performing an aggregating select, we will let that
     // compiler handle the building of the select clauses, as it will need some
     // more syntax that is best handled by that function to keep things neat.
@@ -197,7 +193,7 @@ class QueryGrammar extends BaseGrammar {
   ///
   ///  Compile the "from" portion of the query.
   ///
-  ///  [query]  QueryBuilder  
+  ///  [query]  QueryBuilder
   ///  [table] String|QueryExpression
   ///  `Return` String
   ///
@@ -222,7 +218,7 @@ class QueryGrammar extends BaseGrammar {
       // First we need to build all of the "on" clauses for the join. There may be many
       // of these clauses so we will need to iterate through each one and build them
       // separately, then we'll join them up into a single string when we're done.
-      dynamic clauses = [];
+      var clauses = [];
 
       for (var clause in join.clauses) {
         clauses.add(this.compileJoinConstraint(clause));
@@ -233,14 +229,14 @@ class QueryGrammar extends BaseGrammar {
       // because it leads the rest of the clauses, thus not requiring any boolean.
       clauses[0] = this.removeLeadingBoolean(clauses[0]);
 
-      clauses = Utils.implode(' ', clauses);
+      final clausesString = Utils.implode(' ', clauses);
 
       var type = join.type;
 
       // Once we have everything ready to go, we will just concatenate all the parts to
       // build the final join statement SQL for the query and we can then return the
       // final clause back to the callers as a single, stringified join statement.
-      sql.add("$type join $table on $clauses");
+      sql.add("$type join $table on $clausesString");
     }
 
     return Utils.implode(' ', sql);
@@ -280,19 +276,14 @@ class QueryGrammar extends BaseGrammar {
   ///  @param  array  $clause
   ///  @return String
   ///
-  String compileNestedJoinConstraint(dynamic clause) {
-    // $clauses = [];
-
-    // foreach ($clause['join']->clauses as $nestedClause) {
-    //     $clauses[] = this.compileJoinConstraint($nestedClause);
-    // }
-
-    // $clauses[0] = this.removeLeadingBoolean($clauses[0]);
-
-    // $clauses = implode(' ', $clauses);
-
-    // return "{$clause['boolean']} ({$clauses})";
-    return '';
+  String compileNestedJoinConstraint(Map clause) {
+    final clauses = [];
+    for (var nestedClause in clause['join'].clauses) {
+      clauses.add(this.compileJoinConstraint(nestedClause));
+    }
+    clauses[0] = this.removeLeadingBoolean(clauses[0]);
+    final clausesStr = Utils.implode(' ', clauses);
+    return "${clause['boolean']} ($clausesStr)";
   }
 
   ///
@@ -342,7 +333,6 @@ class QueryGrammar extends BaseGrammar {
   ///
   String whereNested(QueryBuilder query, Map<String, dynamic> where) {
     var nested = where['query'];
-
     return '(' + Utils.substr(this.compileWheres(nested), 6) + ')';
   }
 
@@ -355,7 +345,6 @@ class QueryGrammar extends BaseGrammar {
   ///
   String whereSub(QueryBuilder query, Map<String, dynamic> where) {
     var select = this.compileSelect(where['query']);
-
     return this.wrap(where['column']) + ' ' + where['operator'] + " ($select)";
   }
 
@@ -368,7 +357,6 @@ class QueryGrammar extends BaseGrammar {
   ///
   String whereBasic(QueryBuilder query, Map<String, dynamic> where) {
     var value = this.parameter(where['value']);
-
     return this.wrap(where['column']) + ' ' + where['operator'] + ' ' + value;
   }
 
@@ -381,7 +369,6 @@ class QueryGrammar extends BaseGrammar {
   ///
   String whereBetween(QueryBuilder query, Map<String, dynamic> where) {
     var between = where['not'] ? 'not between' : 'between';
-
     return this.wrap(where['column']) + ' ' + between + ' ? and ?';
   }
 
@@ -421,7 +408,6 @@ class QueryGrammar extends BaseGrammar {
     }
     //print('whereIn ${where['values'].runtimeType}' );
     List<dynamic> values = where['values'];
-    
 
     var valuesString = this.parameterize(values);
 
@@ -500,7 +486,7 @@ class QueryGrammar extends BaseGrammar {
   ///  @param  array  $where
   ///  @return String
   ///
-  String whereDate(QueryBuilder query, where) {
+  String whereDate(QueryBuilder query, dynamic where) {
     return this.dateBasedWhere('date', query, where);
   }
 
@@ -678,7 +664,7 @@ class QueryGrammar extends BaseGrammar {
   ///  @return String
   ///
   String compileUnions(QueryBuilder query) {
-   // var sql = '';
+    // var sql = '';
 
     // for(var union in query.unionsProp ) {
     //     sql += compileUnion(union);
@@ -728,9 +714,9 @@ class QueryGrammar extends BaseGrammar {
   ///
   ///  Compile an insert statement into SQL.
   ///
-  ///  @param  \Illuminate\Database\Query\Builder  $query
-  ///  @param [values] List<Map<String,dynamic>> | Map<String,dynamic>
-  ///  @return String
+  ///  [query]  QueryBuilder
+  ///  [values] Map<String,dynamic>
+  ///  `Return` String
   ///
   String compileInsert(QueryBuilder query, Map<String, dynamic> values) {
     // Essentially we will force every insert to be treated as a batch insert which
@@ -793,6 +779,17 @@ class QueryGrammar extends BaseGrammar {
     // // intended records are updated by the SQL statements we generate to run.
     var where = this.compileWheres(query);
     return Utils.trim("update $table$joins set $columns $where");
+  }
+
+  ///
+  /// Prepare the bindings for an update statement.
+  ///
+  /// @param  array  $bindings
+  /// @param  array  $values
+  /// @return array
+  ///
+  prepareBindingsForUpdate( $bindings,  $values) {
+    return $bindings;
   }
 
   ///
@@ -869,7 +866,9 @@ class QueryGrammar extends BaseGrammar {
     //     return value != '';
     // }));
 
-    return segments.values.where((value) => value != '' && value != null ).join(' ');
+    return segments.values
+        .where((value) => value != '' && value != null)
+        .join(' ');
   }
 
   ///

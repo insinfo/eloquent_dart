@@ -1,6 +1,8 @@
 import 'package:eloquent/eloquent.dart';
 import 'package:eloquent/src/container/container.dart';
+import 'package:eloquent/src/mysql_connection.dart';
 
+import 'mysql_connector.dart';
 
 class ConnectionFactory {
   /**
@@ -157,8 +159,6 @@ class ConnectionFactory {
   ///  @throws \InvalidArgumentException
   ///
   ConnectorInterface createConnector(Map<String, dynamic> config) {
-
-   
     if (config['driver'] == null) {
       throw InvalidArgumentException('A driver must be specified.');
     }
@@ -168,8 +168,8 @@ class ConnectionFactory {
     // }
 
     switch (config['driver']) {
-      // case 'mysql':
-      //     return new MySqlConnector;
+      case 'mysql':
+        return MySqlConnector();
 
       case 'pgsql':
         return PostgresConnector();
@@ -203,8 +203,8 @@ class ConnectionFactory {
     // }
 
     switch (driver) {
-      // case 'mysql':
-      //     return new MySqlConnection($connection, $database, $prefix, $config);
+      case 'mysql':
+        return MySqlConnection(pdoP, database, prefix, config);
 
       case 'pgsql':
         return PostgresConnection(pdoP, database, prefix, config);

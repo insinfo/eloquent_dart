@@ -4,6 +4,7 @@ import 'package:test/test.dart';
 
 /// test PostgresPDO
 /// config['driver_implementation'] == 'postgres'
+/// run: dart test .\test\postgres_query_test.dart -j 1 --chain-stack-traces --name 'update simple'
 void main() {
   late Connection db;
   setUp(() async {
@@ -28,9 +29,9 @@ void main() {
     //await db.execute('set password_encryption to scram-sha-256;');
     //await db.execute("set password_encryption to md5; CREATE ROLE usermd5 WITH LOGIN SUPERUSER PASSWORD 's1sadm1n';");
     //IF EXISTS
-    try{
-    await db.execute('DROP SCHEMA  myschema CASCADE;');
-    }catch(e){}
+    try {
+      await db.execute('DROP SCHEMA  myschema CASCADE;');
+    } catch (e) {}
     // IF NOT EXISTS
     await db.execute('CREATE SCHEMA myschema;');
     await db.execute('SET search_path TO myschema;');
@@ -62,21 +63,40 @@ void main() {
     });
 
     test('insertGetId simple', () async {
-      var query = db.table('temp_location');
-      var res = await query
+      final query = db.table('temp_location');
+      final res = await query
           .insertGetId({'id': 1, 'city': 'Rio de Janeiro', 'street': 'Rua R'});
       expect(res, 1);
     });
 
+    test('insertGetId simple with transaction', () async {
+      final res = await db.transaction((ctx) async {
+        final query = ctx.table('temp_location');
+        final res = await query.insertGetId(
+            {'id': 2, 'city': 'Rio de Janeiro', 'street': 'Rua R'});
+        return res;
+      });
+      expect(res, 2);
+    });
+
     test('select first', () async {
-      var query = db.table('temp_location');
-      var res = await query.select(['id', 'city', 'street']).first();
+      final query = db.table('temp_location');
+      final res = await query.select(['id', 'city', 'street']).first();
+      expect(res, {'id': 1, 'city': 'Niteroi', 'street': 'Rua B'});
+    });
+
+    test('select first with transaction', () async {
+      final res = await db.transaction((ctx) async {
+        final query = ctx.table('temp_location');
+        final res = await query.select(['id', 'city', 'street']).first();
+        return res;
+      });
       expect(res, {'id': 1, 'city': 'Niteroi', 'street': 'Rua B'});
     });
 
     test('select limit 1 get', () async {
-      var query = db.table('temp_location');
-      var res = await query.select(['id', 'city', 'street']).limit(1).get();
+      final query = db.table('temp_location');
+      final res = await query.select(['id', 'city', 'street']).limit(1).get();
       expect(res, [
         {'id': 1, 'city': 'Niteroi', 'street': 'Rua B'}
       ]);
@@ -91,7 +111,7 @@ void main() {
       ]);
     });
 
-    test('select * where limit 1 offset 0 get', () async {
+    test('select where limit 1 offset 0 get', () async {
       var query = db.table('temp_location');
       var res =
           await query.select().where('id', '=', 1).limit(1).offset(0).get();
@@ -115,6 +135,7 @@ void main() {
       ]);
     });
 
+    ///dart test .\test\postgres_query_test.dart --name 'select inner join with callback' -j 1
     test('select inner join with callback', () async {
       final query = db.table('temp_location');
       final res = await query
@@ -132,17 +153,57 @@ void main() {
       ]);
     });
 
+    ///dart test .\test\postgres_query_test.dart --name 'select inner join with callback and transaction' -j 1
+    test('select inner join with callback and transaction', () async {
+      final res = await db.transaction((ctx) async {
+        final query = ctx.table('temp_location');
+        final res = await query
+            .select(['temp_location.id', 'city', 'street'])
+            .where('temp_location.id', '=', 1)
+            .join('people', (JoinClause q) {
+              q.on('people.id', '=', 'temp_location.id_people');
+            })
+            .limit(1)
+            .offset(0)
+            .get();
+        return res;
+      });
+      expect(res, [
+        {'id': 1, 'city': 'Niteroi', 'street': 'Rua B'}
+      ]);
+    });
+
     test('update simple', () async {
-      var query = db.table('temp_location');
+      await db
+          .table('temp_location')
+          .where('id', '=', 1)
+          .update({'city': 'Teresopolis'});
 
-      await query.where('id', '=', 1).update({'city': 'Teresopolis'});
-
-      final res = await query
+      final res = await db
+          .table('temp_location')
           .select(['city'])
           .where('temp_location.id', '=', 1)
           .first();
 
       expect(res, {'city': 'Teresopolis'});
+    });
+
+    test('update simple with transaction', () async {
+      final res = await db.transaction((ctx) async {
+        await ctx
+            .table('temp_location')
+            .where('id', '=', 1)
+            .update({'city': 'Teresopolis2'});
+
+        final res = await ctx
+            .table('temp_location')
+            .select(['city'])
+            .where('temp_location.id', '=', 1)
+            .first();
+
+        return res;
+      });
+      expect(res, {'city': 'Teresopolis2'});
     });
 
     test('delete simple', () async {

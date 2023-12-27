@@ -26,7 +26,7 @@ abstract class ConnectionInterface {
   /// [bindings]  List
   /// @return dynamic
   ///
-  Future<dynamic> selectOne(String query,
+  Future<Map<String, dynamic>?> selectOne(String query,
       [List bindings = listVoid, int? timeoutInSeconds]);
 
   ///
@@ -48,7 +48,7 @@ abstract class ConnectionInterface {
   /// [bindings]  List
   /// @return bool
   ///
-  Future<dynamic> insert(String query,
+  Future<PDOResults> insert(String query,
       [List bindings = listVoid, int? timeoutInSeconds]);
 
   ///
@@ -78,7 +78,7 @@ abstract class ConnectionInterface {
   /// [bindings]  List
   /// @return bool
   ///
-  Future<dynamic> statement(String query,
+  Future<PDOResults> statement(String query,
       [List bindings = listVoid, int? timeoutInSeconds]);
 
   ///
@@ -88,7 +88,7 @@ abstract class ConnectionInterface {
   /// [bindings]  List
   /// @return int
   ///
-  Future<dynamic> affectingStatement(String query,
+  Future<int> affectingStatement(String query,
       [List bindings = listVoid, int? timeoutInSeconds]);
 
   ///
@@ -97,7 +97,7 @@ abstract class ConnectionInterface {
   /// [query]  String
   /// @return bool
   ///
-  Future<dynamic> unprepared(String query, int? timeoutInSeconds);
+  Future<int> unprepared(String query, int? timeoutInSeconds);
 
   ///
   /// Prepare the query bindings for execution.

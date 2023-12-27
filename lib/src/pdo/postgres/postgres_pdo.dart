@@ -61,11 +61,10 @@ class PostgresPDO extends PDOInterface {
       dsnParser.database,
       username: user,
       password: password,
-      encoding: _getEncoding(dsnParser.charset),
+      encoding: _getEncoding(dsnParser.charset  ?? 'utf8'),
     );
     await connection.open();
     await connection.query('''SET client_encoding = '${dsnParser.charset}';''');
-
     return this;
   }
 

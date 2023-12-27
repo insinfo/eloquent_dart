@@ -1,14 +1,30 @@
 import 'package:eloquent/eloquent.dart';
 import 'package:eloquent/src/query/processors/postgres_processor.dart';
 
-
-
 class PostgresConnection extends Connection {
-  PostgresConnection(PDOInterface pdoP,
+  PostgresConnection(PDOExecutionContext pdoP,
       [String databaseP = '',
       String tablePrefixP = '',
       Map<String, dynamic> configP = const {}])
-      : super(pdoP, databaseP, tablePrefixP, configP) {}
+      : super(pdoP, databaseP, tablePrefixP, configP);
+
+  ///
+  /// Execute a Closure within a transaction.
+  ///
+  /// @param  Function  callback
+  /// @return mixed
+  ///
+  /// @throws \Throwable
+  Future<dynamic> transaction(Future<dynamic> Function(Connection ctx) callback,
+      [int? timeoutInSeconds]) async {
+    var result = this.pdo.pdoInstance.runInTransaction((pdoCtx) {
+      final newConnection = PostgresConnection(pdoCtx, this.getDatabaseName(),
+          this.getTablePrefix(), this.getConfigs());
+      return callback(newConnection);
+    });
+
+    return result;
+  }
 
   ///
   /// Get the default query grammar instance.
@@ -16,7 +32,8 @@ class PostgresConnection extends Connection {
   /// @return \Illuminate\Database\Query\Grammars\PostgresGrammar
   ///
   QueryGrammar getDefaultQueryGrammar() {
-    return withTablePrefix(QueryGrammar());
+    //QueryGrammar()
+    return withTablePrefix(QueryPostgresGrammar());
   }
 
   ///
@@ -24,8 +41,8 @@ class PostgresConnection extends Connection {
   ///
   /// @return \Illuminate\Database\Schema\Grammars\PostgresGrammar
   ///
-  SchemaGrammar getDefaultSchemaGrammar() {
-    return this.withTablePrefix(SchemaGrammar());
+  SchemaGrammar getDefaultSchemaGrammar() {   
+    return this.withTablePrefix(SchemaPostgresGrammar());
   }
 
   ///
@@ -34,7 +51,7 @@ class PostgresConnection extends Connection {
   /// @return \Illuminate\Database\Query\Processors\PostgresProcessor
   ///
   PostgresProcessor getDefaultPostProcessor() {
-    return new PostgresProcessor();
+    return PostgresProcessor();
   }
 
   ///

@@ -42,7 +42,7 @@ class DargresPDO extends PDOInterface {
         host: dsnParser.host,
         port: dsnParser.port,
         password: password,
-        textCharset: dsnParser.charset,
+        textCharset: dsnParser.charset ?? 'utf8',
         applicationName: dsnParser.applicationName,
         allowAttemptToReconnect: false,
       );
@@ -56,7 +56,7 @@ class DargresPDO extends PDOInterface {
           password: password,
           allowAttemptToReconnect: false,
           // sslContext: sslContext,
-          textCharset: dsnParser.charset);
+          textCharset: dsnParser.charset ?? 'utf8');
       await connection!.connect();
     }
 

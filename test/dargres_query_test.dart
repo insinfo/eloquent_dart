@@ -4,6 +4,7 @@ import 'package:test/test.dart';
 
 /// test DargresPDO
 /// config['driver_implementation'] == 'dargres'
+/// dart test .\test\dargres_query_test.dart -j 1
 void main() {
   late Connection db;
   setUp(() async {
@@ -12,7 +13,7 @@ void main() {
       'driver': 'pgsql',
       'driver_implementation': 'dargres',
       'host': 'localhost',
-      'port': '5432',
+      'port': '5435',
       'database': 'banco_teste',
       'username': 'usermd5',
       'password': 's1sadm1n',

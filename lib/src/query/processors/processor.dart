@@ -8,7 +8,8 @@ class Processor {
   /// @param  array  $results
   /// @return array
   ///
-  List<Map<String, dynamic>> processSelect(QueryBuilder query, List<Map<String, dynamic>> results) {
+  List<Map<String, dynamic>> processSelect(
+      QueryBuilder query, List<Map<String, dynamic>> results) {
     return results;
   }
 
@@ -23,8 +24,10 @@ class Processor {
   ///
   Future<dynamic> processInsertGetId(
       QueryBuilder query, String sql, List values,
-      [String sequence ='id']) async {
-    return query.getConnection().insert(sql, values);
+      [String sequence = 'id']) async {
+    final resp = await query.getConnection().insert(sql, values);
+    final id = resp.isNotEmpty ? resp.first[sequence] : null;   
+    return id;
     //var id = query.getConnection().getPdo().lastInsertId(sequence);
     //return is_numeric($id) ? (int) $id : $id;
     //return -1;

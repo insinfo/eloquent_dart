@@ -35,7 +35,7 @@ class DSNParser {
     'host': null,
     'port': null,
     'database': null,
-    'charset': 'utf8',
+    'charset': null,
     'params': {}
   };
 
@@ -45,7 +45,7 @@ class DSNParser {
   String get driver => dsnParts['driver'];
   int get port => dsnParts['port'] != null ? int.parse(dsnParts['port']) : 0;
   String get database => dsnParts['database'];
-  String get charset => dsnParts['charset'];
+  String? get charset => dsnParts['charset'];
 
   bool get pool => dsnParts['pool'].toString() == 'true';
   int get poolSize => int.tryParse(dsnParts['poolsize'] ?? '') ?? 1;

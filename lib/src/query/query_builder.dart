@@ -2056,25 +2056,26 @@ class QueryBuilder {
   /// @return int
   ///
   Future<dynamic> insertGetId(Map<String, dynamic> keyValues,
-      [String sequence = 'id']) {
-    var sql = this.grammar.compileInsertGetId(this, keyValues, sequence);
-    var values = this.cleanBindings(keyValues.values.toList());
-    return this.processor.processInsertGetId(this, sql, values, sequence);
+      [String sequence = 'id']) async{
+    final sql = this.grammar.compileInsertGetId(this, keyValues, sequence);    
+    final values = this.cleanBindings(keyValues.values.toList());
+    return await this.processor.processInsertGetId(this, sql, values, sequence);
   }
 
   ///
   /// Update a record in the database.
   ///
-  /// @param  array  $values
-  /// @return int
+  /// [keyValues] Map
+  /// Return int
   ///
   Future<dynamic> update(Map<String, dynamic> keyValues,
       [Duration? timeout = Connection.defaultTimeout]) {
     var curentBindings = this.getBindings();
     var values = keyValues.values.toList();
-    var bindings = Utils.array_merge(values, curentBindings);
-    var sql = this.grammar.compileUpdate(this, keyValues);
-    return this.connection.update(sql, this.cleanBindings(bindings));
+    var mergedBindings = Utils.array_merge(values, curentBindings);
+
+    final sql = this.grammar.compileUpdate(this, keyValues);
+    return this.connection.update(sql, this.cleanBindings(mergedBindings));
   }
 
   ///

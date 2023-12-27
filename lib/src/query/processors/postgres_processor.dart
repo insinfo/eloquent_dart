@@ -13,11 +13,10 @@ class PostgresProcessor extends Processor {
   Future<dynamic> processInsertGetId(
       QueryBuilder query, String sql, List values,
       [String sequence = 'id']) async {
-    var newSql = '$sql returning "$sequence"';
-    var results = await query.getConnection().insert(newSql, values);
+    //var newSql = '$sql returning "$sequence"';
+    final resp = await query.getConnection().insert(sql, values);
     // var results = query.getConnection().selectFromWriteConnection(sql, values);
-    var result = results[0];
-    var id = result[sequence];
+    final id = resp.isNotEmpty ? resp.first[sequence] : null;
     return id;
   }
 

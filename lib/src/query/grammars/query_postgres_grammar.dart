@@ -6,7 +6,7 @@ class QueryPostgresGrammar extends QueryGrammar {
   ///
   ///protected @var array
   ///
-  List operators = [
+  List<String> operators = [
     '=',
     '<',
     '>',
@@ -18,26 +18,141 @@ class QueryPostgresGrammar extends QueryGrammar {
     'not like',
     'between',
     'ilike',
+    'not ilike',
+    '~',
     '&',
     '|',
     '#',
     '<<',
     '>>',
+    '<<=',
+    '>>=',
+    '&&',
+    '@>',
+    '<@',
+    '?',
+    '?|',
+    '?&',
+    '||',
+    '-',
+    '-',
+    '#-',
+    'is distinct from',
+    'is not distinct from',
   ];
 
   ///
-  ///Compile the lock into SQL.
+  /// Compile a "where date" clause.
   ///
-  ///@param  \Illuminate\Database\Query\Builder  $query
-  ///@param  bool|string  $value
-  ///@return String
+  /// [query] QueryBuilder
+  /// [where] dynamic/map/array
+  /// @return string
+  ///
+  String whereDate(QueryBuilder query, dynamic where) {
+    var value = this.parameter(where['value']);
+    return this.wrap(where['column']) +
+        '::date ' +
+        where['operator'] +
+        ' ' +
+        value;
+  }
+
+  ///
+  /// Compile a "where time" clause.
+  ///
+  /// [query] QueryBuilder
+  /// [where] dynamic/map/array
+  /// @return string
+  ///
+  String whereTime(QueryBuilder query, dynamic where) {
+    var value = this.parameter(where['value']);
+
+    return this.wrap(where['column']) +
+        '::time ' +
+        where['operator'] +
+        ' ' +
+        value;
+  }
+
+  ///
+  /// Compile a date based where clause.
+  ///
+  /// @param  string  $type
+  /// @param  \Illuminate\Database\Query\Builder  $query
+  /// @param  array  $where
+  /// @return string
+  ///
+  String dateBasedWhere(type, QueryBuilder query, dynamic where) {
+    var value = this.parameter(where['value']);
+    return 'extract(' +
+        type +
+        ' from ' +
+        this.wrap(where['column']) +
+        ') ' +
+        where['operator'] +
+        ' ' +
+        value;
+  }
+
+  ///
+  /// Compile a "JSON contains" statement into SQL.
+  ///
+  /// @param  string  $column
+  /// @param  string  $value
+  /// @return string
+  ///
+  String compileJsonContains(dynamic column, dynamic value) {
+    //column = str_replace('->>', '->', this.wrap(column));
+    final newCol = this.wrap(column).replaceAll('->>', '->');
+    return '(' + newCol + ')::jsonb @> ' + value;
+  }
+
+  ///
+  /// Compile the lock into SQL.
+  ///
+  /// [query] QueryBuilder
+  /// [value]  bool|String
+  /// @return String
   ///
   String compileLock(QueryBuilder query, dynamic value) {
-    if (Utils.is_string(value)) {
-      return value;
+    if (value is! String) {
+      return value ? 'for update' : 'for share';
+    }
+    return value;
+  }
+
+  ///
+  ///  Compile an insert statement into SQL.
+  ///
+  ///  [query]  QueryBuilder
+  ///  [values] Map<String,dynamic>
+  ///  `Return` String
+  ///
+  String compileInsert(QueryBuilder query, Map<String, dynamic> values) {
+    final table = this.wrapTable(query.fromProp);
+    return values.isEmpty
+        ? "insert into $table} DEFAULT VALUES"
+        : super.compileInsert(query, values);
+  }
+
+  ///
+  /// Compile an insert and get ID statement into SQL.
+  ///
+  ///  [query]  QueryBuilder
+  ///  [values] Map<String,dynamic>
+  /// @param  String  $sequence
+  ///  `Return` String
+  ///
+  @override
+  String compileInsertGetId(
+      QueryBuilder query, Map<String, dynamic> values, String? sequence) {
+    if (sequence == null) {
+      sequence = 'id';
     }
 
-    return value ? 'for update' : 'for share';
+    return this.compileInsert(query, values) +
+        ' returning ' +
+        this.wrap(sequence);
   }
 
   ///
@@ -54,12 +169,9 @@ class QueryPostgresGrammar extends QueryGrammar {
     // keyword identifiers, also a place-holder needs to be created for each of
     // the values in the list of bindings so we can make the sets statements.
     var columns = this.compileUpdateColumns(values);
-
     var from = this.compileUpdateFrom(query);
-
     var where = this.compileUpdateWheres(query);
-
-    return Utils.trim("update {$table} set {$columns}{$from} $where");
+    return 'update $table set $columns$from $where'.trim();
   }
 
   ///
@@ -69,18 +181,17 @@ class QueryPostgresGrammar extends QueryGrammar {
   /// @return String
   ///
   String compileUpdateColumns(Map<String, dynamic> values) {
-    var columns = [];
+    final columns = <String>[];
 
     // When gathering the columns for an update statement, we'll wrap each of the
     // columns and convert it to a parameter value. Then we will concatenate a
     // list of the columns that can be added into this update query clauses.
     for (var items in values.entries) {
-      var key = items.key;
-      var value = items.value;
+      final key = items.key;
+      final value = items.value;
       columns.add(this.wrap(key) + ' = ' + this.parameter(value));
     }
-
-    return Utils.implode(', ', columns);
+    return columns.join(', ');
   }
 
   ///
@@ -103,8 +214,8 @@ class QueryPostgresGrammar extends QueryGrammar {
       froms.add(wrapTable(join.table));
     }
 
-    if (Utils.count(froms) > 0) {
-      return ' from ' + Utils.implode(', ', froms);
+    if (froms.length > 0) {
+      return ' from ' + froms.join(', ');
     }
 
     return null;
@@ -113,7 +224,7 @@ class QueryPostgresGrammar extends QueryGrammar {
   ///
   ///Compile the additional where clauses for updates with joins.
   ///
-  ///@param  \Illuminate\Database\Query\Builder  $query
+  ///@param  QueryBuilder  $query
   ///@return String
   ///
   String compileUpdateWheres(QueryBuilder query) {
@@ -138,7 +249,7 @@ class QueryPostgresGrammar extends QueryGrammar {
   ///
   ///Compile the "join" clauses for an update.
   ///
-  ///@param  \Illuminate\Database\Query\Builder  $query
+  ///@param  QueryBuilder  $query
   ///@return String
   ///
   String compileUpdateJoinWheres(QueryBuilder query) {
@@ -157,28 +268,10 @@ class QueryPostgresGrammar extends QueryGrammar {
   }
 
   ///
-  ///Compile an insert and get ID statement into SQL.
+  /// Compile a truncate table statement into SQL.
   ///
-  ///@param  \Illuminate\Database\Query\Builder  $query
-  ///@param  array   $values
-  ///@param  String  $sequence
-  ///@return String
-  ///
-  String compileInsertGetId(QueryBuilder query, values, String? sequence) {
-    if (Utils.is_null(sequence)) {
-      sequence = 'id';
-    }
-
-    return this.compileInsert(query, values) +
-        ' returning ' +
-        this.wrap(sequence);
-  }
-
-  ///
-  ///Compile a truncate table statement into SQL.
-  ///
-  ///@param  \Illuminate\Database\Query\Builder  $query
-  ///@return array
+  /// @param  \Illuminate\Database\Query\Builder  $query
+  /// @return array
   ///
   Map<String, dynamic> compileTruncate(QueryBuilder query) {
     return {

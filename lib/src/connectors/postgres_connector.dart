@@ -1,6 +1,7 @@
 import 'package:eloquent/eloquent.dart';
 import 'package:eloquent/src/pdo/dargres/dargres_pdo.dart';
 import 'package:eloquent/src/pdo/postgres/postgres_pdo.dart';
+import 'package:eloquent/src/pdo/postgres_v3/postgres_v3_pdo.dart';
 
 class PostgresConnector extends Connector implements ConnectorInterface {
   ///
@@ -79,7 +80,7 @@ class PostgresConnector extends Connector implements ConnectorInterface {
     // in the configuration options. This will give us the basic DSN we will
     // need to establish the PDO connections and return them back for use.
 
-    var host = config['host'] != null ? "host=${config['host']};" : '';
+    final host = config['host'] != null ? "host=${config['host']};" : '';
     var dsn = "pgsql:${host}dbname=${config['database']}";
 
     // If a port was specified, we will add it to this Postgres DSN connections
@@ -92,8 +93,6 @@ class PostgresConnector extends Connector implements ConnectorInterface {
     if (config['sslmode'] != null) {
       dsn += ";sslmode=${config['sslmode']}";
     }
-
-  
 
     // add charset to DSN
     if (config.containsKey('charset') && config['charset'] != null) {
@@ -157,20 +156,16 @@ class PostgresConnector extends Connector implements ConnectorInterface {
     //     );
     // }
     late PDOInterface pdo;
-
     if (config['driver_implementation'] == 'postgres') {
       pdo = PostgresPDO(dsn, username, password, options);
-    
+    } else if (config['driver_implementation'] == 'postgres_v3') {
+      pdo = PostgresV3PDO(dsn, username, password, options);
     } else if (config['driver_implementation'] == 'dargres') {
       pdo = DargresPDO(dsn, username, password, options);
-     
     } else {
-     
       pdo = PostgresPDO(dsn, username, password, options);
     }
-
     await pdo.connect();
-
     return pdo;
   }
 }

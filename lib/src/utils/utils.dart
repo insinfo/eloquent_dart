@@ -362,12 +362,13 @@ class Utils {
 
   /// array1 => ['A', 'B']  and array2 => ['C', 'D'] return ['A', 'B', 'C', 'D']
   static List array_merge(List? array1, List? array2) {
-    var a1 =array1;var a2 = array2;
+    var a1 = array1;
+    var a2 = array2;
     if (a1 == null) {
       a1 = [];
     }
     if (a2 == null) {
-      a2=[];
+      a2 = [];
     }
     return [...a1, ...a2];
   }
@@ -762,6 +763,8 @@ class Utils {
   // }
 
   static List array_fill(int start_index, int count, dynamic value) {
-    return List.generate(count, (v)=>value);
+    return List.generate(count, (v) => value);
   }
+
+  
 }
