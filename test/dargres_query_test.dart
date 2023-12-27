@@ -47,6 +47,11 @@ void main() {
         '''insert into "temp_location" ("id", "city", "street","id_people") values (1, 'Niteroi', 'Rua B',1)''');
   });
   group('query', () {
+    test('exec command simple', () async {
+      final res = await db.execute(''' SELECT 'TEST'  ''');    
+      expect(res, [1]);
+    });
+
     test('insert simple', () async {
       var query = db.table('temp_location');
       var res = await query
