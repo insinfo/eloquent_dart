@@ -59,13 +59,19 @@ jobs:
           mariadb-version: "10.11"
           database: banco_teste
       - name: get mysql version  
-        run: mysql --version |
-         mysql -e 'SELECT VERSION()'
-         mysql -e 'SELECT CURRENT_USER()'
-         mysql -e 'SELECT DATABASE()'
-         mysql -e "SHOW VARIABLES LIKE 'socket'"
-         mysqladmin create banco_teste
-         mysql -D banco_teste -e 'SELECT DATABASE()'
+        run: |
+          mysql --version  
+          mysql -e 'SELECT VERSION()'         
+      - name: SELECT CURRENT_USER mysql
+        run:  mysql -e 'SELECT CURRENT_USER()'         
+      - name: SELECT DATABASE mysql
+        run: mysql -e 'SELECT DATABASE()'         
+      - name: SHOW VARIABLES mysql
+        run: mysql -e "SHOW VARIABLES LIKE 'socket'"   
+      - name: create db mysql
+        run: mysqladmin create banco_teste    
+      - name: SELECT db mysql
+        run: mysql -D banco_teste -e 'SELECT DATABASE()'
 
       - name: Start PostgreSQL on Ubuntu
         run: |
