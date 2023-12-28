@@ -61,16 +61,16 @@ jobs:
       - name: get mysql version  
         run: |
           mysql --version  
-          mysql -e 'SELECT VERSION()'         
-      - name: SELECT CURRENT_USER mysql
-        run:  mysql -e 'SELECT CURRENT_USER()'         
-      - name: SELECT DATABASE mysql
-        run: mysql -e 'SELECT DATABASE()'         
-      - name: SHOW VARIABLES mysql
+          mysql -e 'SELECT VERSION()' -u root         
+      - name: SELECT CURRENT_USER 
+        run:  mysql -e 'SELECT CURRENT_USER()' -u root        
+      - name: SELECT DATABASE 
+        run: mysql -e 'SELECT DATABASE()' -u root        
+      - name: SHOW VARIABLES 
         run: mysql -e "SHOW VARIABLES LIKE 'socket'"   
-      - name: create db mysql
-        run: mysqladmin create banco_teste    
-      - name: SELECT db mysql
+      # - name: create db mysql
+      #   run: mysqladmin create banco_teste    
+      - name: SELECT db 
         run: mysql -D banco_teste -e 'SELECT DATABASE()'
 
       - name: Start PostgreSQL on Ubuntu
