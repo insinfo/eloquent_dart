@@ -13,7 +13,7 @@ void main() {
       'driver': 'pgsql',
       'driver_implementation': 'postgres_v3',
       'host': 'localhost',
-      'port': '5435',
+      'port': '5432',
       'database': 'banco_teste',
       'username': 'usermd5',
       'password': 's1sadm1n',
