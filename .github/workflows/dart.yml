@@ -21,7 +21,20 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-22.04]
-        sdk: [2.18.3]
+        sdk: [3.2.1]
+
+    services:
+      mysql:
+        image: ["mysql:8"]
+        env:
+          #MYSQL_ALLOW_EMPTY_PASSWORD: yes
+          MYSQL_ROOT_PASSWORD: dart         
+          MYSQL_DATABASE: banco_teste
+          MYSQL_USER: dart
+          MYSQL_PASSWORD: dart
+        ports:
+          - 3306:3306
+        options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
 
     #services:
       #postgres:
@@ -75,4 +88,4 @@ jobs:
         run: dart pub get
     
       - name: Run tests
-        run: dart run test --concurrency 1  --chain-stack-traces
+        run: dart run test --concurrency 1 --chain-stack-traces --platform vm

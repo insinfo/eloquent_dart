@@ -1,4 +1,5 @@
 import 'package:eloquent/eloquent.dart';
+
 import 'package:test/test.dart';
 
 /// test PostgresPDO
@@ -7,10 +8,10 @@ import 'package:test/test.dart';
 void main() {
   late Connection db;
   setUp(() async {
-    var manager = Manager();
+    var manager = new Manager();
     manager.addConnection({
       'driver': 'pgsql',
-      'driver_implementation': 'postgres',
+      'driver_implementation': 'postgres_v3',
       'host': 'localhost',
       'port': '5435',
       'database': 'banco_teste',
@@ -55,7 +56,7 @@ void main() {
   });
   group('query', () {
     test('exec command simple', () async {
-      final res = await db.execute(''' SELECT 'TEST'  ''');
+      final res = await db.execute(''' SELECT 'TEST'  ''');      
       expect(res, [1]);
     });
 
