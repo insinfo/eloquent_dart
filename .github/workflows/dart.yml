@@ -23,18 +23,18 @@ jobs:
         os: [ubuntu-22.04]
         sdk: [3.2.1]
 
-    services:
-      mysql:
-        image: mysql:8
-        env:
-          #MYSQL_ALLOW_EMPTY_PASSWORD: yes
-          MYSQL_ROOT_PASSWORD: dart         
-          MYSQL_DATABASE: banco_teste
-          MYSQL_USER: dart
-          MYSQL_PASSWORD: dart
-        ports:
-          - 3306:3306
-        options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
+    # services:
+    #   mysql:
+    #     image: mysql:8
+    #     env:
+    #       #MYSQL_ALLOW_EMPTY_PASSWORD: yes
+    #       MYSQL_ROOT_PASSWORD: dart         
+    #       MYSQL_DATABASE: banco_teste
+    #       MYSQL_USER: dart
+    #       MYSQL_PASSWORD: dart
+    #     ports:
+    #       - 3306:3306
+    #     options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
 
     #services:
       #postgres:
@@ -53,6 +53,19 @@ jobs:
          # --health-retries 5
    # sudo cp ci/pg_hba.conf /etc/postgresql/9.6/main/pg_hba.conf
     steps:
+      - name: Start mariadb on Ubuntu
+      - uses: ankane/setup-mariadb@v1
+        with:
+          mariadb-version: "10.11"
+          database: banco_teste
+      - run: mysql --version
+      - run: mysql -e 'SELECT VERSION()'
+      - run: mysql -e 'SELECT CURRENT_USER()'
+      - run: mysql -e 'SELECT DATABASE()'
+      - run: mysql -e "SHOW VARIABLES LIKE 'socket'"
+      - run: mysqladmin create banco_teste
+      - run: mysql -D banco_teste -e 'SELECT DATABASE()'
+
       - name: Start PostgreSQL on Ubuntu
         run: |
           sudo lsb_release -a
