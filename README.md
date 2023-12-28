@@ -7,7 +7,7 @@ eloquent 5.2 query builder port from PHP Laravel to dart
 
 https://laravel.com/docs/5.2/queries
 
-for now it only works with PostgreSQL
+for now it only works with PostgreSQL and MySQL
 
 
 ## Creating a connection executing a simple select
@@ -92,7 +92,7 @@ void main(List<String> args) async {
     'port': '3306',
     'database': 'banco_teste',
     'username': 'root',
-    'password': 's1sadm1n',
+    'password': 'pass',
     // 'pool': true,
     // 'poolsize': 2,
   });
