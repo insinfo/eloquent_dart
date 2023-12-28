@@ -12,7 +12,7 @@ void main(List<String> args) async {
     'password': 'dart',
     // for SSL conection
     'sslmode': 'require',
-    // not implemented
+    // options not implemented 
     // 'options': {
     //   PDO_MYSQL_ATTR_SSL_VERIFY_SERVER_CERT: false,
     //   PDO_MYSQL_ATTR_SSL_KEY: '/certs/client-key.pem',
@@ -55,6 +55,8 @@ void main(List<String> args) async {
   await db.table('contacts').insert({'id_client': 1, 'tel': '27772339'});
   await db.table('contacts').insert({'id_client': 2, 'tel': '99705498'});
 
+  final id = await db.table('clients').insertGetId({'name': 'Jack'});
+  print('id: $id');
   var res = await db
       .table('clients')
       .selectRaw('id,name,tel')

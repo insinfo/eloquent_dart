@@ -14,7 +14,7 @@ void main(List<String> args) async {
     'charset': 'win1252',
     'prefix': '',
     'schema': ['public'],
-    //'sslmode' => 'prefer',
+    //'sslmode' : 'require',
   });
 
   manager.setAsGlobal();

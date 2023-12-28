@@ -80,6 +80,28 @@ class QueryMySqlGrammar extends QueryGrammar {
   }
 
   ///
+  /// Compile an insert and get ID statement into SQL.
+  ///
+  ///  [query]  QueryBuilder
+  ///  [values] Map<String,dynamic>
+  /// @param  String  $sequence
+  ///  `Return` String
+  ///
+  @override
+  String compileInsertGetId(
+      QueryBuilder query, Map<String, dynamic> values, String? sequence) {
+    if (sequence == null) {
+      sequence = 'id';
+    }
+
+    // return this.compileInsert(query, values) +
+    //     ' returning ' +
+    //     this.wrap(sequence);
+
+    return this.compileInsert(query, values);
+  }
+
+  ///
   /// Compile an update statement into SQL.
   ///
   /// @param  QueryBuilder  $query

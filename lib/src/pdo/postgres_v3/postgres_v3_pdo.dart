@@ -32,7 +32,7 @@ class PostgresV3PDO extends PDOInterface {
   }
 
   /// postgres V3 Connection
-  late Connection connection;
+  late dynamic connection;
 
   Encoding _getEncoding(String encoding) {
     switch (encoding.toLowerCase()) {
@@ -57,24 +57,41 @@ class PostgresV3PDO extends PDOInterface {
     final dsnParser = DSNParser(dsn, DsnType.pdoPostgreSql);
 
     // dsnParser.sslmode?.toString() == 'require'
+    final endpoint = Endpoint(
+      host: dsnParser.host,
+      port: dsnParser.port,
+      database: dsnParser.database,
+      username: user,
+      password: password,
+    );
 
-    connection = await Connection.open(
-        Endpoint(
-          host: dsnParser.host,
-          port: dsnParser.port,
-          database: dsnParser.database,
-          username: user,
-          password: password,
-        ),
-        settings: ConnectionSettings(
+    final sslMode = dsnParser.sslmode?.toString() == 'require'
+        ? SslMode.require
+        : SslMode.disable;
+
+    if (dsnParser.pool == true) {
+      connection = Pool.withEndpoints(
+        [endpoint],
+        settings: PoolSettings(
+          maxConnectionCount: dsnParser.poolSize,
           encoding: _getEncoding(dsnParser.charset ?? 'utf8'),
-          sslMode: dsnParser.sslmode?.toString() == 'require'
-              ? SslMode.require
-              : SslMode.disable,
-        ));
+          sslMode: sslMode,
+        ),
+      );
 
-    await connection
-        .execute('''SET client_encoding = '${dsnParser.charset}';''');
+      await (connection as Pool)
+          .execute('''SET client_encoding = '${dsnParser.charset}';''');
+     } else {
+      connection = await Connection.open(endpoint,
+          settings: ConnectionSettings(
+            encoding: _getEncoding(dsnParser.charset ?? 'utf8'),
+            sslMode: sslMode,
+          ));
+
+      await (connection as Connection)
+          .execute('''SET client_encoding = '${dsnParser.charset}';''');
+    }
+
     return this;
   }
 
@@ -112,6 +129,8 @@ class PostgresV3PDO extends PDOInterface {
       timeoutInSeconds = PostgresV3PDO.defaultTimeoutInSeconds;
     }
 
+    // final conn = connection is Pool ? connection as Pool : connection as Connection;
+
     final rs = await connection.execute(
       Sql.indexed(query, substitution: '?'),
       parameters: params,
@@ -132,7 +151,7 @@ class PostgresV3PDO extends PDOInterface {
         maps.add(map);
       }
     }
-
+    
     final pdoResult = PDOResults(maps, rs.affectedRows);
     return pdoResult;
   }
