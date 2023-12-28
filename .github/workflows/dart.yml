@@ -72,6 +72,12 @@ jobs:
       #   run: mysqladmin create banco_teste    
       - name: SELECT db 
         run: mysql -D banco_teste -e 'SELECT DATABASE()'
+      - name: crete super user
+        run: mysql -e "CREATE USER 'dart2'@'%' IDENTIFIED BY 'dart';" -u root   
+      - name: GRANT ALL PRIVILEGES
+        run: mysql -e "GRANT ALL PRIVILEGES ON  *.* to 'dart2'@'%' WITH GRANT OPTION;" -u root 
+      - name: FLUSH PRIVILEGES;
+        run: mysql -e "FLUSH PRIVILEGES;" -u root   
 
       - name: Start PostgreSQL on Ubuntu
         run: |
