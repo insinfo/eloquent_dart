@@ -53,18 +53,19 @@ jobs:
          # --health-retries 5
    # sudo cp ci/pg_hba.conf /etc/postgresql/9.6/main/pg_hba.conf
     steps:
-      - name: Start mariadb on Ubuntu
+      #- name: Start mariadb on Ubuntu
       - uses: ankane/setup-mariadb@v1
         with:
           mariadb-version: "10.11"
           database: banco_teste
-      - run: mysql --version
-      - run: mysql -e 'SELECT VERSION()'
-      - run: mysql -e 'SELECT CURRENT_USER()'
-      - run: mysql -e 'SELECT DATABASE()'
-      - run: mysql -e "SHOW VARIABLES LIKE 'socket'"
-      - run: mysqladmin create banco_teste
-      - run: mysql -D banco_teste -e 'SELECT DATABASE()'
+      - name: get mysql version  
+        run: mysql --version |
+         mysql -e 'SELECT VERSION()'
+         mysql -e 'SELECT CURRENT_USER()'
+         mysql -e 'SELECT DATABASE()'
+         mysql -e "SHOW VARIABLES LIKE 'socket'"
+         mysqladmin create banco_teste
+         mysql -D banco_teste -e 'SELECT DATABASE()'
 
       - name: Start PostgreSQL on Ubuntu
         run: |
