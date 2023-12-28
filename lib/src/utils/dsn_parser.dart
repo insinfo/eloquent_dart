@@ -51,6 +51,8 @@ class DSNParser {
   int get poolSize => int.tryParse(dsnParts['poolsize'] ?? '') ?? 1;
   bool get allowReconnect => dsnParts['allowreconnect'].toString() == 'true';
   String? get applicationName => dsnParts['application_name'];
+  String? get sslmode => dsnParts['sslmode'];
+  Map<String, dynamic>? get options => dsnParts['options'];
 
   Map<String, dynamic> get params => dsnParts['params'];
 
@@ -103,7 +105,6 @@ class DSNParser {
       if (parts.join().contains('pool=')) {
         dsnParts['pool'] =
             parts.lastWhere((p) => p.contains('pool=')).split('=').last;
-       
       }
       if (parts.join().contains('poolsize=')) {
         dsnParts['poolsize'] =
@@ -120,6 +121,14 @@ class DSNParser {
             .lastWhere((p) => p.contains('application_name='))
             .split('=')
             .last;
+      }
+      if (parts.join().contains('sslmode=')) {
+        dsnParts['sslmode'] =
+            parts.lastWhere((p) => p.contains('sslmode=')).split('=').last;
+      }
+      if (parts.join().contains('options=')) {
+        dsnParts['options'] =
+            parts.lastWhere((p) => p.contains('options=')).split('=').last;
       }
     } else if (dsnType == DsnType.heroku) {
       var patternString = '^' +

@@ -17,7 +17,7 @@ class PostgresV3PDO extends PDOInterface {
   int port = 5432;
   String driver = 'pgsql';
   String host = 'localhost';
-  dynamic attributes;
+  Map<dynamic, dynamic>? attributes;
 
   /// Creates a PDO instance representing a connection to a database
   /// Example
@@ -56,6 +56,8 @@ class PostgresV3PDO extends PDOInterface {
   Future<PostgresV3PDO> connect() async {
     final dsnParser = DSNParser(dsn, DsnType.pdoPostgreSql);
 
+    // dsnParser.sslmode?.toString() == 'require'
+
     connection = await Connection.open(
         Endpoint(
           host: dsnParser.host,
@@ -66,7 +68,9 @@ class PostgresV3PDO extends PDOInterface {
         ),
         settings: ConnectionSettings(
           encoding: _getEncoding(dsnParser.charset ?? 'utf8'),
-          sslMode: SslMode.disable,
+          sslMode: dsnParser.sslmode?.toString() == 'require'
+              ? SslMode.require
+              : SslMode.disable,
         ));
 
     await connection
@@ -74,7 +78,8 @@ class PostgresV3PDO extends PDOInterface {
     return this;
   }
 
-  Future<T> runInTransaction<T>(Future<T> operation(PostgresV3PDOTransaction ctx),
+  Future<T> runInTransaction<T>(
+      Future<T> operation(PostgresV3PDOTransaction ctx),
       [int? timeoutInSeconds]) async {
     if (timeoutInSeconds == null) {
       timeoutInSeconds = defaultTimeoutInSeconds;
@@ -85,7 +90,7 @@ class PostgresV3PDO extends PDOInterface {
       return operation(pdoCtx);
     });
 
-    return res ;
+    return res;
   }
 
   /// Executa uma instrução SQL e retornar o número de linhas afetadas
@@ -116,16 +121,17 @@ class PostgresV3PDO extends PDOInterface {
     final rows = rs.map((row) => row.toColumnMap()).toList();
     final maps = <Map<String, dynamic>>[];
     if (rows.isNotEmpty) {
-      for (final row in rows) {      
+      for (final row in rows) {
         final map = <String, dynamic>{};
         for (final col in row.entries) {
           final key = col.key;
-          final value = col.value is UndecodedBytes ? col.value.asString : col.value;
+          final value =
+              col.value is UndecodedBytes ? col.value.asString : col.value;
           map.addAll({key: value});
         }
-        maps.add(map);        
+        maps.add(map);
       }
-    }   
+    }
 
     final pdoResult = PDOResults(maps, rs.affectedRows);
     return pdoResult;

@@ -8,7 +8,7 @@ class MySqlConnector extends Connector implements ConnectorInterface {
   ///
   /// @var array
   ///
-  Map<String, dynamic> options = {};
+  Map<dynamic, dynamic> options = {};
 
   ///
   /// Establish a database connection.
@@ -150,8 +150,8 @@ class MySqlConnector extends Connector implements ConnectorInterface {
   /// @return \PDO
   /// Aqui que cria a conexão com o Banco de Dados de fato
   ///
-  Future<PDOInterface> createConnection(String dsn, Map<String, dynamic> config,
-      Map<String, dynamic> options) async {
+  Future<PDOInterface> createConnection(String dsn, Map<dynamic, dynamic> config,
+      Map<dynamic, dynamic> options) async {
     final username = config['username'];
     final password = config['password'];
 
@@ -161,7 +161,7 @@ class MySqlConnector extends Connector implements ConnectorInterface {
     //   pdo = MySqlClientPDO(dsn, username, password, options);
 
 
-    pdo = MySqlClientPDO(dsn, username, password);
+    pdo = MySqlClientPDO(dsn, username, password,options);
 
     await pdo.connect();
 

@@ -6,7 +6,7 @@ abstract class Connector with DetectsLostConnections {
   ///
   /// @var array
   ///
-  Map<String, dynamic> options = {};
+  Map<dynamic, dynamic> options = {};
 
   ///
   /// Get the PDO options based on the configuration.
@@ -14,12 +14,13 @@ abstract class Connector with DetectsLostConnections {
   /// @param  array  $config
   /// @return array
   ///
-  Map<String, dynamic> getOptions(Map<String, dynamic> config) {
+  Map<dynamic, dynamic> getOptions(Map<dynamic, dynamic> config) {
     var optionsP = config['options'];
 
     //return array_diff_key(options, optionsP) + $options;
+    //Utils.map_merge_sd(options, optionsP);
     if (optionsP != null) {
-      return Utils.map_merge_sd(options, optionsP);
+      return {...options, ...optionsP};
     }
     return options;
   }

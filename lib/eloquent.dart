@@ -44,3 +44,5 @@ export 'src/exceptions/query_exception.dart';
 export 'src/pdo/core/pdo_execution_context.dart';
 export 'src/pdo/core/pdo_result.dart';
 export 'src/pdo/core/pdo_interface.dart';
+
+export '/src/pdo/core/constants.dart';

@@ -15,7 +15,7 @@ class MySqlClientPDO extends PDOInterface {
   int port = 3306;
   String driver = 'mysql_client';
   String host = 'localhost';
-  dynamic attributes;
+  Map<dynamic, dynamic>? attributes;
 
   /// Creates a PDO instance representing a connection to a database
   /// Example
@@ -35,6 +35,10 @@ class MySqlClientPDO extends PDOInterface {
   //called from postgres_connector.dart
   Future<MySqlClientPDO> connect() async {
     final dsnParser = DSNParser(dsn, DsnType.pdoPostgreSql);
+    // print('MySqlClientPDO@connect dsnParser: $dsnParser');
+    // print('MySqlClientPDO@connect sslmode: ${dsnParser.sslmode}');
+    // print('MySqlClientPDO@connect sslmode: ${dsnParser.sslmode?.toString() == 'require'}');
+    //print('MySqlClientPDO@connect options: $attributes');
 
     if (dsnParser.pool == true) {
       connection = MySQLConnectionPool(
@@ -45,7 +49,7 @@ class MySqlClientPDO extends PDOInterface {
         password: password,
         collation: dsnParser.charset ?? 'utf8mb4_general_ci',
         maxConnections: dsnParser.poolSize,
-        secure: false,
+        secure: dsnParser.sslmode?.toString() == 'require',
       );
     } else {
       connection = await MySQLConnection.createConnection(
@@ -55,7 +59,7 @@ class MySqlClientPDO extends PDOInterface {
         userName: user,
         password: password,
         collation: dsnParser.charset ?? 'utf8mb4_general_ci',
-        secure: false,
+        secure: dsnParser.sslmode?.toString() == 'require',
       );
     }
     if (connection is MySQLConnection) {

@@ -10,6 +10,16 @@ void main(List<String> args) async {
     'database': 'banco_teste',
     'username': 'dart',
     'password': 'dart',
+    // for SSL conection
+    'sslmode': 'require',
+    // not implemented
+    // 'options': {
+    //   PDO_MYSQL_ATTR_SSL_VERIFY_SERVER_CERT: false,
+    //   PDO_MYSQL_ATTR_SSL_KEY: '/certs/client-key.pem',
+    //   PDO_MYSQL_ATTR_SSL_CERT: '/certs/client-cert.pem',
+    //   PDO_MYSQL_ATTR_SSL_CA: '/certs/ca.pem',
+    // },
+    // to enable pool of conections
     // 'pool': true,
     // 'poolsize': 2,
   });
@@ -18,7 +28,7 @@ void main(List<String> args) async {
 
   final db = await manager.connection();
 
-  await db.execute('DROP TABLE clients');
+  await db.execute('DROP TABLE IF EXISTS clients');
   await db.execute(''' CREATE TABLE IF NOT EXISTS clients (
     id int NOT NULL AUTO_INCREMENT,
     name varchar(255) NOT NULL,      

@@ -9,7 +9,7 @@ class PostgresConnector extends Connector implements ConnectorInterface {
   ///
   /// @var array
   ///
-  Map<String, dynamic> options = {};
+  Map<dynamic, dynamic> options = {};
 
   ///
   /// Establish a database connection.
@@ -142,7 +142,7 @@ class PostgresConnector extends Connector implements ConnectorInterface {
   /// Aqui que cria a conexão com o Banco de Dados de fato
   ///
   Future<PDOInterface> createConnection(String dsn, Map<String, dynamic> config,
-      Map<String, dynamic> options) async {
+      Map<dynamic, dynamic> options) async {
     final username = config['username'];
     final password = config['password'];
     // var host = config['host'];
