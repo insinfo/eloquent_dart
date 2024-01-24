@@ -1,5 +1,4 @@
 import 'dart:io';
-
 import 'package:eloquent/eloquent.dart';
 
 void main(List<String> args) async {
