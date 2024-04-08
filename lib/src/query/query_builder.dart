@@ -1890,7 +1890,7 @@ class QueryBuilder {
   ///
   /// Retrieve the "count" result of the query.
   ///
-  /// @param  String|List<String>  $columns
+  /// @param  String|List<String>  columns
   /// @return int
   ///
   Future<int> count([dynamic columns = '*']) async {
@@ -1901,7 +1901,8 @@ class QueryBuilder {
 
     //__FUNCTION__	The function name, or {closure} for anonymous functions.
     //a constant __FUNCTION__  retorna o nome da corrent função https://www.php.net/manual/en/language.constants.magic.php
-    return await this.aggregate('count', columns);
+    final result = await this.aggregate('count', columns);
+    return result is int ? result : 0;
   }
 
   ///
@@ -2056,8 +2057,8 @@ class QueryBuilder {
   /// @return int
   ///
   Future<dynamic> insertGetId(Map<String, dynamic> keyValues,
-      [String sequence = 'id']) async{
-    final sql = this.grammar.compileInsertGetId(this, keyValues, sequence);    
+      [String sequence = 'id']) async {
+    final sql = this.grammar.compileInsertGetId(this, keyValues, sequence);
     final values = this.cleanBindings(keyValues.values.toList());
     return await this.processor.processInsertGetId(this, sql, values, sequence);
   }

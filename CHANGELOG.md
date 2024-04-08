@@ -73,3 +73,7 @@ final manager = Manager();
 ## 3.0.0
 
 - implemented support for mysql through the 'mysql_client' package and also implemented support for posgress with the postgres v3 package, now you can choose the driver implementation through ``` 'driver_implementation': 'postgres_v3', ``` in addConnection method
+
+## 3.0.1
+
+- fix bug on query builder count() 
