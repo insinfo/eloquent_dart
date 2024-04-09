@@ -375,7 +375,7 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
       return [res];
     }, timeoutInSeconds);
 
-    return resp ;
+    return resp;
   }
 
   ///
@@ -577,16 +577,16 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
     // Here we will run this query. If an exception occurs we'll determine if it was
     // caused by a connection that has been lost. If that is the cause, we'll try
     // to re-establish connection and re-run the query with a fresh connection.
-    // try {
-    // print('Connection@run');
-    result = await this
-        .runQueryCallback(query, bindings, callback, timeoutInSeconds);
-    //print('Connection@run $result');
-    // } catch (e) {
-    //   //print('Connection@run error');
-    //   result = await this
-    //       .tryAgainIfCausedByLostConnection(e, query, bindings, callback);
-    // }
+    try {
+      // print('Connection@run');
+      result = await this
+          .runQueryCallback(query, bindings, callback, timeoutInSeconds);
+      //print('Connection@run $result');
+    } catch (e) {
+      //print('Connection@run error $e');
+      result = await this
+          .tryAgainIfCausedByLostConnection(e, query, bindings, callback, timeoutInSeconds);
+    }
 
     // Once we have run the query we will calculate the time that it took to run and
     // then log the query, bindings, and execution time so we will report them on
@@ -652,19 +652,18 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
               Connection, String, dynamic, int? timeoutInSeconds)
           callback,
       int? timeoutInSeconds,
-      {int delay = 2000}) async {
+      {int delay = 1000}) async {
     if (this.causedByLostConnection(e) &&
         tryReconnectCount < tryReconnectLimit) {
       await Future.delayed(Duration(milliseconds: delay));
-      //print('Eloquent@tryAgainIfCausedByLostConnection try reconnect...');
+     // print('Eloquent@tryAgainIfCausedByLostConnection try reconnect...');
       tryReconnectLimit++;
       await this.reconnect();
-      await Future.delayed(Duration(milliseconds: 1000));
       tryReconnectLimit = 0;
       return await this
           .runQueryCallback(query, bindings, callback, timeoutInSeconds);
     }
-    //print('tryAgainIfCausedByLostConnection');
+   // print('tryAgainIfCausedByLostConnection');
     throw e;
   }
 

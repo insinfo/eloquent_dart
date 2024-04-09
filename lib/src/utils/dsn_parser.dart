@@ -52,8 +52,10 @@ class DSNParser {
   bool get allowReconnect => dsnParts['allowreconnect'].toString() == 'true';
   String? get applicationName => dsnParts['application_name'];
   String? get sslmode => dsnParts['sslmode'];
-  Map<String, dynamic>? get options => dsnParts['options'];
+  String? get timezone => dsnParts['timezone'];
+  String? get schema => dsnParts['schema'];
 
+  Map<String, dynamic>? get options => dsnParts['options'];
   Map<String, dynamic> get params => dsnParts['params'];
 
   DSNParser(this.dsn, [this.dsnType = DsnType.pdoPostgreSql]) {
@@ -129,6 +131,16 @@ class DSNParser {
       if (parts.join().contains('options=')) {
         dsnParts['options'] =
             parts.lastWhere((p) => p.contains('options=')).split('=').last;
+      }
+
+      if (parts.join().contains('timezone=')) {
+        dsnParts['timezone'] =
+            parts.lastWhere((p) => p.contains('timezone=')).split('=').last;
+      }
+
+      if (parts.join().contains('schema=')) {
+        dsnParts['schema'] =
+            parts.lastWhere((p) => p.contains('schema=')).split('=').last;
       }
     } else if (dsnType == DsnType.heroku) {
       var patternString = '^' +

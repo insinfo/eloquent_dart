@@ -109,8 +109,8 @@ class Manager {
   ///  @param  string  $connection
   ///  @return \Illuminate\Database\Connection
   ///
-  Future<Connection> connection([String? connection]) {
-    return instance!.getConnection(connection);
+  Future<Connection> connection([String? connection]) async {
+    return await instance!.getConnection(connection);
   }
 
   ///
@@ -121,7 +121,7 @@ class Manager {
   ///  @return \Illuminate\Database\Query\Builder
   ///
   Future<QueryBuilder> table(String table, [String? connectionP]) async {
-    var com = await instance!.connection(connectionP);
+    final com = await instance!.connection(connectionP);
     return com.table(table);
   }
 
@@ -132,7 +132,7 @@ class Manager {
   ///  @return \Illuminate\Database\Schema\Builder
   ///
   Future<SchemaBuilder> schema([String? connectionP]) async {
-    var com = await instance!.connection(connectionP);
+    final com = await instance!.connection(connectionP);
     return com.getSchemaBuilder();
   }
 
@@ -142,8 +142,8 @@ class Manager {
   ///  @param  string  $name
   ///  @return \Illuminate\Database\Connection
   ///
-  Future<Connection> getConnection([String? name]) {
-    return this.manager.connection(name);
+  Future<Connection> getConnection([String? name]) async {
+    return await this.manager.connection(name);
   }
 
   ///
@@ -187,7 +187,6 @@ class Manager {
   ///
   Manager setFetchMode(int fetchMode) {
     this.container['config']['database.fetch'] = fetchMode;
-
     return this;
   }
 

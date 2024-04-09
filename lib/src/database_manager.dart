@@ -49,6 +49,7 @@ class DatabaseManager implements ConnectionResolverInterface {
   Future<Connection> connection([String? nameP]) async {
     var re = this.parseConnectionName(nameP);
 
+
     var name = re[0];
     var type = re[1];
     // If we haven't created this connection, we'll create it based on the config
@@ -56,7 +57,7 @@ class DatabaseManager implements ConnectionResolverInterface {
     // set the "fetch mode" for PDO which determines the query return types.
 
     if (!Utils.isset(this.connectionsProp[name])) {
-      var connection = await this.makeConnection(name);
+      final connection = await this.makeConnection(name);
 
       this.setPdoForType(connection, type);
 
@@ -83,13 +84,12 @@ class DatabaseManager implements ConnectionResolverInterface {
   ///
   /// Disconnect from the given database and remove from local cache.
   ///
-  /// @param  string  $name
+  /// [name] Connection name  
   /// @return void
   ///
-  void purge([String? name]) {
-    this.disconnect(name);
-    this.connectionsProp.remove(name);
-    //unset(this.connectionsProp[name]);
+  Future<void> purge([String? name]) async {
+    await this.disconnect(name);
+    this.connectionsProp.remove(name);    
   }
 
   ///
@@ -100,7 +100,7 @@ class DatabaseManager implements ConnectionResolverInterface {
   ///
   Future<void> disconnect([String? name]) async {
     name = name ?? this.getDefaultConnection();
-
+   
     if (Utils.isset(this.connectionsProp[name])) {
       await this.connectionsProp[name].disconnect();
     }
@@ -174,8 +174,6 @@ class DatabaseManager implements ConnectionResolverInterface {
   /// @return \Illuminate\Database\Connection
   ///
   Connection prepare(Connection connection) {
- 
-
     if (this.app.bound('events')) {
       connection.setEventDispatcher(this.app['events']);
     }

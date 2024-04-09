@@ -77,3 +77,7 @@ final manager = Manager();
 ## 3.0.1
 
 - fix bug on query builder count() 
+
+## 3.1.2
+
+- Fix bugs in lost connection detection to automatically reconnect. Updated postgres to 3.1.2 to be able to use the onOpen callback to configure connection settings like setting search path

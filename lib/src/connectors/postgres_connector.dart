@@ -37,34 +37,33 @@ class PostgresConnector extends Connector implements ConnectorInterface {
     // and if it has we will issue a statement to modify the timezone with the
     // database. Setting this DB timezone is an optional configuration item.
 
-    if (config.containsKey('timezone') && config['timezone'] != null) {
-      var timezone = config['timezone'];
-      await connection.execute("set time zone '$timezone'");
-    }
+    // if (config.containsKey('timezone') && config['timezone'] != null) {
+    //   var timezone = config['timezone'];
+    //   await connection.execute("set time zone '$timezone'");
+    // }
 
     // Unlike MySQL, Postgres allows the concept of "schema" and a default schema
     // may have been specified on the connections. If that is the case we will
     // set the default schema search paths to the specified database schema.
-    if (config.containsKey('schema') && config['schema'] != null) {
-      var schema = formatSchema(config['schema']);
-
-      await connection.execute("set search_path to $schema");
-    }
+    // if (config.containsKey('schema') && config['schema'] != null) {
+    //   var schema = formatSchema(config['schema']);
+    //   await connection.execute("set search_path to $schema");
+    // }
 
     // Postgres allows an application_name to be set by the user and this name is
     // used to when monitoring the application with pg_stat_activity. So we'll
     // determine if the option has been specified and run a statement if so.
 
-    if (config.containsKey('application_name') &&
-        config['application_name'] != null) {
-      var applicationName = config['application_name'];
-      try {
-        await connection.execute("set application_name to '$applicationName'");
-      } catch (e) {
-        print(
-            'Eloquent: Unable to set the application_name for this PostgreSQL driver.');
-      }
-    }
+    // if (config.containsKey('application_name') &&
+    //     config['application_name'] != null) {
+    //   var applicationName = config['application_name'];
+    //   try {
+    //     await connection.execute("set application_name to '$applicationName'");
+    //   } catch (e) {
+    //     print(
+    //         'Eloquent: Unable to set the application_name for this PostgreSQL driver.');
+    //   }
+    // }
 
     return connection;
   }
@@ -113,6 +112,14 @@ class PostgresConnector extends Connector implements ConnectorInterface {
 
     if (config['application_name'] != null) {
       dsn += ";application_name=${config['application_name']}";
+    }
+
+    if (config['schema'] != null) {
+      dsn += ";schema=${config['schema']}";
+    }
+    
+    if (config['timezone'] != null) {
+      dsn += ";timezone=${config['timezone']}";
     }
 
     return dsn;
