@@ -1,11 +1,9 @@
-
 library executor;
 
 import 'dart:async';
 import 'dart:collection';
 
-import 'package:stack_trace/stack_trace.dart';
-
+import 'package:eloquent/src/pdo/postgres/dependencies/stack_trace/stack_trace.dart';
 
 /// An async task that completes with a Future or a value.
 typedef AsyncTask<R> = FutureOr<R>? Function();
