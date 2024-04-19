@@ -56,7 +56,6 @@ class PostgresV3PDO extends PDOInterface {
   Future<PostgresV3PDO> connect() async {
     final dsnParser = DSNParser(dsn, DsnType.pdoPostgreSql);
 
-    // dsnParser.sslmode?.toString() == 'require'
     final endpoint = Endpoint(
       host: dsnParser.host,
       port: dsnParser.port,
@@ -76,20 +75,7 @@ class PostgresV3PDO extends PDOInterface {
           applicationName: dsnParser.applicationName,
           timeZone: dsnParser.timezone,
           onOpen: (conn) async {
-            if (dsnParser.charset != null) {
-              await conn
-                  .execute("SET client_encoding = '${dsnParser.charset}';");
-            }
-            if (dsnParser.schema != null) {
-              await conn.execute("SET search_path TO '${dsnParser.schema}';");
-            }
-            if (dsnParser.timezone != null) {
-              await conn.execute("SET time zone '${dsnParser.timezone};'");
-            }
-            if (dsnParser.applicationName != null) {
-              await conn.execute(
-                  "SET application_name TO '${dsnParser.applicationName};'");
-            }
+            await _onOpen(conn, dsnParser);
           },
           maxConnectionCount: dsnParser.poolSize,
           encoding: _getEncoding(dsnParser.charset ?? 'utf8'),
@@ -97,39 +83,38 @@ class PostgresV3PDO extends PDOInterface {
         ),
       );
 
-      //final pool = await (connection as Pool);
+      
     } else {
       connection = await Connection.open(endpoint,
           settings: ConnectionSettings(
             applicationName: dsnParser.applicationName,
             timeZone: dsnParser.timezone,
             onOpen: (conn) async {
-              if (dsnParser.charset != null) {
-                await conn
-                    .execute("SET client_encoding = '${dsnParser.charset}';");
-              }
-              if (dsnParser.schema != null) {
-                await conn.execute("SET search_path TO '${dsnParser.schema}';");
-              }
-              if (dsnParser.timezone != null) {
-                await conn.execute("SET time zone '${dsnParser.timezone};'");
-              }
-              if (dsnParser.applicationName != null) {
-                await conn.execute(
-                    "SET application_name TO '${dsnParser.applicationName};'");
-              }
+              await _onOpen(conn, dsnParser);
             },
             encoding: _getEncoding(dsnParser.charset ?? 'utf8'),
             sslMode: sslMode,
           ));
-
-      // final conn = await (connection as Connection);
-      // if (dsnParser.charset != null) {
-      //   conn.execute('''SET client_encoding = '${dsnParser.charset}';''');
-      // }
     }
 
     return this;
+  }
+
+  /// inicializa configurações ao conectar com o banco de dados
+  Future<void> _onOpen(Connection conn, DSNParser dsnParser) async {
+    if (dsnParser.charset != null) {
+      await conn.execute("SET client_encoding = '${dsnParser.charset}'");
+    }
+    if (dsnParser.schema != null) {
+      await conn.execute("SET search_path TO ${dsnParser.schema}");
+    }
+    if (dsnParser.timezone != null) {
+      await conn.execute("SET time zone '${dsnParser.timezone}'");
+    }
+    if (dsnParser.applicationName != null) {
+      await conn
+          .execute("SET application_name TO '${dsnParser.applicationName}'");
+    }
   }
 
   Future<T> runInTransaction<T>(
@@ -195,7 +180,7 @@ class PostgresV3PDO extends PDOInterface {
 
   @override
   Future close() async {
-   // print('postgres_v3_pdo@close isOpen ${(connection).isOpen} ');
+    // print('postgres_v3_pdo@close isOpen ${(connection).isOpen} ');
     if (connection is Connection) {
       await (connection as Connection).close();
     } else if (connection is Pool) {

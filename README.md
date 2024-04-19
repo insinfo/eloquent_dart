@@ -22,7 +22,7 @@ for now it only works with PostgreSQL and MySQL
       'password': 'pass',
       'charset': 'utf8',
       'prefix': '',
-      'schema': ['public'],      
+      'schema': 'public',      
     });
     manager.setAsGlobal();
     final db = await manager.connection();
@@ -75,6 +75,105 @@ for now it only works with PostgreSQL and MySQL
 
     await db.table('temp_location')
         .where('id', '=', 1).delete();
+
+```
+## using connection pool (works for mysql and postgresql)
+
+```dart
+    var manager = new Manager();
+    manager.addConnection({
+      'driver': 'pgsql',
+      'driver_implementation': 'postgres_v3',
+      'host': 'localhost',
+      'port': '5432',
+      'database': 'database_name',
+      'username': 'user_name',
+      'password': 'pass',
+      'charset': 'utf8',
+      'prefix': '',
+      'schema': 'public,other', 
+      'pool': true,
+      'poolsize': 8,     
+    });
+   
+    final db = await manager.connection();
+
+    final query = db.table('temp_location');
+    
+    final res = await query
+        .select(['temp_location.id', 'city', 'street'])
+        .where('temp_location.id', '=', 1)
+        .join('people', 'people.id', '=', 'temp_location.id_people', 'inner')
+        .limit(1)
+        .offset(0)
+        .get();
+
+
+```
+
+
+## connect and disconnect in loop
+
+```dart
+    var manager = new Manager();
+    manager.addConnection({
+      'driver': 'pgsql',
+      'host': 'localhost',
+      'port': '5432',
+      'database': 'database_name',
+      'username': 'user_name',
+      'password': 'pass',
+      'charset': 'utf8',
+      'prefix': '',
+      'schema': 'public,other',          
+    });
+
+    while (true){
+      //connect
+      final db = await manager.connection();
+      final res = await query
+          .select(['temp_location.id', 'city', 'street'])
+          .where('temp_location.id', '=', 1)
+          .join('people', 'people.id', '=', 'temp_location.id_people', 'inner')
+          .limit(1)
+          .offset(0)
+          .get();
+      //disconnect    
+      await manager.getDatabaseManager().purge();
+    }    
+
+```
+
+## using different drivers implementation for postgresql
+
+```dart
+    var manager = new Manager();
+    manager.addConnection({
+      'driver': 'pgsql',
+      'driver_implementation': 'postgres_v3', // postgres | dargres | postgres_v3
+      'host': 'localhost',
+      'port': '5432',
+      'database': 'database_name',
+      'username': 'user_name',
+      'password': 'pass',
+      'charset': 'utf8',
+      'prefix': '',
+      'schema': 'public,other',          
+    });
+
+    
+      //connect
+      final db = await manager.connection();
+      final res = await query
+          .select(['temp_location.id', 'city', 'street'])
+          .where('temp_location.id', '=', 1)
+          .join('people', 'people.id', '=', 'temp_location.id_people', 'inner')
+          .limit(1)
+          .offset(0)
+          .get();
+      //disconnect    
+      await manager.getDatabaseManager().purge();
+       
 
 ```
 

@@ -7,7 +7,7 @@ mixin DetectsLostConnections {
   /// @param  \Exception  $e
   /// @return bool
   ///
-  bool causedByLostConnection(Exception e) {
+  bool causedByLostConnection(dynamic e) {
     final message = '$e';
     //TODO revise isso para outros cenários
     final isR = Utils.string_contains(message, [

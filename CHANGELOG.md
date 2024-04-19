@@ -80,4 +80,10 @@ final manager = Manager();
 
 ## 3.1.2
 
-- Fix bugs in lost connection detection to automatically reconnect. Updated postgres to 3.1.2 to be able to use the onOpen callback to configure connection settings like setting search path
+- fix bugs in lost connection detection to automatically reconnect. Updated postgres to 3.1.2 to be able to use the onOpen callback to configure connection settings like setting search path
+
+## 3.2.0
+
+- fix bugs in onOpen callback to configure connection settings
+- improvements to README
+- implemented connection pool for 'postgres' (v2) driver_implementation
