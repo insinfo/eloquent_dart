@@ -30,3 +30,5 @@ main.exe
 teste_concorrencia.dart
 teste_utils.dart
 teste_insert_get_id.dart
+
+example/bin/teste_insert_get_id.dart

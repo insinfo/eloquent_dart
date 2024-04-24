@@ -87,3 +87,7 @@ final manager = Manager();
 - fix bugs in onOpen callback to configure connection settings
 - improvements to README
 - implemented connection pool for 'postgres' (v2) driver_implementation
+
+## 3.2.1
+
+- fix bug on format Schema

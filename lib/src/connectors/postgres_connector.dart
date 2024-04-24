@@ -115,9 +115,9 @@ class PostgresConnector extends Connector implements ConnectorInterface {
     }
 
     if (config['schema'] != null) {
-      dsn += ";schema=${config['schema']}";
+      dsn += ";schema=${formatSchema(config['schema'])}";
     }
-    
+
     if (config['timezone'] != null) {
       dsn += ";timezone=${config['timezone']}";
     }
@@ -132,11 +132,20 @@ class PostgresConnector extends Connector implements ConnectorInterface {
   /// @return string
   ///
   String formatSchema(dynamic schema) {
-    if (Utils.is_array(schema)) {
-      return '"' + Utils.implode('", "', schema) + '"';
+    String result = '';
+    if (schema is List<String>) {
+      result = schema.map((e) => '"$e"').join(',');
+    } else if (schema is String) {
+      if (schema.contains(',')) {
+        final parts = schema.split(',');
+        result = parts.map((e) => '"$e"').join(',');
+      } else {
+        result = '"$schema"';
+      }
     } else {
-      return '"' + schema + '"';
+      throw Exception('schema is not String or List<String>');
     }
+    return result;
   }
 
   ///
