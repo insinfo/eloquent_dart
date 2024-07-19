@@ -107,7 +107,7 @@ class PostgresV3PDO extends PDOInterface {
       await conn.execute("SET search_path TO ${dsnParser.schema}");
     }
     if (dsnParser.timezone != null) {
-      await conn.execute("SET time zone '${dsnParser.timezone}'");
+      await conn.execute("SET timezone TO '${dsnParser.timezone}'");
     }
     if (dsnParser.applicationName != null) {
       await conn

@@ -39,7 +39,7 @@ class PostgresConnector extends Connector implements ConnectorInterface {
 
     // if (config.containsKey('timezone') && config['timezone'] != null) {
     //   var timezone = config['timezone'];
-    //   await connection.execute("set time zone '$timezone'");
+    //   await connection.execute("set timezone TO '$timezone'");
     // }
 
     // Unlike MySQL, Postgres allows the concept of "schema" and a default schema
