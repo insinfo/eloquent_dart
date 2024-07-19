@@ -91,3 +91,7 @@ final manager = Manager();
 ## 3.2.1
 
 - fix bug on format Schema
+
+## 3.3.0
+
+- **Breaking change**: decode timestamp without timezone as local DateTime and decode timestamp with timezone respecting the timezone defined in the connection

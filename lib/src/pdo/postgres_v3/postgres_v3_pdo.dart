@@ -73,7 +73,7 @@ class PostgresV3PDO extends PDOInterface {
         [endpoint],
         settings: PoolSettings(
           applicationName: dsnParser.applicationName,
-          timeZone: dsnParser.timezone,
+          timeZone: TimeZoneSettings(dsnParser.timezone ?? 'UTC'),
           onOpen: (conn) async {
             await _onOpen(conn, dsnParser);
           },
@@ -82,13 +82,11 @@ class PostgresV3PDO extends PDOInterface {
           sslMode: sslMode,
         ),
       );
-
-      
     } else {
       connection = await Connection.open(endpoint,
           settings: ConnectionSettings(
             applicationName: dsnParser.applicationName,
-            timeZone: dsnParser.timezone,
+            timeZone: TimeZoneSettings(dsnParser.timezone ?? 'UTC'),
             onOpen: (conn) async {
               await _onOpen(conn, dsnParser);
             },

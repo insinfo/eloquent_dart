@@ -501,7 +501,7 @@ class PgPool implements PostgreSQLExecutionContext {
             isUnixSocket: _url.isUnixSocket,
             timeoutInSeconds: settings.connectTimeout.inSeconds,
             queryTimeoutInSeconds: settings.queryTimeout.inSeconds,
-            timeZone: settings.timeZone,
+            timeZone: TimeZoneSettings(settings.timeZone),
             encoding: settings.encoding,
           );
           await c.open();
