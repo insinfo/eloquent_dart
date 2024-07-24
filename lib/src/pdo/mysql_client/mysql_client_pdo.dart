@@ -1,6 +1,7 @@
+import 'package:eloquent/src/pdo/core/pdo_config.dart';
 import 'package:eloquent/src/pdo/core/pdo_interface.dart';
 import 'package:eloquent/src/pdo/core/pdo_result.dart';
-import 'package:eloquent/src/utils/dsn_parser.dart';
+
 import 'package:mysql_client/mysql_client.dart';
 import 'mysql_client_pdo_transaction.dart';
 
@@ -8,24 +9,17 @@ class MySqlClientPDO extends PDOInterface {
   /// default query Timeout =  30 seconds
   static const defaultTimeoutInSeconds = 30;
 
-  String dsn;
-  String user;
-  String password;
-  String dbname = '';
-  int port = 3306;
-  String driver = 'mysql_client';
-  String host = 'localhost';
-  Map<dynamic, dynamic>? attributes;
+  PDOConfig config;
 
   /// Creates a PDO instance representing a connection to a database
   /// Example
   ///
-  /// var dsn = "mysql:host=localhost;port=3306;dbname=banco_teste;";
-  /// Example: "mysql:host=localhost;port=3306;dbname=banco_teste;";
-  /// var pdo = new PDO($dsn, $user, $password, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+  ///
+  /// Example:  Map<String, dynamic> config = {'host': 'localhost','port':5432,'database':'teste'};
+  /// var pdo = new PDO(PDOConfig.fromMap(config));
   /// await pdo.connect();
   ///
-  MySqlClientPDO(this.dsn, this.user, this.password, [this.attributes]) {
+  MySqlClientPDO(this.config) {
     super.pdoInstance = this;
   }
 
@@ -34,40 +28,31 @@ class MySqlClientPDO extends PDOInterface {
 
   //called from postgres_connector.dart
   Future<MySqlClientPDO> connect() async {
-    final dsnParser = DSNParser(dsn, DsnType.pdoPostgreSql);
-    // print('MySqlClientPDO@connect dsnParser: $dsnParser');
-    // print('MySqlClientPDO@connect sslmode: ${dsnParser.sslmode}');
-    // print('MySqlClientPDO@connect sslmode: ${dsnParser.sslmode?.toString() == 'require'}');
-    //print('MySqlClientPDO@connect options: $attributes');
-
-    if (dsnParser.pool == true) {
+    if (config.pool == true) {
       connection = MySQLConnectionPool(
-        host: dsnParser.host,
-        port: dsnParser.port,
-        databaseName: dsnParser.database,
-        userName: user,
-        password: password,
-        collation: dsnParser.charset ?? 'utf8mb4_general_ci',
-        maxConnections: dsnParser.poolSize,
-        secure: dsnParser.sslmode?.toString() == 'require',
+        host: config.host,
+        port: config.port,
+        databaseName: config.database,
+        userName: config.username ?? '',
+        password: config.password,
+        collation: config.charset ?? 'utf8mb4_general_ci',
+        maxConnections: config.poolSize ?? 1,
+        secure: config.sslmode?.toString() == 'require',
       );
     } else {
       connection = await MySQLConnection.createConnection(
-        host: dsnParser.host,
-        port: dsnParser.port,
-        databaseName: dsnParser.database,
-        userName: user,
-        password: password,
-        collation: dsnParser.charset ?? 'utf8mb4_general_ci',
-        secure: dsnParser.sslmode?.toString() == 'require',
+        host: config.host,
+        port: config.port,
+        databaseName: config.database,
+        userName: config.username ?? '',
+        password: config.password ?? '',
+        collation: config.charset ?? 'utf8mb4_general_ci',
+        secure: config.sslmode?.toString() == 'require',
       );
     }
     if (connection is MySQLConnection) {
       await (connection as MySQLConnection).connect();
     }
-    //else if(connection is MySQLConnectionPool){
-    //await (connection as MySQLConnectionPool).;
-    //}
 
     return this;
   }

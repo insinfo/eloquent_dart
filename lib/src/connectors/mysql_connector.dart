@@ -17,10 +17,9 @@ class MySqlConnector extends Connector implements ConnectorInterface {
   /// @return PostgreSQLConnection \PDO
   ///
   Future<PDOInterface> connect(Map<String, dynamic> config) async {
-    final dsn = getDsn(config);
-    final options = getOptions(config);
-
-    final connection = await createConnection(dsn, config, options);
+    //final dsn = getDsn(config);
+    //final options = getOptions(config);
+    final connection = await createConnection(config);
 
     if (config.containsKey('database') && config['database'] != null) {
       await connection.execute("use `${config['database']}`;");
@@ -150,18 +149,12 @@ class MySqlConnector extends Connector implements ConnectorInterface {
   /// @return \PDO
   /// Aqui que cria a conexão com o Banco de Dados de fato
   ///
-  Future<PDOInterface> createConnection(String dsn, Map<dynamic, dynamic> config,
-      Map<dynamic, dynamic> options) async {
-    final username = config['username'];
-    final password = config['password'];
-
+  Future<PDOInterface> createConnection(Map<String, dynamic> config) async {
     late PDOInterface pdo;
 
-    // if (config['driver_implementation'] == 'postgres') {
-    //   pdo = MySqlClientPDO(dsn, username, password, options);
+    final pdoConfig = PDOConfig.fromMap(config);
 
-
-    pdo = MySqlClientPDO(dsn, username, password,options);
+    pdo = MySqlClientPDO(pdoConfig);
 
     await pdo.connect();
 

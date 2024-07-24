@@ -281,7 +281,7 @@ class PgPoolSettings {
   int maxQueryCount = 1024 * 1024;
 
   /// Timezone for the connetion
-  String timeZone = 'UTC';
+  TimeZoneSettings timeZone = TimeZoneSettings('UTC');
 
   Encoding encoding = utf8;
 
@@ -501,7 +501,7 @@ class PgPool implements PostgreSQLExecutionContext {
             isUnixSocket: _url.isUnixSocket,
             timeoutInSeconds: settings.connectTimeout.inSeconds,
             queryTimeoutInSeconds: settings.queryTimeout.inSeconds,
-            timeZone: TimeZoneSettings(settings.timeZone),
+            timeZone: settings.timeZone,
             encoding: settings.encoding,
           );
           await c.open();

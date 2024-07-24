@@ -152,7 +152,11 @@ class Manager {
   ///  @param  array   $config
   ///  @param  string  $name
   ///  @return void
-  ///
+  /// 
+  /// ```dart
+  /// 
+  /// ```
+  /// 
   void addConnection(Map<String, dynamic> config, [String name = 'default']) {
     var connections = this.container['config']['database.connections'];
     if (connections == null) {

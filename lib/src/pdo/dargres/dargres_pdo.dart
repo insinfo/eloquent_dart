@@ -1,5 +1,4 @@
 import 'package:dargres/dargres.dart' as dargres;
-import 'package:eloquent/src/utils/dsn_parser.dart';
 import 'package:eloquent/eloquent.dart';
 import 'dargres_pdo_transaction.dart';
 
@@ -7,24 +6,17 @@ class DargresPDO extends PDOInterface {
   /// default query Timeout =  30 seconds
   static const defaultTimeout = const Duration(seconds: 30);
 
-  String dsn;
-  String user;
-  String password;
-  String dbname = '';
-  int port = 5432;
-  String driver = 'pgsql';
-  String host = 'localhost';
-  dynamic attributes;
+  PDOConfig config;
 
   /// Creates a PDO instance representing a connection to a database
   /// Example
   ///
-  /// var dsn = "pgsql:host=$host;port=5432;dbname=$db;";
-  /// Example: "pgsql:host=$host;dbname=$db;charset=utf8";
-  /// var pdo = new PDO($dsn, $user, $password, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+  ///
+  /// Example:  Map<String, dynamic> config = {'host': 'localhost','port':5432,'database':'teste'};
+  /// var pdo = new PDO(PDOConfig.fromMap(config));
   /// await pdo.connect();
   ///
-  DargresPDO(this.dsn, this.user, this.password, [this.attributes]) {
+  DargresPDO(this.config) {
     super.pdoInstance = this;
   }
 
@@ -33,30 +25,35 @@ class DargresPDO extends PDOInterface {
 
   //called from postgres_connector.dart
   Future<DargresPDO> connect() async {
-    final dsnParser = DSNParser(dsn, DsnType.pdoPostgreSql);
+    final timeZone = dargres.TimeZoneSettings(config.timezone ?? 'UTC');
+    timeZone.forceDecodeTimestamptzAsUTC = config.forceDecodeTimestamptzAsUTC;
+    timeZone.forceDecodeTimestampAsUTC = config.forceDecodeTimestampAsUTC;
+    timeZone.forceDecodeDateAsUTC = config.forceDecodeDateAsUTC;
 
-    if (dsnParser.pool == true) {
+    if (config.pool == true) {
       final settings = dargres.ConnectionSettings(
-        user: user,
-        database: dsnParser.database,
-        host: dsnParser.host,
-        port: dsnParser.port,
-        password: password,
-        textCharset: dsnParser.charset ?? 'utf8',
-        applicationName: dsnParser.applicationName,
+        user: config.username ?? '',
+        database: config.database,
+        host: config.host,
+        port: config.port,
+        password: config.password,
+        textCharset: config.charset ?? 'utf8',
+        applicationName: config.applicationName,
         allowAttemptToReconnect: false,
+        timeZone: timeZone,
       );
-      connection = dargres.PostgreSqlPool(dsnParser.poolSize, settings,
-          allowAttemptToReconnect: dsnParser.allowReconnect);
+      connection = dargres.PostgreSqlPool(config.poolSize ?? 1, settings,
+          allowAttemptToReconnect: config.allowReconnect ?? false);
     } else {
-      connection = dargres.CoreConnection(user,
-          database: dsnParser.database,
-          host: dsnParser.host,
-          port: dsnParser.port,
-          password: password,
+      connection = dargres.CoreConnection(config.username ?? '',
+          database: config.database,
+          host: config.host,
+          port: config.port,
+          password: config.password,
           allowAttemptToReconnect: false,
           // sslContext: sslContext,
-          textCharset: dsnParser.charset ?? 'utf8');
+          textCharset: config.charset ?? 'utf8',
+          timeZone: timeZone);
       await connection!.connect();
     }
 

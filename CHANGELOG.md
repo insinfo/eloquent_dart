@@ -94,4 +94,33 @@ final manager = Manager();
 
 ## 3.3.0
 
-- **Breaking change**: decode timestamp without timezone as local DateTime and decode timestamp with timezone respecting the timezone defined in the connection
+- add option to decode timestamp without timezone and date as local DateTime and decode timestamp with timezone respecting the timezone defined in the connection
+```dart
+ final manager = Manager();
+  manager.addConnection({
+    'driver': 'pgsql',
+    'driver_implementation': 'postgres_v3', // postgres | dargres | postgres_v3
+    'timezone': 'America/Sao_Paulo',   
+    // If true, decodes the timestamp with timezone (timestamptz) as UTC = default
+    // If false, decodes the timestamp with timezone using the timezone defined in the connection.
+    'forceDecodeTimestamptzAsUTC': false,
+    // If true, decodes the timestamp without timezone (timestamp) as UTC.
+    // If false, decodes the timestamp without timezone as local datetime.
+    'forceDecodeTimestampAsUTC': false,
+    // If true, decodes the date as UTC.
+    // If false, decodes the date as local datetime.
+    'forceDecodeDateAsUTC': false,
+    'pool': true,
+    'poolsize': 2,
+    'host': 'localhost',
+    'port': '5435',
+    'database': 'siamweb',
+    'username': 'dart',
+    'password': 'dart',
+    'charset': 'win1252',
+    'prefix': '',
+    'schema': ['public'],
+    // require | disable
+    //'sslmode' : 'require',
+  });
+```

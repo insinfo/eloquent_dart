@@ -241,3 +241,39 @@ void main(List<String> args) async {
 }
 
 ```
+
+## example of all settings
+
+```dart
+ final manager = Manager();
+  manager.addConnection({
+    'driver': 'pgsql',
+    'driver_implementation': 'postgres_v3', // postgres | dargres | postgres_v3
+    // set connection time zone UTC = default
+    'timezone': 'America/Sao_Paulo',   
+    // If true, decodes the timestamp with timezone (timestamptz) as UTC = default
+    // If false, decodes the timestamp with timezone using the timezone defined in the connection.
+    'forceDecodeTimestamptzAsUTC': false,
+    // If true, decodes the timestamp without timezone (timestamp) as UTC.
+    // If false, decodes the timestamp without timezone as local datetime.
+    'forceDecodeTimestampAsUTC': false,
+    // If true, decodes the date as UTC.
+    // If false, decodes the date as local datetime.
+    'forceDecodeDateAsUTC': false,
+    // enable connection pool
+    'pool': true,
+    // Connection pool maximum connection count
+    'poolsize': 2,
+    'host': 'localhost',
+    'port': '5435',
+    'database': 'siamweb',
+    'username': 'dart',
+    'password': 'dart',
+    // 
+    'charset': 'win1252',
+    'prefix': '',
+    'schema': ['public'],
+    // require | disable
+    //'sslmode' : 'require',
+  });
+```

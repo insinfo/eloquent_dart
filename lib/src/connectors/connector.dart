@@ -16,7 +16,6 @@ abstract class Connector with DetectsLostConnections {
   ///
   Map<dynamic, dynamic> getOptions(Map<dynamic, dynamic> config) {
     var optionsP = config['options'];
-
     //return array_diff_key(options, optionsP) + $options;
     //Utils.map_merge_sd(options, optionsP);
     if (optionsP != null) {
@@ -33,18 +32,5 @@ abstract class Connector with DetectsLostConnections {
   /// @param  array   $options
   /// @return \PDO
   ///
-  dynamic createConnection(
-      String dsn, Map<String, dynamic> config, Map<String, dynamic> options);
-  // var username = config['username'];
-  //var password = config['password'];
-
-  // try {
-  //     $pdo = new PDO($dsn, $username, $password, $options);
-  // } catch (Exception e) {
-  //     $pdo = $this->tryAgainIfCausedByLostConnection(
-  //         $e, $dsn, $username, $password, $options
-  //     );
-  // }
-
-  //}
+  dynamic createConnection(Map<String, dynamic> config);
 }

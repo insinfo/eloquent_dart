@@ -10,30 +10,30 @@ environment:
 dependencies:  
   intl: '>=0.17.0 <3.0.0'
   #dargres: ^2.2.4
-  dargres: ^3.1.0
-  # dargres: 
-  #   path: ../dargres
-
-  enough_convert: '>=1.6.0 <2.0.0' 
-  
+  dargres: ^3.1.2
+  #dargres: 
+    #path: ../dargres
+  enough_convert: '>=1.6.0 <2.0.0'   
   #postgres:
     #path: ../postgresql-dart 
   # postgres v2
-  postgres_fork: ^2.8.0
-  # postgres_fork: 
-  #   path: ../postgresql-fork
- 
+  postgres_fork: ^2.8.3
+  #postgres_fork: 
+    #path: ../postgresql-fork 
 
   mysql_client: ^0.0.27    
   # postgres v3 
   #postgres: ^3.1.2 
-  # postgres: 
-  #   path: ../postgresql-v3
+  #postgres: 
+    #path: ../postgresql-v3
   postgres:
     git:
       ref: master
       url: https://github.com/insinfo/postgresql-dart.git
     
+# dependency_overrides:
+#   pg_timezone:
+#     path: ../pg_timezone
 
 dev_dependencies:
   test: ^1.17.12 

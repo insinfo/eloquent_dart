@@ -22,11 +22,9 @@ class PostgresConnector extends Connector implements ConnectorInterface {
     // using the configuration option specified by the developer. We will also
     // set the default character set on the connections to UTF-8 by default.
 
-    var dsn = getDsn(config);
-
-    var options = getOptions(config);
-
-    var connection = await createConnection(dsn, config, options);
+    //var dsn = getDsn(config);
+    //var options = getOptions(config);
+    var connection = await createConnection(config);
 
     // if (config.containsKey('charset') && config['charset'] != null) {
     //   var charset = config['charset'];
@@ -157,29 +155,22 @@ class PostgresConnector extends Connector implements ConnectorInterface {
   /// @return \PDO
   /// Aqui que cria a conexão com o Banco de Dados de fato
   ///
-  Future<PDOInterface> createConnection(String dsn, Map<String, dynamic> config,
-      Map<dynamic, dynamic> options) async {
-    final username = config['username'];
-    final password = config['password'];
-    // var host = config['host'];
-    // var port = config['port']; //5432
-    // var database = config['database'];
-    // try {
-    //     $pdo = new PDO($dsn, $username, $password, $options);
-    // } catch (Exception e) {
-    //     $pdo = $this->tryAgainIfCausedByLostConnection(
-    //         $e, $dsn, $username, $password, $options
-    //     );
-    // }
+  Future<PDOInterface> createConnection(Map<String, dynamic> config) async {
+    //print('postgres_connector@createConnection config: $config');
+
+    if (config.containsKey('schema')) {
+      config['schema'] = formatSchema(config['schema']);
+    }
+    final pdoConfig = PDOConfig.fromMap(config);
     late PDOInterface pdo;
     if (config['driver_implementation'] == 'postgres') {
-      pdo = PostgresPDO(dsn, username, password, options);
+      pdo = PostgresPDO(pdoConfig);
     } else if (config['driver_implementation'] == 'postgres_v3') {
-      pdo = PostgresV3PDO(dsn, username, password, options);
+      pdo = PostgresV3PDO(pdoConfig);
     } else if (config['driver_implementation'] == 'dargres') {
-      pdo = DargresPDO(dsn, username, password, options);
+      pdo = DargresPDO(pdoConfig);
     } else {
-      pdo = PostgresPDO(dsn, username, password, options);
+      pdo = PostgresPDO(pdoConfig);
     }
     await pdo.connect();
     return pdo;

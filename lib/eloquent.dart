@@ -5,8 +5,6 @@ export 'src/query/query_builder.dart';
 
 export 'src/query/join_clause.dart';
 
-
-
 export 'src/grammar.dart'; //BaseGrammar
 export 'src/query/grammars/query_grammar.dart';
 export 'src/query/processors/processor.dart';
@@ -40,9 +38,9 @@ export 'src/exceptions/query_exception.dart';
 
 //PDO
 
-
 export 'src/pdo/core/pdo_execution_context.dart';
 export 'src/pdo/core/pdo_result.dart';
 export 'src/pdo/core/pdo_interface.dart';
+export 'src/pdo/core/pdo_config.dart';
 
 export '/src/pdo/core/constants.dart';

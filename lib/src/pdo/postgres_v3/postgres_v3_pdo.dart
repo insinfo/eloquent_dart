@@ -1,7 +1,9 @@
 import 'dart:convert';
+
+import 'package:eloquent/src/pdo/core/pdo_config.dart';
 import 'package:eloquent/src/pdo/core/pdo_interface.dart';
 import 'package:eloquent/src/pdo/core/pdo_result.dart';
-import 'package:eloquent/src/utils/dsn_parser.dart';
+
 import 'package:enough_convert/windows.dart';
 import 'package:postgres/postgres.dart';
 import 'postgres_v3_pdo_transaction.dart';
@@ -10,24 +12,17 @@ class PostgresV3PDO extends PDOInterface {
   /// default query Timeout =  30 seconds
   static const defaultTimeoutInSeconds = 30;
 
-  String dsn;
-  String user;
-  String password;
-  String dbname = '';
-  int port = 5432;
-  String driver = 'pgsql';
-  String host = 'localhost';
-  Map<dynamic, dynamic>? attributes;
+  PDOConfig config;
 
   /// Creates a PDO instance representing a connection to a database
   /// Example
   ///
-  /// var dsn = "pgsql:host=$host;port=5432;dbname=$db;";
-  /// Example: "pgsql:host=$host;dbname=$db;charset=utf8";
-  /// var pdo = new PDO($dsn, $user, $password, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+  ///
+  /// Example:  Map<String, dynamic> config = {'host': 'localhost','port':5432,'database':'teste'};
+  /// var pdo = new PDO(PDOConfig.fromMap(config));
   /// await pdo.connect();
   ///
-  PostgresV3PDO(this.dsn, this.user, this.password, [this.attributes]) {
+  PostgresV3PDO(this.config) {
     super.pdoInstance = this;
   }
 
@@ -54,43 +49,46 @@ class PostgresV3PDO extends PDOInterface {
 
   //called from postgres_connector.dart
   Future<PostgresV3PDO> connect() async {
-    final dsnParser = DSNParser(dsn, DsnType.pdoPostgreSql);
-
     final endpoint = Endpoint(
-      host: dsnParser.host,
-      port: dsnParser.port,
-      database: dsnParser.database,
-      username: user,
-      password: password,
+      host: config.host,
+      port: config.port,
+      database: config.database,
+      username: config.username,
+      password: config.password,
     );
 
-    final sslMode = dsnParser.sslmode?.toString() == 'require'
+    final sslMode = config.sslmode?.toString() == 'require'
         ? SslMode.require
         : SslMode.disable;
 
-    if (dsnParser.pool == true) {
+    final timeZone = TimeZoneSettings(config.timezone ?? 'UTC');
+    timeZone.forceDecodeTimestamptzAsUTC = config.forceDecodeTimestamptzAsUTC;
+    timeZone.forceDecodeTimestampAsUTC = config.forceDecodeTimestampAsUTC;
+    timeZone.forceDecodeDateAsUTC = config.forceDecodeDateAsUTC;
+
+    if (config.pool == true) {
       connection = Pool.withEndpoints(
         [endpoint],
         settings: PoolSettings(
-          applicationName: dsnParser.applicationName,
-          timeZone: TimeZoneSettings(dsnParser.timezone ?? 'UTC'),
+          applicationName: config.applicationName,
+          timeZone: timeZone,
           onOpen: (conn) async {
-            await _onOpen(conn, dsnParser);
+            await _onOpen(conn, config);
           },
-          maxConnectionCount: dsnParser.poolSize,
-          encoding: _getEncoding(dsnParser.charset ?? 'utf8'),
+          maxConnectionCount: config.poolSize,
+          encoding: _getEncoding(config.charset ?? 'utf8'),
           sslMode: sslMode,
         ),
       );
     } else {
       connection = await Connection.open(endpoint,
           settings: ConnectionSettings(
-            applicationName: dsnParser.applicationName,
-            timeZone: TimeZoneSettings(dsnParser.timezone ?? 'UTC'),
+            applicationName: config.applicationName,
+            timeZone: timeZone,
             onOpen: (conn) async {
-              await _onOpen(conn, dsnParser);
+              await _onOpen(conn, config);
             },
-            encoding: _getEncoding(dsnParser.charset ?? 'utf8'),
+            encoding: _getEncoding(config.charset ?? 'utf8'),
             sslMode: sslMode,
           ));
     }
@@ -99,7 +97,7 @@ class PostgresV3PDO extends PDOInterface {
   }
 
   /// inicializa configurações ao conectar com o banco de dados
-  Future<void> _onOpen(Connection conn, DSNParser dsnParser) async {
+  Future<void> _onOpen(Connection conn, PDOConfig dsnParser) async {
     if (dsnParser.charset != null) {
       await conn.execute("SET client_encoding = '${dsnParser.charset}'");
     }

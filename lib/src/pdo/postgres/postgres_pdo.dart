@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'package:eloquent/src/utils/dsn_parser.dart';
+
 import 'package:eloquent/eloquent.dart';
 import 'package:enough_convert/windows.dart';
 import 'postgres_pdo_transaction.dart';
@@ -11,24 +11,17 @@ class PostgresPDO extends PDOInterface {
   /// default query Timeout =  30 seconds
   static const defaultTimeoutInSeconds = 30;
 
-  String dsn;
-  String user;
-  String password;
-  String dbname = '';
-  int port = 5432;
-  String driver = 'pgsql';
-  String host = 'localhost';
-  dynamic attributes;
+  PDOConfig config;
 
   /// Creates a PDO instance representing a connection to a database
   /// Example
   ///
-  /// var dsn = "pgsql:host=$host;port=5432;dbname=$db;";
-  /// Example: "pgsql:host=$host;dbname=$db;charset=utf8";
-  /// var pdo = new PDO($dsn, $user, $password, [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+  ///
+  /// Example:  Map<String, dynamic> config = {'host': 'localhost','port':5432,'database':'teste'};
+  /// var pdo = new PDO(PDOConfig.fromMap(config));
   /// await pdo.connect();
   ///
-  PostgresPDO(this.dsn, this.user, this.password, [this.attributes]) {
+  PostgresPDO(this.config) {
     super.pdoInstance = this;
   }
 
@@ -55,56 +48,59 @@ class PostgresPDO extends PDOInterface {
 
   //called from postgres_connector.dart
   Future<PostgresPDO> connect() async {
-    final dsnParser = DSNParser(dsn, DsnType.pdoPostgreSql);
+    final timeZone = TimeZoneSettings(config.timezone ?? 'UTC');
+    timeZone.forceDecodeTimestamptzAsUTC = config.forceDecodeTimestamptzAsUTC;
+    timeZone.forceDecodeTimestampAsUTC = config.forceDecodeTimestampAsUTC;
+    timeZone.forceDecodeDateAsUTC = config.forceDecodeDateAsUTC;
 
-    if (dsnParser.pool == true) {
+    if (config.pool == true) {
       final endpoint = PgEndpoint(
-        host: dsnParser.host,
-        port: dsnParser.port,
-        database: dsnParser.database,
-        username: user,
-        password: password,
+        host: config.host,
+        port: config.port,
+        database: config.database,
+        username: config.username,
+        password: config.password,
       );
       final settings = PgPoolSettings();
-      settings.encoding = _getEncoding(dsnParser.charset ?? 'utf8');
-      settings.maxConnectionCount = dsnParser.poolSize;
+      settings.encoding = _getEncoding(config.charset ?? 'utf8');
+      settings.maxConnectionCount = config.poolSize ?? 1;
       settings.onOpen = (conn) async {
-        await _onOpen(conn, dsnParser);
+        await _onOpen(conn, config);
       };
+      settings.timeZone = timeZone;
       connection = PgPool(endpoint, settings: settings);
       //print('dsnParser.pool ${dsnParser.pool} $connection');
     } else {
       connection = PostgreSQLConnection(
-        dsnParser.host,
-        dsnParser.port,
-        dsnParser.database,
-        username: user,
-        password: password,
-        encoding: _getEncoding(dsnParser.charset ?? 'utf8'),
+        config.host,
+        config.port,
+        config.database,
+        username: config.username,
+        password: config.password,
+        timeZone: timeZone,
+        encoding: _getEncoding(config.charset ?? 'utf8'),
       );
       final conn = connection as PostgreSQLConnection;
       await conn.open();
-      await _onOpen(conn, dsnParser);
+      await _onOpen(conn, config);
     }
 
     return this;
   }
 
   /// inicializa configurações ao conectar com o banco de dados
-  Future<void> _onOpen(
-      PostgreSQLExecutionContext conn, DSNParser dsnParser) async {
-    if (dsnParser.charset != null) {
-      await conn.execute("SET client_encoding = '${dsnParser.charset}'");
+  Future<void> _onOpen(PostgreSQLExecutionContext conn, PDOConfig conf) async {
+    if (conf.charset != null) {
+      await conn.execute("SET client_encoding = '${conf.charset}'");
     }
-    if (dsnParser.schema != null) {
-      await conn.execute("SET search_path TO ${dsnParser.schema}");
+    if (conf.schema != null) {
+      await conn.execute("SET search_path TO ${conf.schema}");
     }
-    if (dsnParser.timezone != null) {
-      await conn.execute("SET timezone TO '${dsnParser.timezone}'");
+    if (conf.timezone != null) {
+      await conn.execute("SET timezone TO '${conf.timezone}'");
     }
-    if (dsnParser.applicationName != null) {
-      await conn
-          .execute("SET application_name TO '${dsnParser.applicationName}'");
+    if (conf.applicationName != null) {
+      await conn.execute("SET application_name TO '${conf.applicationName}'");
     }
   }
 
