@@ -192,6 +192,7 @@ void main(List<String> args) async {
     'database': 'banco_teste',
     'username': 'root',
     'password': 'pass',
+    'sslmode': 'require',
     // 'pool': true,
     // 'poolsize': 2,
   });
