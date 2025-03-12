@@ -1,6 +1,13 @@
 import 'package:eloquent/eloquent.dart';
 
 class QueryGrammar extends BaseGrammar {
+  /// The grammar specific operators.
+  List<String> operators = [];
+
+  List<String> getOperators() {
+    return operators;
+  }
+
   /// chama um determinado metodo com base no nome
   /// este metodo é para evitar reflexão dart:mirror
   dynamic callMethod(
@@ -67,6 +74,20 @@ class QueryGrammar extends BaseGrammar {
         return whereYear(positionalArguments[0], positionalArguments[1]);
       case 'whereraw':
         return whereRaw(positionalArguments[0], positionalArguments[1]);
+
+      case 'wherecolumn':
+        return whereColumn(positionalArguments[0], positionalArguments[1]);
+
+      case 'compilehavings':
+        return compileHavings(positionalArguments[0], positionalArguments[1]);
+
+      case 'compileunion':
+        return compileUnion(positionalArguments[0]);
+
+      case 'compileunions':
+        return compileUnions(positionalArguments[0]);
+      case 'compilelock':
+        return compileLock(positionalArguments[0], positionalArguments[1]);
 
       default:
         throw Exception("method '$methodName' not exist in QueryGrammar class");
@@ -209,33 +230,30 @@ class QueryGrammar extends BaseGrammar {
   ///  @return String
   ///
   String compileJoins(QueryBuilder query, List<JoinClause> joins) {
-    //print('compileJoins joins: $joins');
-    var sql = [];
+    var sql = <String>[];
 
     for (var join in joins) {
       var table = this.wrapTable(join.table);
+      var type = join.type.toLowerCase();
 
-      // First we need to build all of the "on" clauses for the join. There may be many
-      // of these clauses so we will need to iterate through each one and build them
-      // separately, then we'll join them up into a single string when we're done.
-      var clauses = [];
+      // Se for um cross join sem cláusulas, retorna apenas "cross join <table>"
+      if (type == 'cross' && (join.clauses.isEmpty)) {
+        sql.add("cross join $table");
+        continue;
+      }
 
+      // Compila as cláusulas ON para os demais joins
+      var clauses = <String>[];
       for (var clause in join.clauses) {
         clauses.add(this.compileJoinConstraint(clause));
       }
 
-      // Once we have constructed the clauses, we'll need to take the boolean connector
-      // off of the first clause as it obviously will not be required on that clause
-      // because it leads the rest of the clauses, thus not requiring any boolean.
-      clauses[0] = this.removeLeadingBoolean(clauses[0]);
+      if (clauses.isNotEmpty) {
+        // Remove o booleano da primeira cláusula
+        clauses[0] = this.removeLeadingBoolean(clauses[0]);
+      }
 
-      final clausesString = Utils.implode(' ', clauses);
-
-      var type = join.type;
-
-      // Once we have everything ready to go, we will just concatenate all the parts to
-      // build the final join statement SQL for the query and we can then return the
-      // final clause back to the callers as a single, stringified join statement.
+      var clausesString = Utils.implode(' ', clauses);
       sql.add("$type join $table on $clausesString");
     }
 
@@ -554,6 +572,21 @@ class QueryGrammar extends BaseGrammar {
     return where['sql'];
   }
 
+  /// Compila uma cláusula "where" que compara duas colunas.
+  ///
+  /// Parâmetros:
+  /// [query] - A instância de QueryBuilder (não necessariamente usada aqui, mas passada para manter consistência).
+  /// [where] - Mapa com as chaves 'first', 'operator' e 'second' que representam, respectivamente, a primeira coluna, o operador e a segunda coluna.
+  ///
+  /// Retorna a string SQL resultante, por exemplo: "table1.col1 = table2.col2".
+  String whereColumn(QueryBuilder query, Map<String, dynamic> where) {
+    final firstWrapped = this.wrap(where['first']);
+    final secondWrapped = this.wrap(where['second']);
+    final operator = where['operator'];
+
+    return '$firstWrapped $operator $secondWrapped';
+  }
+
   ///
   ///  Compile the "group by" portions of the query.
   ///
@@ -574,10 +607,14 @@ class QueryGrammar extends BaseGrammar {
   ///
   String compileHavings(
       QueryBuilder query, List<Map<String, dynamic>> havings) {
-    //TODO implementar havings
-    // var sql = implode(' ', array_map([$this, 'compileHaving'], $havings));
-    // return 'having '+this.removeLeadingBoolean(sql);
-    throw UnimplementedError();
+    // Mapeia cada cláusula having para sua representação SQL utilizando compileHaving.
+    var sqlParts = havings.map((having) => compileHaving(having)).toList();
+
+    // Junta as partes com um espaço em branco.
+    var combinedSql = sqlParts.join(' ');
+
+    // Remove o conector booleano inicial e retorna a string final com a palavra "having".
+    return 'having ' + removeLeadingBoolean(combinedSql);
   }
 
   ///
@@ -664,27 +701,29 @@ class QueryGrammar extends BaseGrammar {
   ///  @return String
   ///
   String compileUnions(QueryBuilder query) {
-    // var sql = '';
+    var sql = '';
 
-    // for(var union in query.unionsProp ) {
-    //     sql += compileUnion(union);
-    // }
+    // Itera sobre cada union armazenada na propriedade unionsProp.
+    for (var union in query.unionsProp) {
+      sql += compileUnion(union);
+    }
 
-    // if (isset($query->unionOrders)) {
-    //     $sql .= ' '.this.compileOrders($query, $query->unionOrders);
-    // }
+    // Se houver unionOrders, adiciona-os.
+    if (query.unionOrdersProp.isNotEmpty) {
+      sql += ' ' + compileOrders(query, query.unionOrdersProp);
+    }
 
-    // if (isset($query->unionLimit)) {
-    //     $sql .= ' '.this.compileLimit($query, $query->unionLimit);
-    // }
+    // Se houver unionLimit, adiciona-o.
+    if (query.unionLimit != null) {
+      sql += ' ' + compileLimit(query, query.unionLimit!);
+    }
 
-    // if (isset($query->unionOffset)) {
-    //     $sql .= ' '.this.compileOffset($query, $query->unionOffset);
-    // }
+    // Se houver unionOffset, adiciona-o.
+    if (query.unionOffset != null) {
+      sql += ' ' + compileOffset(query, query.unionOffset!);
+    }
 
-    // return ltrim($sql);
-
-    throw UnimplementedError();
+    return sql.trimLeft();
   }
 
   ///
@@ -694,8 +733,8 @@ class QueryGrammar extends BaseGrammar {
   ///  @return String
   ///
   String compileUnion(Map<String, dynamic> union) {
-    var joiner = union['all'] ? ' union all ' : ' union ';
-
+    // Se o union tiver a flag 'all' verdadeira, utiliza "union all"; caso contrário, "union".
+    var joiner = union['all'] == true ? ' union all ' : ' union ';
     return joiner + union['query'].toSql();
   }
 
@@ -707,7 +746,6 @@ class QueryGrammar extends BaseGrammar {
   ///
   String compileExists(QueryBuilder query) {
     var select = compileSelect(query);
-
     return "select exists($select) as {this.wrap('exists')}";
   }
 
@@ -788,7 +826,7 @@ class QueryGrammar extends BaseGrammar {
   /// @param  array  $values
   /// @return array
   ///
-  prepareBindingsForUpdate( $bindings,  $values) {
+  prepareBindingsForUpdate($bindings, $values) {
     return $bindings;
   }
 

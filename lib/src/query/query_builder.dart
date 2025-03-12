@@ -1,5 +1,9 @@
 import 'package:eloquent/src/connection.dart';
 import 'package:eloquent/src/connection_interface.dart';
+import 'package:eloquent/src/contracts/pagination/default_length_aware_paginator.dart';
+import 'package:eloquent/src/contracts/pagination/length_aware_paginator.dart';
+import 'package:eloquent/src/contracts/pagination/pagination_utils.dart';
+
 import 'package:eloquent/src/query/expression.dart';
 import 'package:eloquent/src/query/grammars/query_grammar.dart';
 import 'package:eloquent/src/query/join_clause.dart';
@@ -50,8 +54,7 @@ class QueryBuilder {
         return this.lockProp;
       case 'backups':
         return this.backups;
-      case 'unionOrders':
-        return this.unionOrdersProp;
+
       case 'bindingBackups':
         return this.bindingBackups;
       case 'operators':
@@ -224,14 +227,14 @@ class QueryBuilder {
   ///
   /// @var array
   ///
-  List backups = [];
+  Map<String, dynamic> backups = {}; // Para orders, limit, offset, columns
 
   ///
   /// The binding backups currently in use.
   ///
   /// @var array
   ///
-  List bindingBackups = [];
+  Map<String, dynamic> bindingBackups = {}; // Para as chaves 'order' e 'select'
 
   ///
   /// All of the available clause operators.
@@ -293,7 +296,7 @@ class QueryBuilder {
   /// @param  array|mixed  $columns
   /// @return $this
   ///
-  QueryBuilder select([List<String> columnsP = const ['*']]) {
+  QueryBuilder select([List<dynamic> columnsP = const ['*']]) {
     //this.columns = is_array($columns) ? $columns : func_get_args();
     this.columnsProp = columnsP;
     return this;
@@ -599,6 +602,17 @@ class QueryBuilder {
     return this.joinWhere(table, one, operator, two, 'right');
   }
 
+  QueryBuilder crossJoin(dynamic table,
+      [dynamic first, String? operator, dynamic second]) {
+    if (first != null) {
+      // Se for passado um join condicional, delega para o método join com tipo 'cross'
+      return this.join(table, first, operator, second, 'cross');
+    }
+    // Caso contrário, adiciona um JoinClause do tipo 'cross' sem cláusula ON
+    this.joinsProp.add(JoinClause('cross', table, this));
+    return this;
+  }
+
   ///
   /// Add a basic where clause to the query.
   ///
@@ -718,34 +732,86 @@ class QueryBuilder {
      * @param  string|null  $boolean
      * @return \Illuminate\Database\Query\Builder|static
      */
-  // TODO implementar isso
-  //  whereColumn(first, [operator = null, second = null, boolean = 'and'])
-  // {
-  //     // If the column is an array, we will assume it is an array of key-value pairs
-  //     // and can add them each as a where clause. We will maintain the boolean we
-  //     // received when the method was called and pass it into the nested where.
-  //     if (first is List) {
-  //         return this.addArrayOfWheres($first, $boolean, 'whereColumn');
-  //     }
+  QueryBuilder whereColumn(dynamic first,
+      [String? operator, dynamic second, String boolean = 'and']) {
+    // Se "first" for um array (Lista ou Map), assumimos que é um conjunto de condições
+    // e delegamos a adição das condições ao método addArrayOfWheres.
+    if (first is List || first is Map) {
+      return this.addArrayOfWheres(first, boolean, 'whereColumn');
+    }
 
-  //     // If the given operator is not found in the list of valid operators we will
-  //     // assume that the developer is just short-cutting the '=' operators and
-  //     // we will set the operators to '=' and set the values appropriately.
-  //     if ($this->invalidOperator($operator)) {
-  //         list($second, $operator) = [$operator, '='];
-  //     }
+    // Verifica se o operador fornecido é válido.
+    // Se o operador não for encontrado na lista de operadores válidos da classe (_operators)
+    // ou na lista de operadores da gramática (grammar.getOperators()),
+    // assumimos que o desenvolvedor está encurtando o uso do operador '='.
+    if (operator == null ||
+        !(Utils.in_array(operator.toLowerCase(), this._operators) ||
+            Utils.in_array(
+                operator.toLowerCase(), this.grammar.getOperators()))) {
+      second = operator;
+      operator = '=';
+    }
 
-  //     // Finally, we will add this where clause into this array of clauses that we
-  //     // are building for the query. All of them will be compiled via a grammar
-  //     // once the query is about to be executed and run against the database.
-  //     $type = 'Column';
+    // Define o tipo da cláusula "where" como "Column"
+    var type = 'Column';
 
-  //     $this->wheres[] = compact(
-  //         'type', 'first', 'operator', 'second', 'boolean'
-  //     );
+    // Adiciona a cláusula na lista de condições (wheresProp)
+    this.wheresProp.add({
+      'type': type,
+      'first': first,
+      'operator': operator,
+      'second': second,
+      'boolean': boolean
+    });
 
-  //     return $this;
-  // }
+    return this;
+  }
+
+  QueryBuilder addArrayOfWheres(dynamic column, String boolean,
+      [String method = 'where']) {
+    // Utiliza whereNested para agrupar as condições
+    return this.whereNested((QueryBuilder query) {
+      // Se "column" for um Map (array associativo de condições)
+      if (column is Map) {
+        column.forEach((key, value) {
+          // Se a chave for numérica e o valor for uma lista,
+          // assumimos que a lista contém os parâmetros para chamar o método where dinamicamente.
+          if (key is int && value is List) {
+            if (method == 'where') {
+              Function.apply(query.where, value);
+            } else if (method == 'orWhere') {
+              Function.apply(query.orWhere, value);
+            } else {
+              // Se o método não for reconhecido, usa-se o método where por padrão.
+              Function.apply(query.where, value);
+            }
+          } else {
+            // Caso contrário, trata a chave como nome da coluna e o valor como o valor a ser comparado.
+            query.where(key, '=', value);
+          }
+        });
+      }
+      // Se "column" for uma lista, itera sobre cada item
+      else if (column is List) {
+        for (var item in column) {
+          if (item is List) {
+            if (method == 'where') {
+              Function.apply(query.where, item);
+            } else if (method == 'orWhere') {
+              Function.apply(query.orWhere, item);
+            } else {
+              Function.apply(query.where, item);
+            }
+          } else if (item is Map) {
+            // Se o item for um mapa, itera sobre cada chave e valor
+            item.forEach((key, value) {
+              query.where(key, '=', value);
+            });
+          }
+        }
+      }
+    }, boolean);
+  }
 
   ///
   /// Determine if the given operator and value combination is legal.
@@ -1152,11 +1218,11 @@ class QueryBuilder {
   ///
   /// @param  String  $column
   /// @param  String   $operator
-  /// @param  int   $value
+  /// @param   DateTime?  $value
   /// @param  String   $boolean
   /// @return \Illuminate\Database\Query\Builder|static
   ///
-  QueryBuilder whereDate(String column, String? operator, int value,
+  QueryBuilder whereDate(String column, String? operator, DateTime? value,
       [String boolean = 'and']) {
     return this.addDateBasedWhere('Date', column, operator, value, boolean);
   }
@@ -1209,12 +1275,12 @@ class QueryBuilder {
   /// @param  String  $type
   /// @param  String  $column
   /// @param  String  $operator
-  /// @param  int  $value
+  /// @param  dynamic  $value
   /// @param  String  $boolean
   /// @return $this
   ///
   QueryBuilder addDateBasedWhere(
-      String type, String column, String? operator, int value,
+      String type, String column, String? operator, dynamic value,
       [String boolean = 'and']) {
     this.wheresProp.add({
       'column': column,
@@ -1223,9 +1289,7 @@ class QueryBuilder {
       'operator': operator,
       'value': value
     });
-
     this.addBinding(value, 'where');
-
     return this;
   }
 
@@ -1317,7 +1381,7 @@ class QueryBuilder {
   /// @param  String  $boolean
   /// @return $this
   ///
-  QueryBuilder having(String column,
+  QueryBuilder having(dynamic column,
       [String? operator, dynamic value, String boolean = 'and']) {
     var type = 'basic';
 
@@ -1329,7 +1393,7 @@ class QueryBuilder {
       'boolean': boolean
     });
 
-    if (!value is QueryExpression) {
+    if (!(value is QueryExpression)) {
       this.addBinding(value, 'having');
     }
 
@@ -1348,36 +1412,36 @@ class QueryBuilder {
     return this.having(column, operator, value, 'or');
   }
 
+  /// Adiciona uma cláusula "having" bruta (raw) à consulta.
   ///
-  /// Add a raw having clause to the query.
-  ///
-  /// @param  String  $sql
-  /// @param  array   $bindings
-  /// @param  String  $boolean
-  /// @return $this
-  ///
-  // dynamic havingRaw($sql, array $bindings = [], $boolean = 'and')
-  // {
-  //     $type = 'raw';
+  /// [sql] é a expressão SQL bruta.
+  /// [bindings] são os valores que devem ser vinculados à consulta (por exemplo, parâmetros).
+  /// [boolean] indica o conector lógico da cláusula (por padrão, "and").
+  /// Retorna a instância atual de QueryBuilder para permitir encadeamento de chamadas.
+  QueryBuilder havingRaw(String sql,
+      [List bindings = const [], String boolean = 'and']) {
+    const type = 'raw';
 
-  //     this.havings[] = compact('type', 'sql', 'boolean');
+    // Adiciona um registro em havingsProp com as informações necessárias
+    this.havingsProp.add({
+      'type': type,
+      'sql': sql,
+      'boolean': boolean,
+    });
 
-  //     this.addBinding($bindings, 'having');
+    // Adiciona os valores de binding à seção 'having'
+    this.addBinding(bindings, 'having');
 
-  //     return this;
-  // }
+    return this;
+  }
 
+  /// Adiciona uma cláusula "having" bruta (raw) com conector "or" à consulta.
   ///
-  /// Add a raw or having clause to the query.
-  ///
-  /// @param  String  $sql
-  /// @param  array   $bindings
-  /// @return \Illuminate\Database\Query\Builder|static
-  ///
-  // dynamic orHavingRaw($sql, array $bindings = [])
-  // {
-  //     return this.havingRaw($sql, $bindings, 'or');
-  // }
+  /// [sql] é a expressão SQL bruta.
+  /// [bindings] são os valores que devem ser vinculados à consulta.
+  QueryBuilder orHavingRaw(String sql, [List bindings = const []]) {
+    return this.havingRaw(sql, bindings, 'or');
+  }
 
   ///
   /// Add an "order by" clause to the query.
@@ -1514,9 +1578,7 @@ class QueryBuilder {
   /// @return \Illuminate\Database\Query\Builder|static
   ///
   QueryBuilder forPage(int page, [int perPage = 15]) {
-    return this.skip((page - 1));
-
-    /// $perPage)->take($perPage);
+    return this.skip((page - 1) * perPage).take(perPage);
   }
 
   ///
@@ -1599,7 +1661,8 @@ class QueryBuilder {
   /// @param  array  $columns
   /// @return mixed|static
   ///
-  dynamic find(int id, [List<String> columns = const ['*']]) {
+  Future<Map<String, dynamic>?> find(int id,
+      [List<String> columns = const ['*']]) {
     return this.where('id', '=', id).first(columns);
   }
 
@@ -1673,19 +1736,28 @@ class QueryBuilder {
   /// @param  int|null  $page
   /// @return \Illuminate\Contracts\Pagination\LengthAwarePaginator
   ///
-  // dynamic paginate([int perPage = 15, columns = const['*'], pageName = 'page', page = null])
-  // {
-  //     var page = $page ?: Paginator::resolveCurrentPage($pageName);
+  Future<LengthAwarePaginator> paginate({
+    int perPage = 15,
+    List<String> columns = const ['*'],
+    String pageName = 'page',
+    int? page,
+  }) async {
+    // Se a página não for informada, resolve a página atual.
+    page ??= PaginationUtils.resolveCurrentPage(pageName);
 
-  //     $total = this.getCountForPagination($columns);
+    // Obtém o total de registros para a paginação.
+    int total = await getCountForPagination(columns);
 
-  //     $results = this.forPage($page, $perPage)->get($columns);
+    // Se houver registros, obtém os resultados da página solicitada; caso contrário, retorna uma lista vazia.
+    List<Map<String, dynamic>> results =
+        total > 0 ? await forPage(page, perPage).get(columns) : [];
 
-  //     return new LengthAwarePaginator($results, $total, $perPage, $page, [
-  //         'path' => Paginator::resolveCurrentPath(),
-  //         'pageName' => $pageName,
-  //     ]);
-  // }
+    // Retorna o objeto LengthAwarePaginator com os resultados e metadados.
+    return DefaultLengthAwarePaginator(results, total, perPage, page, {
+      'path': PaginationUtils.resolveCurrentPath(),
+      'pageName': pageName,
+    });
+  }
 
   ///
   /// Get a paginator only supporting simple next and previous links.
@@ -1715,44 +1787,69 @@ class QueryBuilder {
   /// @param  array  $columns
   /// @return int
   ///
-  // dynamic getCountForPagination($columns = ['///'])
-  // {
-  //     this.backupFieldsForCount();
+  /// Retorna a contagem total de registros para a paginação.
+  Future<int> getCountForPagination(
+      [List<String> columns = const ['*']]) async {
+    backupFieldsForCount();
 
-  //     this.aggregate = ['function' => 'count', 'columns' => this.clearSelectAliases($columns)];
+    // Define a agregação para contagem, removendo eventuais aliases.
+    aggregateProp = {
+      'function': 'count',
+      'columns': clearSelectAliases(columns)
+    };
 
-  //     $results = this.get();
+    // Executa a consulta (nesse caso, a consulta de contagem).
+    List<Map<String, dynamic>> results = await get();
 
-  //     this.aggregate = null;
+    aggregateProp = null;
 
-  //     this.restoreFieldsForCount();
+    restoreFieldsForCount();
 
-  //     if (isset(this.groupsProp)) {
-  //         return count($results);
-  //     }
+    // Se houver agrupamentos, retorna o número de resultados.
+    if (groupsProp.isNotEmpty) {
+      return results.length;
+    }
 
-  //     return isset($results[0]) ? (int) array_change_key_case((array) $results[0])['aggregate'] : 0;
-  // }
+    // Caso contrário, espera que o resultado possua uma chave 'aggregate'.
+    if (results.isNotEmpty && results.first.containsKey('aggregate')) {
+      var agg = results.first['aggregate'];
+      if (agg is int) {
+        return agg;
+      } else if (agg is String) {
+        return int.tryParse(agg) ?? 0;
+      }
+    }
+
+    return 0;
+  }
 
   ///
   /// Backup some fields for the pagination count.
   ///
   /// @return void
   ///
-  // void backupFieldsForCount()
-  // {
-  //     for (['orders', 'limit', 'offset', 'columns'] as $field) {
-  //         this.backups[$field] = this.{$field};
+  /// Faz o backup dos campos utilizados na contagem da paginação.
+  void backupFieldsForCount() {
+    // Backup dos campos da consulta.
+    backups['orders'] = ordersProp;
+    backups['limit'] = limitProp;
+    backups['offset'] = offsetProp;
+    backups['columns'] = columnsProp;
 
-  //         this.{$field} = null;
-  //     }
+    // Define os campos de consulta como nulos (ou listas vazias) para a contagem.
+    ordersProp = [];
+    limitProp = null;
+    offsetProp = null;
+    columnsProp = null;
 
-  //     for (['order', 'select'] as $key) {
-  //         this.bindingBackups[$key] = this.bindings[$key];
+    // Backup dos bindings para 'order' e 'select'.
+    bindingBackups['order'] = bindings['order'];
+    bindingBackups['select'] = bindings['select'];
 
-  //         this.bindings[$key] = [];
-  //     }
-  // }
+    // Limpa os bindings de 'order' e 'select' para que não interfiram na contagem.
+    bindings['order'] = [];
+    bindings['select'] = [];
+  }
 
   ///
   /// Remove the column aliases since they will break count queries.
@@ -1760,32 +1857,33 @@ class QueryBuilder {
   /// @param  array  $columns
   /// @return array
   ///
-  // dynamic clearSelectAliases( $columns)
-  // {
-  //     return array_map(function ($column) {
-  //         return is_string($column) && ($aliasPosition = strpos(strtolower($column), ' as ')) != false
-  //                 ? substr($column, 0, $aliasPosition) : $column;
-  //     }, $columns);
-  // }
+  /// Remove aliases de colunas para evitar problemas na contagem.
+  /// Exemplo: "users.name as user_name" será transformado em "users.name".
+  List<String> clearSelectAliases(List<String> columns) {
+    return columns.map((column) {
+      final aliasPos = column.toLowerCase().indexOf(' as ');
+      return aliasPos != -1 ? column.substring(0, aliasPos) : column;
+    }).toList();
+  }
 
   ///
   /// Restore some fields after the pagination count.
   ///
   /// @return void
   ///
-  // protected function restoreFieldsForCount()
-  // {
-  //     foreach (['orders', 'limit', 'offset', 'columns'] as $field) {
-  //         this.{$field} = this.backups[$field];
-  //     }
+  /// Restaura os campos que foram modificados para a contagem da paginação.
+  void restoreFieldsForCount() {
+    ordersProp = backups['orders'];
+    limitProp = backups['limit'];
+    offsetProp = backups['offset'];
+    columnsProp = backups['columns'];
 
-  //     foreach (['order', 'select'] as $key) {
-  //         this.bindings[$key] = this.bindingBackups[$key];
-  //     }
+    bindings['order'] = bindingBackups['order'];
+    bindings['select'] = bindingBackups['select'];
 
-  //     this.backups = [];
-  //     this.bindingBackups = [];
-  // }
+    backups.clear();
+    bindingBackups.clear();
+  }
 
   ///
   /// Chunk the results of the query.
@@ -1911,10 +2009,10 @@ class QueryBuilder {
   /// @param  String  $column
   /// @return float|int
   ///
-  // dynamic min($column)
-  // {
-  //     return this.aggregate(__FUNCTION__, [$column]);
-  // }
+  Future<num?> min(String column) async {
+    final result = await this.aggregate("min", [column]);
+    return result is String ? num.tryParse(result) : result;
+  }
 
   ///
   /// Retrieve the maximum value of a given column.
@@ -1922,10 +2020,10 @@ class QueryBuilder {
   /// @param  String  $column
   /// @return float|int
   ///
-  // dynamic max($column)
-  // {
-  //     return this.aggregate(__FUNCTION__, [$column]);
-  // }
+  Future<num?> max(String column) async {
+    final result = await this.aggregate("max", [column]);
+    return result is String ? num.tryParse(result) : result;
+  }
 
   ///
   /// Retrieve the sum of the values of a given column.
@@ -1933,12 +2031,10 @@ class QueryBuilder {
   /// @param  String  $column
   /// @return float|int
   ///
-  // dynamic sum($column)
-  // {
-  //     $result = this.aggregate(__FUNCTION__, [$column]);
-
-  //     return $result ?: 0;
-  // }
+  Future<num?> sum(String column) async {
+    final result = await this.aggregate('sum', [column]);
+    return result is String ? num.tryParse(result) : result;
+  }
 
   ///
   /// Retrieve the average of the values of a given column.
@@ -1946,10 +2042,10 @@ class QueryBuilder {
   /// @param  String  $column
   /// @return float|int
   ///
-  // dynamic avg($column)
-  // {
-  //     return this.aggregate(__FUNCTION__, [$column]);
-  // }
+  Future<num?> avg(String column) async {
+    final result = await this.aggregate('avg', [column]);
+    return result is String ? num.tryParse(result) : result;
+  }
 
   ///
   /// Alias for the "avg" method.
@@ -1957,10 +2053,9 @@ class QueryBuilder {
   /// @param  String  $column
   /// @return float|int
   ///
-  // dynamic average($column)
-  // {
-  //     return this.avg($column);
-  // }
+  Future<num?> average(String column) async {
+    return await this.avg(column);
+  }
 
   ///
   /// Execute an aggregate function on the database.
@@ -2138,11 +2233,11 @@ class QueryBuilder {
   ///
   /// @return void
   ///
-  void truncate() {
+  Future<void> truncate() async {
     for (var entry in this.grammar.compileTruncate(this).entries) {
       var sql = entry.key;
       var bindings = entry.value;
-      this.connection.statement(sql, bindings);
+      await this.connection.statement(sql, bindings);
     }
   }
 

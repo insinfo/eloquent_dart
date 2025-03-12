@@ -23,19 +23,13 @@ dependencies:
 
   mysql_client: ^0.0.27    
   # postgres v3 
-  #postgres: ^3.1.2 
+  postgres: ^3.5.4
   #postgres: 
     #path: ../postgresql-v3
-  postgres:
-    git:
-      ref: master
-      url: https://github.com/insinfo/postgresql-dart.git
+  # postgres:
+  #   git:
+  #     ref: master
+  #     url: https://github.com/insinfo/postgresql-dart.git
     
-# dependency_overrides:
-#   pg_timezone:
-#     path: ../pg_timezone
-
 dev_dependencies:
-  test: ^1.17.12 
-
-  
+  test: ^1.17.12   

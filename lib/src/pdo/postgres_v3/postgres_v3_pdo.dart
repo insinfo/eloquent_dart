@@ -1,9 +1,7 @@
 import 'dart:convert';
-
 import 'package:eloquent/src/pdo/core/pdo_config.dart';
 import 'package:eloquent/src/pdo/core/pdo_interface.dart';
 import 'package:eloquent/src/pdo/core/pdo_result.dart';
-
 import 'package:enough_convert/windows.dart';
 import 'package:postgres/postgres.dart';
 import 'postgres_v3_pdo_transaction.dart';
@@ -61,17 +59,12 @@ class PostgresV3PDO extends PDOInterface {
         ? SslMode.require
         : SslMode.disable;
 
-    final timeZone = TimeZoneSettings(config.timezone ?? 'UTC');
-    timeZone.forceDecodeTimestamptzAsUTC = config.forceDecodeTimestamptzAsUTC;
-    timeZone.forceDecodeTimestampAsUTC = config.forceDecodeTimestampAsUTC;
-    timeZone.forceDecodeDateAsUTC = config.forceDecodeDateAsUTC;
-
     if (config.pool == true) {
       connection = Pool.withEndpoints(
         [endpoint],
         settings: PoolSettings(
           applicationName: config.applicationName,
-          timeZone: timeZone,
+          timeZone: config.timezone,
           onOpen: (conn) async {
             await _onOpen(conn, config);
           },
@@ -84,7 +77,7 @@ class PostgresV3PDO extends PDOInterface {
       connection = await Connection.open(endpoint,
           settings: ConnectionSettings(
             applicationName: config.applicationName,
-            timeZone: timeZone,
+            timeZone: config.timezone,
             onOpen: (conn) async {
               await _onOpen(conn, config);
             },

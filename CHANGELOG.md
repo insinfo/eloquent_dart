@@ -94,7 +94,10 @@ final manager = Manager();
 
 ## 3.3.0
 
-- add option to decode timestamp without timezone and date as local DateTime and decode timestamp with timezone respecting the timezone defined in the connection
+- add option to decode timestamp without timezone and date as local DateTime and decode timestamp with timezone respecting the timezone defined in the connection for driver_implementation postgres
+
+- update postgres_v3 to  ^3.5.4 With that dependency, upgraded minimum SDK to 3.4
+
 ```dart
  final manager = Manager();
   manager.addConnection({

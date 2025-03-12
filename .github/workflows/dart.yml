@@ -91,6 +91,7 @@ jobs:
           sudo -u postgres psql --command="SELECT * FROM pg_hba_file_rules();"
           sudo -u postgres psql --command="SHOW password_encryption;"   
           sudo -u postgres psql --command="CREATE ROLE sisadmin WITH LOGIN SUPERUSER PASSWORD 's1sadm1n'" --command="\du"
+          sudo -u postgres psql --command="CREATE ROLE dart WITH LOGIN SUPERUSER PASSWORD 'dart'" --command="\du"
           sudo -u postgres psql --command="SET password_encryption = 'md5';" --command="CREATE ROLE usermd5 WITH LOGIN SUPERUSER PASSWORD 's1sadm1n'" --command="\du"
           sudo -u postgres psql --command="SET password_encryption = 'scram-sha-256';" --command="CREATE ROLE userscram WITH LOGIN SUPERUSER PASSWORD 's1sadm1n'" --command="\du"
           sudo -u postgres psql --command="SELECT rolname,rolpassword FROM pg_authid" 

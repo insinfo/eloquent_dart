@@ -228,7 +228,7 @@ class SchemaGrammar extends BaseGrammar {
   }
 
   ///
-  /// {@inheritdoc}
+  /// 
   ///
   String wrap(dynamic value, [bool prefixAlias = false]) {
     if (value is Fluent) {

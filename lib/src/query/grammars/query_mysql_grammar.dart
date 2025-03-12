@@ -3,7 +3,34 @@ import 'package:eloquent/eloquent.dart';
 import '../json_expression.dart';
 
 class QueryMySqlGrammar extends QueryGrammar {
-  //List<String> operators = ['sounds like'];
+  /// All of the available clause operators.
+  List<String> operators = [
+    '=',
+    '<',
+    '>',
+    '<=',
+    '>=',
+    '<>',
+    '!=',
+    'like',
+    'not like',
+    'between',
+    'ilike',
+    '&',
+    '|',
+    '#',
+    '<<',
+    '>>',
+    '@>',
+    '<@',
+    '?',
+    '?|',
+    '?&',
+    '||',
+    '-',
+    '-',
+    '#-'
+  ];
 
   List<String> selectComponents = [
     'aggregate',
