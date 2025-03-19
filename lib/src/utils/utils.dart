@@ -12,6 +12,15 @@ class Utils {
   static const int intMinValueJS = -9007199254740992;
   static const int intMaxValueJS = 9007199254740992;
 
+  /// Converte uma string CamelCase para snake_case.
+  static String toSnakeCase(String input) {
+    // Insere um "_" antes de cada letra maiúscula que vem após um caractere minúsculo ou dígito
+    final RegExp exp = RegExp(r'(?<=[a-z0-9])([A-Z])');
+    return input
+        .replaceAllMapped(exp, (Match m) => '_${m.group(0)}')
+        .toLowerCase();
+  }
+
   ///  Aplica o retorno de chamada aos elementos dos arrays fornecidos
   static List array_map(Function callback, List values) {
     var result = [];
@@ -126,45 +135,91 @@ class Utils {
   /// @return array return [value, key];
   ///
   static List explodePluckParameters(dynamic valueP, dynamic keyP) {
-    var value = is_string(valueP) ? explode('.', valueP) : valueP;
+    // Se valueP for string, primeiro trim
+    if (valueP is String) {
+      valueP = valueP.trim();
+    }
+    // Se keyP for string, trim
+    if (keyP is String) {
+      keyP = keyP.trim();
+    }
 
+    var value = is_string(valueP) ? explode('.', valueP) : valueP;
     var key = is_null(keyP) || is_array(keyP) ? keyP : explode('.', keyP);
+
+    // Agora, se 'value' ou 'key' forem List<String>, trim cada segmento
+    if (value is List) {
+      value = value.map((segment) {
+        if (segment is String) return segment.trim();
+        return segment;
+      }).toList();
+    }
+
+    if (key is List) {
+      key = key.map((segment) {
+        if (segment is String) return segment.trim();
+        return segment;
+      }).toList();
+    }
 
     return [value, key];
   }
 
-  ///
+  /// igual a Arr.pluck
   /// Pluck an array of values from an array.
   ///
-  /// @param  array  $array
-  /// @param  string|array  $value
-  /// @param  string|array|null  $key
-  /// @return array
+  /// Se [keyP] == null, retorna uma List.
+  /// Se [keyP] != null, retorna um Map, onde cada chave é itemKey e valor é itemValue.
   ///
-  static array_pluck(arrayP, valueP, [keyP = null]) {
-    var results = [];
+  static array_pluck(dynamic arrayP, dynamic valueP, [dynamic keyP]) {
+  if (arrayP == null) {
+    return keyP != null ? <dynamic, dynamic>{} : <dynamic>[];
+  }
 
-    var re = explodePluckParameters(valueP, keyP);
-    var value = re[0];
-    var key = re[1];
+  var results = keyP != null ? <dynamic, dynamic>{} : <dynamic>[];
 
+  // Explode "valueP" e "keyP"
+  var re = explodePluckParameters(valueP, keyP);
+  var valuePath = re[0];
+  var keyPath   = re[1];
+
+  if (arrayP is List) {
     for (var item in arrayP) {
-      var itemValue = data_get(item, value);
+      var itemValue = data_get(item, valuePath);
 
-      // If the key is "null", we will just append the value to the array and keep
-      // looping. Otherwise we will key the array using the value of the key we
-      // received from the developer. Then we'll return the final array form.
-      if (is_null(key)) {
-        results.add(itemValue);
+      if (keyPath == null) {
+        (results as List).add(itemValue);
       } else {
-        var itemKey = data_get(item, key);
+        var itemKey = data_get(item, keyPath);
 
-        results[itemKey] = itemValue;
+        // Se a chave não foi encontrada, fallback = item inteiro
+        if (itemKey == null) {
+          itemKey = item;
+        }
+
+        (results as Map)[itemKey] = itemValue;
       }
     }
+  } else if (arrayP is Map) {
+    for (var entry in arrayP.entries) {
+      var itemValue = data_get(entry.value, valuePath);
 
-    return results;
+      if (keyPath == null) {
+        (results as List).add(itemValue);
+      } else {
+        var itemKey = data_get(entry.value, keyPath);
+
+        if (itemKey == null) {
+          itemKey = entry.value;
+        }
+
+        (results as Map)[itemKey] = itemValue;
+      }
+    }
   }
+
+  return results;
+}
 
   /// change all keys to case defined
   static Map<String, dynamic> map_change_key_case_sd(Map<String, dynamic> map,
@@ -195,28 +250,17 @@ class Utils {
   /// @return mixed
   /// equivalente a Arr::get($connections, $name)
   ///
-  static dynamic array_get(array, String key, [dynamic defaultP]) {
+  static dynamic array_get(dynamic array, String key, [dynamic defaultP]) {
     if (!array_accessible(array)) {
       return value(defaultP);
     }
 
-    if (is_null(key)) {
-      return array;
-    }
-
+    // Se a key existe em nível top-level, retorna. Caso contrário, default.
     if (array_exists(array, key)) {
       return array[key];
     }
 
-    for (var segment in explode('.', key)) {
-      if (array_accessible(array) && array_exists(array, segment)) {
-        array = array[segment];
-      } else {
-        return value(defaultP);
-      }
-    }
-
-    return array;
+    return value(defaultP);
   }
 
   ///
@@ -227,35 +271,34 @@ class Utils {
   /// @param  mixed   $default
   /// @return mixed
   ///
-  static dynamic data_get(dynamic target, dynamic key, [dynamic defaultP]) {
-    if (is_null(key)) {
+  static dynamic data_get(dynamic target, dynamic originalKey,
+      [dynamic defaultP]) {
+    if (is_null(originalKey)) {
       return target;
     }
 
-    key = is_array(key) ? key : explode('.', key);
-    var segment;
-    while ((segment = array_shift(key)) != null) {
-      if (segment == '*') {
-        // if ($target instanceof Collection) {
-        //     $target = $target->all();
-        //}
+    // Se 'originalKey' for string, transformamos em lista (explode),
+    // mas se for List, criamos uma cópia para não modificá-la:
+    List<dynamic> segments;
+    if (is_array(originalKey)) {
+      segments = List.of(originalKey); // cria cópia
+    } else {
+      segments = explode('.', originalKey.toString());
+    }
 
+    while (segments.isNotEmpty) {
+      var segment = segments.removeAt(0); // array_shift
+      if (segment == '*') {
         if (!is_array(target)) {
           return value(defaultP);
         }
-
-        var result = array_pluck(target, key);
-
-        return in_array('*', key) ? array_collapse(result) : result;
+        var result = array_pluck(target, segments);
+        return in_array('*', segments) ? array_collapse(result) : result;
       }
 
       if (array_accessible(target) && array_exists(target, segment)) {
         target = target[segment];
-      }
-      // else if (is_object($target) && isset($target->{$segment})) {
-      //     target = target->{$segment};
-      // }
-      else {
+      } else {
         return value(defaultP);
       }
     }
@@ -669,14 +712,31 @@ class Utils {
   ///  echo(substr("abcdef", -2,10));
   ///  ef
   static String substr(String str, int offset, [int? length]) {
-    if (length != null && length > str.length) {
-      length = str.length;
-    }
-    if (offset >= 0) {
-      return str.substring(offset, length);
+    // Se length != null, ajustamos para pegar `length` caracteres a partir de offset.
+    if (length != null) {
+      // Se offset >= 0, soma offset + length
+      if (offset >= 0) {
+        length = offset + length;
+        if (length > str.length) length = str.length;
+        return str.substring(offset, length);
+      } else {
+        // Offset negativo => começa de (str.length + offset)
+        int start =
+            str.length + offset; // por ex. offset=-2 => start = str.length-2
+        int end = start + length;
+        if (start < 0) start = 0;
+        if (end > str.length) end = str.length;
+        return str.substring(start, end);
+      }
     } else {
-      var reverStr = str.substring(str.length - offset.abs(), length);
-      return reverStr;
+      // Sem length => do offset até o fim
+      if (offset >= 0) {
+        return str.substring(offset);
+      } else {
+        int start = str.length + offset;
+        if (start < 0) start = 0;
+        return str.substring(start);
+      }
     }
   }
 
@@ -765,6 +825,4 @@ class Utils {
   static List array_fill(int start_index, int count, dynamic value) {
     return List.generate(count, (v) => value);
   }
-
-  
 }

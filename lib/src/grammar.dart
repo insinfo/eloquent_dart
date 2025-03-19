@@ -26,8 +26,8 @@ abstract class BaseGrammar {
   /// @return string
   ///
   String wrapTable(dynamic table) {
-    if (isExpression(table)) {
-      return getValue(table as QueryExpression);
+    if (table is QueryExpression) {
+      return getValue(table);
     }
 
     return wrap(tablePrefix + table, true);
@@ -40,33 +40,33 @@ abstract class BaseGrammar {
   /// @param  bool    $prefixAlias
   /// @return string
   ///
-  String wrap(dynamic value, [bool prefixAlias = false]) {
-    if (isExpression(value)) {
-      return getValue(value);
+  String wrap(dynamic valueP, [bool prefixAlias = false]) {
+    if (valueP is QueryExpression) {
+      return getValue(valueP);
     }
+
+    // pra ter o mesmo comportamento do PHP para converter para string
+    final value = valueP; // valueP is String ? : valueP.toString();
 
     // If the value being wrapped has a column alias we will need to separate out
     // the pieces so we can wrap each of the segments of the expression on it
     // own, and then joins them both back together with the "as" connector.
     if (Utils.strpos(Utils.strtolower(value), ' as ') != false) {
       var segments = Utils.explode(' ', value);
-
       if (prefixAlias) {
         segments[2] = tablePrefix + segments[2];
       }
-
       return wrap(segments[0]) + ' as ' + wrapValue(segments[2]);
     }
 
     var wrapped = [];
-
     var segments = Utils.explode('.', value);
 
     // If the value is not an aliased table expression, we'll just wrap it like
     // normal, so if there is more than one segment, we will wrap the first
     // segments as if it was a table and the rest as just regular values.
     for (var key = 0; key < segments.length; key++) {
-      var segment = segments[key];
+      final segment = segments[key];
       if (key == 0 && Utils.count(segments) > 1) {
         wrapped.add(wrapTable(segment));
       } else {

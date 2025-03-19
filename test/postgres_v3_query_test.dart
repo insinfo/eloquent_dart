@@ -886,7 +886,293 @@ void main() {
       var countAfterDelete = await db.table('temp_location').count();
       expect(countAfterDelete, 0);
     });
+    test('pluck and implode using TEMP TABLE', () async {
+      // 1) Cria a tabela temporária (ou com prefixo “TEMPORARY”) se o seu banco suportar
+      await db.statement('CREATE TEMP TABLE temp_people ('
+          'id serial primary key, '
+          'name text, '
+          'profession text'
+          ')');
+
+      // 2) Insere registros
+      await db.table('temp_people').insert(
+        {'id': 1, 'name': 'Isaque', 'profession': 'Personal Trainer'},
+      );
+      await db.table('temp_people').insert(
+        {'id': 2, 'name': 'John', 'profession': 'Doctor'},
+      );
+      await db.table('temp_people').insert(
+        {'id': 3, 'name': 'Jane', 'profession': 'Teacher'},
+      );
+
+      // 3) Executa pluck e implode na tabela temp_people
+      var namesWithIds = await db.table('temp_people').pluck('name', 'id');
+
+      expect(namesWithIds, equals({1: 'Isaque', 2: 'John', 3: 'Jane'}));
+
+      var professions = await db.table('temp_people').pluck('profession');
+      expect(professions, equals(['Personal Trainer', 'Doctor', 'Teacher']));
+
+      var namesImploded = await db.table('temp_people').implode('name', ', ');
+      expect(namesImploded, equals('Isaque, John, Jane'));
+
+      var qualifiedNames = await db
+          .table('temp_people')
+          .select(['temp_people.name as full_name']).pluck('full_name');
+      expect(qualifiedNames, equals(['Isaque', 'John', 'Jane']));
+
+      var qualifiedNamesImplode = await db
+          .table('temp_people')
+          .select(['temp_people.name as full_name']).implode('full_name', ', ');
+      expect(qualifiedNamesImplode, equals('Isaque, John, Jane'));
+
+      // 4) (Opcional) Dropar a tabela temporária (depende do banco)
+      await db.statement('DROP TABLE temp_people');
+    });
 
     //end
+  });
+
+  group('Missing tests', () {
+    group('Pagination', () {
+      test('paginate returns correct metadata and items', () async {
+        // Cria uma tabela temporária para teste de paginação.
+        await db.execute(
+            'CREATE TEMP TABLE temp_pagination (id int, value varchar(50));');
+        // Insere 12 registros
+        for (var i = 1; i <= 12; i++) {
+          await db
+              .table('temp_pagination')
+              .insert({'id': i, 'value': 'Row $i'});
+        }
+        var query = db.table('temp_pagination').orderBy('id', 'asc');
+        var paginator = await query.paginate(perPage: 5, page: 2);
+        // Verifica que o total é 12, página atual 2, perPage 5 e 5 itens na página
+        expect(paginator.total(), equals(12));
+        expect(paginator.currentPage(), equals(2));
+        expect(paginator.perPage(), equals(5));
+        expect(paginator.items().length, equals(5));
+        // O primeiro item da página 2 deve ter id 6
+        expect(paginator.items().first['id'], equals(6));
+      });
+
+      test('simplePaginate returns correct items and hasMorePages flag',
+          () async {
+        // Cria uma tabela temporária para teste de simplePaginate.
+        await db.execute(
+            'CREATE TEMP TABLE temp_simple_paginate (id int, value varchar(50));');
+        // Insere 8 registros
+        for (var i = 1; i <= 8; i++) {
+          await db
+              .table('temp_simple_paginate')
+              .insert({'id': i, 'value': 'Row $i'});
+        }
+        var query = db.table('temp_simple_paginate').orderBy('id', 'asc');
+        var paginator = await query.simplePaginate(perPage: 3, page: 2);
+        // Espera 3 itens na página e indicação de mais páginas
+        expect(paginator.items().length, equals(3));
+        expect(paginator.hasMorePages(), isTrue);
+        // Primeiro item da página 2 deve ter id 4
+        expect(paginator.items().first['id'], equals(4));
+      });
+    });
+
+    group('Chunk Operations', () {
+      test('chunk iterates over all rows', () async {
+        // Cria uma tabela temporária para chunk.
+        await db.execute(
+            'CREATE TEMP TABLE temp_chunk (id int, value varchar(50));');
+        // Insere 10 registros
+        for (var i = 1; i <= 10; i++) {
+          await db.table('temp_chunk').insert({'id': i, 'value': 'Row $i'});
+        }
+        List<int> collectedIds = [];
+        bool completed = await db
+            .table('temp_chunk')
+            .orderBy('id', 'asc')
+            .chunk(3, (chunk, page) async {
+          for (var row in chunk) {
+            collectedIds.add(row['id']);
+          }
+          return true;
+        });
+        expect(completed, isTrue);
+        expect(collectedIds, equals(List.generate(10, (i) => i + 1)));
+      });
+
+      test('chunk stops iteration when callback returns false', () async {
+        // Cria uma tabela temporária para teste de interrupção de chunk.
+        await db.execute(
+            'CREATE TEMP TABLE temp_chunk_interrupt (id int, value varchar(50));');
+        // Insere 5 registros
+        for (var i = 1; i <= 5; i++) {
+          await db
+              .table('temp_chunk_interrupt')
+              .insert({'id': i, 'value': 'Row $i'});
+        }
+        int chunksProcessed = 0;
+        bool completed = await db
+            .table('temp_chunk_interrupt')
+            .orderBy('id', 'asc')
+            .chunk(2, (chunk, page) async {
+          chunksProcessed++;
+          return false; // Interrompe após o primeiro chunk.
+        });
+        expect(completed, isFalse);
+        expect(chunksProcessed, equals(1));
+      });
+
+      test('chunkById iterates correctly by numeric IDs', () async {
+        // Cria uma tabela temporária para chunkById.
+        await db.execute(
+            'CREATE TEMP TABLE temp_chunk_by_id (id int, value varchar(50));');
+        // Insere 7 registros
+        for (var i = 1; i <= 7; i++) {
+          await db
+              .table('temp_chunk_by_id')
+              .insert({'id': i, 'value': 'Row $i'});
+        }
+        List<int> collectedIds = [];
+        bool completed = await db
+            .table('temp_chunk_by_id')
+            .orderBy('id', 'asc')
+            .chunkById(3, (chunk) async {
+          for (var row in chunk) {
+            collectedIds.add(row['id']);
+          }
+          return true;
+        });
+        expect(completed, isTrue);
+        expect(collectedIds, equals(List.generate(7, (i) => i + 1)));
+      });
+
+      test('each iterates over each row individually', () async {
+        // Cria uma tabela temporária para o teste do each.
+        await db.execute(
+            'CREATE TEMP TABLE temp_each (id int, value varchar(50));');
+        // Insere 4 registros
+        for (var i = 1; i <= 4; i++) {
+          await db.table('temp_each').insert({'id': i, 'value': 'Row $i'});
+        }
+        List<int> collectedIds = [];
+        bool completed = await db.table('temp_each').orderBy('id', 'asc').each(
+            (row, index) async {
+          collectedIds.add(row['id']);
+          return true;
+        }, 2);
+        expect(completed, isTrue);
+        expect(collectedIds, equals([1, 2, 3, 4]));
+      });
+    });
+
+    group('updateOrInsert', () {
+      test('update existing record with updateOrInsert', () async {
+        // Cria uma tabela temporária para updateOrInsert.
+        await db.execute(
+            'CREATE TEMP TABLE temp_update_or_insert (id int primary key, name varchar(50));');
+        // Insere um registro com id 1.
+        await db
+            .table('temp_update_or_insert')
+            .insert({'id': 1, 'name': 'Alice'});
+        // Chama updateOrInsert para atualizar o registro existente.
+        bool result = await db
+            .table('temp_update_or_insert')
+            .updateOrInsert({'id': 1}, {'name': 'Updated Alice'});
+        expect(result, isTrue);
+        var record = await db
+            .table('temp_update_or_insert')
+            .select(['name'])
+            .where('id', '=', 1)
+            .first();
+        expect(record, equals({'name': 'Updated Alice'}));
+      });
+
+      test('insert new record with updateOrInsert', () async {
+        // Cria uma tabela temporária para updateOrInsert de novo registro.
+        await db.execute(
+            'CREATE TEMP TABLE temp_update_or_insert_new (id int primary key, name varchar(50));');
+        // Chama updateOrInsert para inserir um novo registro (id 2)
+        bool result = await db
+            .table('temp_update_or_insert_new')
+            .updateOrInsert({'id': 2}, {'name': 'Bob'});
+        expect(result, isTrue);
+        var record = await db
+            .table('temp_update_or_insert_new')
+            .select(['name'])
+            .where('id', '=', 2)
+            .first();
+        expect(record, equals({'name': 'Bob'}));
+      });
+    });
+
+    group('Dynamic Where and callMethod', () {
+      test('dynamicWhere builds correct where clause', () async {
+        // Insere um registro na tabela people para teste.
+        await db
+            .table('people')
+            .insert({'id': 100, 'name': 'Charlie', 'profession': 'Engineer'});
+        var query = db
+            .table('people')
+            .dynamicWhere("whereNameAndProfession", ['Charlie', 'Engineer']);
+        var sql = query.toSql().toLowerCase();
+        expect(sql, contains("where"));
+        expect(sql, contains("name"));
+        expect(sql, contains("profession"));
+        // Executa a query e verifica se o registro é retornado.
+        var res = await query.get();
+        expect(res, isNotEmpty);
+      });
+
+      test('callMethod dispatches select, from and where correctly', () {
+        var query = db.table('people');
+        query = query.callMethod("select", [
+          ['*']
+        ]);
+        query = query.callMethod("from", ['people']);
+        query = query.callMethod("where", ['name', '=', 'Charlie']);
+        var sql = query.toSql().toLowerCase();
+        expect(sql, contains("select"));
+        expect(sql, contains("from"));
+        expect(sql, contains("where"));
+      });
+    });
+
+    group('when and distinct', () {
+      test('when applies clause conditionally (true case)', () async {
+        // Insere um registro para o teste.
+        await db
+            .table('people')
+            .insert({'id': 101, 'name': 'Diana', 'profession': 'Analyst'});
+        var queryTrue = db.table('people').when(true, (q) {
+          q.where('name', '=', 'Diana');
+        });
+        var resTrue = await queryTrue.get();
+        expect(resTrue.length, greaterThan(0));
+      });
+
+      test('when does not apply clause when condition is false', () async {
+        var queryFalse = db.table('people').when(false, (q) {
+          q.where('name', '=', 'NonExisting');
+        });
+        var resFalse = await queryFalse.get();
+        // Deve retornar todos os registros, pois a condição não foi aplicada.
+        expect(resFalse.length, greaterThan(0));
+      });
+
+      test('distinct adds DISTINCT to the SQL', () {
+        var query = db.table('people').distinct().select(['name']);
+        var sql = query.toSql().toLowerCase();
+        expect(sql, contains("distinct"));
+      });
+    });
+
+    group('Bindings', () {
+      test('getBindings returns correct bindings after where clause', () {
+        var query = db.table('people').where('name', '=', 'Diana');
+        var bindings = query.getBindings();
+        expect(bindings, isNotEmpty);
+        expect(bindings, contains('Diana'));
+      });
+    });
   });
 }

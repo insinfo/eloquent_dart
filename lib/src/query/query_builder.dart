@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:eloquent/src/connection.dart';
 import 'package:eloquent/src/connection_interface.dart';
 import 'package:eloquent/src/contracts/pagination/default_length_aware_paginator.dart';
+import 'package:eloquent/src/contracts/pagination/default_paginator.dart';
 import 'package:eloquent/src/contracts/pagination/length_aware_paginator.dart';
 import 'package:eloquent/src/contracts/pagination/pagination_utils.dart';
 
@@ -8,6 +11,7 @@ import 'package:eloquent/src/query/expression.dart';
 import 'package:eloquent/src/query/grammars/query_grammar.dart';
 import 'package:eloquent/src/query/join_clause.dart';
 import 'package:eloquent/src/query/processors/processor.dart';
+import 'package:eloquent/src/support/arr.dart';
 import 'package:eloquent/src/utils/utils.dart';
 
 import '../exceptions/invalid_argument_exception.dart';
@@ -54,7 +58,6 @@ class QueryBuilder {
         return this.lockProp;
       case 'backups':
         return this.backups;
-
       case 'bindingBackups':
         return this.bindingBackups;
       case 'operators':
@@ -284,21 +287,22 @@ class QueryBuilder {
   /// @param  \Illuminate\Database\Query\Grammars\Grammar  $grammar
   /// @param  \Illuminate\Database\Query\Processors\Processor  $processor
   ///
-  QueryBuilder(this.connection, this.grammar, this.processor) {
-    // this._grammar = grammarP;
-    // this._processor = processorP;
-    // this._connection = connectionP;
-  }
+  QueryBuilder(this.connection, this.grammar, this.processor);
 
   ///
   /// Set the columns to be selected.
   ///
-  /// @param  array|mixed  $columns
+  /// [columnsP]  List | dynamic
   /// @return $this
   ///
-  QueryBuilder select([List<dynamic> columnsP = const ['*']]) {
-    //this.columns = is_array($columns) ? $columns : func_get_args();
-    this.columnsProp = columnsP;
+  QueryBuilder select([dynamic columnsP = const ['*']]) {
+    if (columnsP is List) {
+      this.columnsProp = columnsP;
+    } else if (columnsP != null) {
+      this.columnsProp = [columnsP];
+    } else {
+      this.columnsProp = const ['*'];
+    }
     return this;
   }
 
@@ -369,9 +373,7 @@ class QueryBuilder {
   ///
   QueryBuilder fromRaw(String expression, [List? $bindings = const []]) {
     this.fromProp = QueryExpression(expression);
-
     this.addBinding($bindings, 'from');
-
     return this;
   }
 
@@ -389,7 +391,6 @@ class QueryBuilder {
       var callback = query;
       callback(query = this.forSubQuery());
     }
-
     return this.parseSub(query);
   }
 
@@ -438,10 +439,10 @@ class QueryBuilder {
   ///
   /// Set the table which the query is targeting.
   ///
-  /// @param  String  $table
-  /// @return $this
+  /// [tableP] QueryExpression | String
+  /// `Return QueryBuilder`
   ///
-  QueryBuilder from(String tableP) {
+  QueryBuilder from(dynamic tableP) {
     this.fromProp = tableP;
     return this;
   }
@@ -466,7 +467,7 @@ class QueryBuilder {
     // is trying to build a join with a complex "on" clause containing more than
     // one condition, so we'll add the join and call a Closure with the query.
     if (one is Function) {
-      var join = JoinClause(type, table, this);
+      final join = JoinClause(type, table, this);
       one(join);
       this.joinsProp.add(join);
       this.addBinding(join.bindingsLocal, 'join');
@@ -475,7 +476,7 @@ class QueryBuilder {
 // "on" clause with a single condition. So we will just build the join with
 // this simple join clauses attached to it. There is not a join callback.
     else {
-      var join = new JoinClause(type, table, this);
+      final join = JoinClause(type, table, this);
       this.joinsProp.add(join.on(one, operator, two, 'and', where));
       this.addBinding(join.bindingsLocal, 'join');
     }
@@ -613,6 +614,16 @@ class QueryBuilder {
     return this;
   }
 
+  /// Apply the [callback] only if [condition] is true.
+  /// Retorna o próprio QueryBuilder para encadeamento (fluent interface).
+  QueryBuilder when(dynamic condition, Function(QueryBuilder) callback) {
+    // Se condition for "truthy" (diferente de null/false/0/''), chama o callback
+    if (condition != null && condition != false) {
+      callback(this);
+    }
+    return this;
+  }
+
   ///
   /// Add a basic where clause to the query.
   ///
@@ -688,14 +699,14 @@ class QueryBuilder {
     // If the value is "null", we will just assume the developer wants to add a
     // where null clause to the query. So, we will allow a short-cut here to
     // that method for convenience so the developer doesn't have to check.
-    if (Utils.is_null(value)) {
+    if (value == null) {
       return this.whereNull(column, boolean, operator != '=');
     }
 
     // Now that we are working with just a simple query we can put the elements
     // in our array and add the query binding to our array of bindings that
     // will be bound to each SQL statements when it is finally executed.
-    var type = 'Basic';
+    final type = 'Basic';
 
     this.wheresProp.add({
       'type': type,
@@ -765,6 +776,14 @@ class QueryBuilder {
     });
 
     return this;
+  }
+
+  /// Add an "or where" clause comparing two columns to the query.
+  ///
+  /// orWhereColumn('first_name', 'last_name') => OR first_name = last_name
+  QueryBuilder orWhereColumn(dynamic first,
+      [String? operator, dynamic second]) {
+    return this.whereColumn(first, operator, second, 'or');
   }
 
   QueryBuilder addArrayOfWheres(dynamic column, String boolean,
@@ -864,7 +883,7 @@ class QueryBuilder {
   ///
   QueryBuilder whereBetween(String column,
       [List? values, String boolean = 'and', bool not = false]) {
-    var type = 'between';
+    final type = 'between';
 
     this
         .wheresProp
@@ -1227,6 +1246,28 @@ class QueryBuilder {
     return this.addDateBasedWhere('Date', column, operator, value, boolean);
   }
 
+  /// Add an "or where date" statement to the query.
+  /// Básico: `orWhereDate('created_at', '=', someDate)`
+  QueryBuilder orWhereDate(String column, String operator, DateTime? value) {
+    return this.whereDate(column, operator, value, 'or');
+  }
+
+  /// Add a "where time" statement to the query.
+  /// [column] Ex: 'created_at'
+  /// [operator] Ex: '=', '<', '>'
+  /// [value] Ex: '12:00:00' ou um DateTime cujo horário interessa
+  /// [boolean] Se é 'and' ou 'or'
+  QueryBuilder whereTime(String column, String operator, dynamic value,
+      [String boolean = 'and']) {
+    // Supondo que addDateBasedWhere('Time', ...) trunque/compare somente a parte de hora
+    return this.addDateBasedWhere('Time', column, operator, value, boolean);
+  }
+
+  /// Add an "or where time" statement to the query.
+  QueryBuilder orWhereTime(String column, String operator, dynamic value) {
+    return this.whereTime(column, operator, value, 'or');
+  }
+
   ///
   /// Add a "where day" statement to the query.
   ///
@@ -1300,39 +1341,43 @@ class QueryBuilder {
   /// @param  String  $parameters
   /// @return $this
   ///
-  // QueryBuilder dynamicWhere(String method, String parameters)
-  // {
-  //     var finder = Utils.substr(method, 5);
+  ///
+  /// Exemplo: `whereFirstNameAndLastName('John', 'Doe')` será traduzido para:
+  /// ```dart
+  /// where('first_name', '=', 'John', 'and')
+  ///   .where('last_name', '=', 'Doe', 'and')
+  /// ```
+  ///
+  /// O método espera que o nome comece com "where" e o restante seja composto
+  /// por segmentos separados por "And" ou "Or".
+  QueryBuilder dynamicWhere(String method, List<dynamic> parameters) {
+    // Remove o prefixo "where"
+    final finder = method.substring(5);
 
-  //     var segments = preg_split('/(And|Or)(?=[A-Z])/', finder, -1, PREG_SPLIT_DELIM_CAPTURE);
+    // Processa a string, separando os segmentos e conectores.
+    // Usa um regex para capturar "And" ou "Or" quando seguido de letra maiúscula.
+    final RegExp regExp = RegExp(r'(And|Or)(?=[A-Z])');
+    final List<String> tokens = [];
+    int start = 0;
+    for (final match in regExp.allMatches(finder)) {
+      tokens.add(finder.substring(start, match.start));
+      tokens.add(match.group(0)!);
+      start = match.end;
+    }
+    tokens.add(finder.substring(start));
 
-  //     // The connector variable will determine which connector will be used for the
-  //     // query condition. We will change it as we come across new boolean values
-  //     // in the dynamic method strings, which could contain a number of these.
-  //     $connector = 'and';
-
-  //     $index = 0;
-
-  //     foreach ($segments as $segment) {
-  //         // If the segment is not a boolean connector, we can assume it is a column's name
-  //         // and we will add it to the query as a new constraint as a where clause, then
-  //         // we can keep iterating through the dynamic method string's segments again.
-  //         if ($segment != 'And' && $segment != 'Or') {
-  //             this.addDynamic($segment, $connector, $parameters, $index);
-
-  //             $index++;
-  //         }
-
-  //         // Otherwise, we will store the connector so we know how the next where clause we
-  //         // find in the query should be connected to the previous ones, meaning we will
-  //         // have the proper boolean connector to connect the next where clause found.
-  //         else {
-  //             $connector = $segment;
-  //         }
-  //     }
-
-  //     return this;
-  // }
+    String connector = 'and';
+    int index = 0;
+    for (final token in tokens) {
+      if (token != 'And' && token != 'Or') {
+        addDynamic(token, connector, parameters, index);
+        index++;
+      } else {
+        connector = token.toLowerCase();
+      }
+    }
+    return this;
+  }
 
   ///
   /// Add a single dynamic where clause statement to the query.
@@ -1343,15 +1388,14 @@ class QueryBuilder {
   /// @param  int     $index
   /// @return void
   ///
-  // QueryBuilder addDynamic(segment, connector, parameters, index)
-  // {
-  //     // Once we have parsed out the columns and formatted the boolean operators we
-  //     // are ready to add it to this query as a where clause just like any other
-  //     // clause on the query. Then we'll increment the parameter index values.
-  //     var boolean = Utils.strtolower(connector);
-
-  //     this.where(Str::snake($segment), '=', $parameters[$index], $bool);
-  // }
+  void addDynamic(
+      String segment, String connector, List<dynamic> parameters, int index) {
+    // Converte o segmento de CamelCase para snake_case.
+    final column = Utils.toSnakeCase(segment);
+    // Adiciona a cláusula where usando o operador "=".
+    // Aqui assume-se que o método where já está implementado na classe.
+    where(column, '=', parameters[index], connector);
+  }
 
   ///
   /// Add a "group by" clause to the query.
@@ -1485,6 +1529,15 @@ class QueryBuilder {
     return this.orderBy(column, 'asc');
   }
 
+  /// Put the query's results in random order.
+  ///
+  /// [seed] pode ser usado em alguns SGDBs para gerar "random com semente".
+  QueryBuilder inRandomOrder([String seed = '']) {
+    // grammar.compileRandom(seed) retornaria algo como "RAND()" ou "RANDOM()"
+    final randomExpression = this.grammar.compileRandom(seed);
+    return this.orderByRaw(randomExpression);
+  }
+
   ///
   /// Add a raw "order by" clause to the query.
   ///
@@ -1581,6 +1634,29 @@ class QueryBuilder {
     return this.skip((page - 1) * perPage).take(perPage);
   }
 
+  /// Constrain the query to the next "page" of results after a given ID.
+  ///
+  /// [perPage]: quantos registros buscar
+  /// [lastId]: valor do ID a partir do qual buscar
+  /// [column]: nome da coluna ID
+  QueryBuilder forPageAfterId([
+    int perPage = 15,
+    dynamic lastId = 0,
+    String column = 'id',
+  ]) {
+    // 1. Remove qualquer ordering que já exista pela mesma coluna
+    this.ordersProp = this.ordersProp.where((order) {
+      return order['column'] != column;
+    }).toList();
+    // 2. Adiciona where(column, '>', lastId)
+    this.where(column, '>', lastId);
+    // 3. Ordena pela coluna asc
+    this.orderBy(column, 'asc');
+    // 4. Limita a [perPage]
+    this.take(perPage);
+    return this;
+  }
+
   ///
   /// Add a union statement to the query.
   ///
@@ -1617,7 +1693,7 @@ class QueryBuilder {
   /// @param  bool  $value
   /// @return $this
   ///
-  QueryBuilder lock([value = true]) {
+  QueryBuilder lock([bool value = true]) {
     this.lockProp = value;
 
     if (this.lockProp) {
@@ -1769,17 +1845,42 @@ class QueryBuilder {
   /// @param  String  $pageName
   /// @return \Illuminate\Contracts\Pagination\Paginator
   ///
-  // dynamic simplePaginate($perPage = 15, $columns = ['///'], $pageName = 'page')
-  // {
-  //     $page = Paginator::resolveCurrentPage($pageName);
+  /// Get a paginator only supporting simple next and previous links.
+  /// Mais eficiente em grandes conjuntos pois não faz count(*).
+  Future<DefaultPaginator> simplePaginate({
+    int perPage = 15,
+    List<String> columns = const ['*'],
+    String pageName = 'page',
+    int? page,
+  }) async {
+    // 1. Determina a página atual
+    page ??= PaginationUtils.resolveCurrentPage(pageName);
 
-  //     this.skip(($page - 1) /// $perPage)->take($perPage + 1);
+    // 2. Carrega (perPage + 1) resultados p/ detectar se há próxima página
+    this.skip((page - 1) * perPage).take(perPage + 1);
+    final results = await this.get(columns);
 
-  //     return new Paginator(this.get($columns), $perPage, $page, [
-  //         'path' => Paginator::resolveCurrentPath(),
-  //         'pageName' => $pageName,
-  //     ]);
-  // }
+    // 3. Se vieram mais registros que `perPage`, tem mais páginas
+    bool hasMorePages = results.length > perPage;
+
+    // Se veio 1 a mais, remove o extra (pois só queremos exibir 'perPage' itens)
+    List<Map<String, dynamic>> pageItems = results;
+    if (hasMorePages) {
+      pageItems = results.sublist(0, perPage);
+    }
+
+    // 4. Monta o paginador
+    return DefaultPaginator(
+      pageItems,
+      perPage,
+      page,
+      hasMorePages,
+      {
+        'path': PaginationUtils.resolveCurrentPath(),
+        'pageName': pageName,
+      },
+    );
+  }
 
   ///
   /// Get the count of the total records for the paginator.
@@ -1885,32 +1986,120 @@ class QueryBuilder {
     bindingBackups.clear();
   }
 
+  /// Chunk the results of the query into blocks of [count] items each,
+  /// calling [callback] for each block.
   ///
-  /// Chunk the results of the query.
+  /// O callback recebe (lista de resultados, número da página).
+  /// Retorna false se for interrompido antes, ou true se iterou tudo.
+  Future<bool> chunk(
+    int count,
+    FutureOr<bool> Function(List<Map<String, dynamic>> chunk, int page)
+        callback,
+  ) async {
+    int page = 1;
+
+    while (true) {
+      // Carrega o próximo bloco
+      final results = await this.forPage(page, count).get();
+      final countResults = results.length;
+
+      if (countResults == 0) {
+        // Não há mais registros
+        break;
+      }
+
+      // Executa o callback; se ele retornar false, paramos o loop
+      final cbResult = await callback(results, page);
+      if (cbResult == false) {
+        return false;
+      }
+
+      page++;
+
+      // Se veio menos que "count", não há mais nada pra buscar
+      if (countResults < count) {
+        break;
+      }
+    }
+
+    return true;
+  }
+
+  /// Chunk the results of a query by comparing numeric IDs.
   ///
-  /// @param  int  $count
-  /// @param  callable  $callback
-  /// @return bool
+  /// [count]: quantos registros por “bloco”
+  /// [callback]: recebe a lista do bloco e deve retornar bool
+  /// [column]: nome da coluna de ID, por padrão 'id'
+  /// [alias]: se o campo tiver alias diferente, ex: 'users.id as user_id'.
   ///
-  // dynamic chunk(int count, Function callback)
-  // {
-  //     $results = this.forPage($page = 1, $count)->get();
+  /// Exemplo de uso:
+  ///   await query.chunkById(100, (chunk) async { ... }, 'id');
+  Future<bool> chunkById(
+    int count,
+    FutureOr<bool> Function(List<Map<String, dynamic>> chunk) callback, {
+    String column = 'id',
+    String? alias,
+  }) async {
+    alias ??= column;
+    dynamic lastId = 0; // valor inicial
 
-  //     while (count($results) > 0) {
-  //         // On each chunk result set, we will pass them to the callback and then let the
-  //         // developer take care of everything within the callback, which allows us to
-  //         // keep the memory low for spinning through large result sets for working.
-  //         if (call_user_func($callback, $results) === false) {
-  //             return false;
-  //         }
+    while (true) {
+      // Carrega os próximos [count] registros, onde column > lastId
+      final results = await this.forPageAfterId(count, lastId, column).get();
+      final countResults = results.length;
 
-  //         $page++;
+      if (countResults == 0) {
+        break;
+      }
 
-  //         $results = this.forPage($page, $count)->get();
-  //     }
+      // Chama o callback para este bloco
+      final cbResult = await callback(results);
+      if (cbResult == false) {
+        return false;
+      }
 
-  //     return true;
-  // }
+      // Pega o valor do ID do último registro retornado
+      final lastRow = results.last;
+      final dynamic aliasValue = lastRow[alias];
+      if (aliasValue == null) {
+        // se não achamos o valor do ID no registro, paramos
+        break;
+      }
+      lastId = aliasValue;
+
+      // Se vieram menos registros que “count”, não há mais nada
+      if (countResults < count) {
+        break;
+      }
+    }
+
+    return true;
+  }
+
+  /// Execute a callback over each item while chunking.
+  ///
+  /// [callback] é chamado para cada item individual. Se retornar false, interrompe.
+  /// [count] é o tamanho do bloco para chunking.
+  /// Retorna true se concluiu tudo, ou false se interrompido antes.
+  Future<bool> each(
+    FutureOr<bool> Function(Map<String, dynamic> row, int index) callback, [
+    int count = 1000,
+  ]) async {
+    // (Opcional) no Laravel, exige que haja orderBy definido antes de each()
+    int globalIndex = 0; // Contador geral, across chunks
+    return await this.chunk(count, (chunkRows, page) async {
+      for (int i = 0; i < chunkRows.length; i++) {
+        final row = chunkRows[i];
+        // callback recebe (row, índice global ou local)
+        final cbResult = await callback(row, globalIndex);
+        if (cbResult == false) {
+          return false; // Interrompe chunk e devolve false
+        }
+        globalIndex++;
+      }
+      return true; // continuar para o próximo chunk
+    });
+  }
 
   ///
   /// Get an array with the values of a given column.
@@ -1919,14 +2108,18 @@ class QueryBuilder {
   /// @param  String|null  $key
   /// @return array
   ///
-  dynamic pluck(String column, [String? key]) {
-    var results = this.get(Utils.is_null(key) ? [column] : [column, key!]);
+  Future<dynamic> pluck(String column, [String? key]) async {
+    var results =
+        await this.get(Utils.is_null(key) ? [column] : [column, key!]);
 
     // If the columns are qualified with a table or have an alias, we cannot use
     // those directly in the "pluck" operations since the results from the DB
     // are only keyed by the column itself. We'll strip the table out here.
-    return Utils.array_pluck(results, this.stripeTableForPluck(column),
-        this.stripeTableForPluck(key));
+    // return Utils.array_pluck(
+    //     results, this.stripTableForPluck(column), this.stripTableForPluck(key));
+
+    return Arr.pluck(
+        results, this.stripTableForPluck(column), this.stripTableForPluck(key));
   }
 
   ///
@@ -1949,37 +2142,38 @@ class QueryBuilder {
   /// @param  String  $column
   /// @return string|null
   ///
-  dynamic stripeTableForPluck(column) {
+  dynamic stripTableForPluck(column) {
     return Utils.is_null(column) ? column : column.split(RegExp(r'\.| ')).last;
   }
 
-  ///
   /// Concatenate values of a given column as a string.
   ///
-  /// @param  String  $column
-  /// @param  String  $glue
-  /// @return string
-  ///
-  // String implode(String column, [String glue = ''])
-  // {
-  //     return Utils.implode(glue, this.pluck($column));
-  // }
+  /// Em Laravel, `implode($column, $glue)` combina os valores em uma só string.
+  /// Aqui, retorna a string concatenada.
+  Future<String> implode(String column, [String glue = '']) async {
+    // 1. Obtém a lista de valores da coluna usando pluck
+    final dynamic result = await this.pluck(column);
+    // 2. Se pluck retornar uma lista, converte cada item para string e faz a junção
+    if (result is List) {
+      return result.map((item) => item?.toString() ?? '').join(glue);
+    }
+    // 3. Caso não seja lista (ou se pluck ainda não estiver completo), retorna vazio
+    return '';
+  }
 
   ///
   /// Determine if any rows exist for the current query.
   ///
   /// @return bool
   ///
-  dynamic exists() {
-    var sql = this.grammar.compileExists(this);
+  Future<bool> exists() async {
+    final sql = this.grammar.compileExists(this);
 
-    dynamic results =
-        this.connection.select(sql, this.getBindings(), this.useWritePdoProp);
+    final results =
+        await this.connection.select(sql, getBindings(), useWritePdoProp);
 
-    if (results[0] != null) {
-      results = results[0];
-
-      return results['exists'];
+    if (results.isNotEmpty && results.first.containsKey('exists')) {
+      return results.first['exists'] == true;
     }
 
     return false;
@@ -2095,6 +2289,33 @@ class QueryBuilder {
     }
   }
 
+  /// Execute a numeric aggregate function on the database.
+  ///
+  /// [function] Pode ser "count", "sum", "avg", "min" ou "max".
+  /// [columns] Lista de colunas (por padrão ['*']).
+  /// Retorna um valor [num] (int ou double).
+  Future<num> numericAggregate(String function,
+      [List<String> columns = const ['*']]) async {
+    // Chama o método aggregate para obter o resultado cru
+    final dynamic result = await this.aggregate(function, columns);
+    // Se não houver resultado, retorna 0
+    if (result == null) {
+      return 0;
+    }
+    // Se já for int ou double, devolve diretamente
+    if (result is int || result is double) {
+      return result;
+    }
+    // Converte para string para analisar se possui ponto decimal
+    final String resultStr = result.toString();
+    // Se não tiver ponto decimal, parse como int
+    if (!resultStr.contains('.')) {
+      return int.tryParse(resultStr) ?? 0;
+    }
+    // Caso contrário, converte para double
+    return double.tryParse(resultStr) ?? 0.0;
+  }
+
   ///
   /// Insert a new record into the database.
   ///
@@ -2128,19 +2349,15 @@ class QueryBuilder {
     // of the records into the database consistently. This will make it much
     // easier on the grammars to just handle one type of record insertion.
     var bindings = [];
-
     for (var entry in values.entries) {
       var value = entry.value;
       bindings.add(value);
     }
-
     var sql = this.grammar.compileInsert(this, values);
-
     // Once we have compiled the insert statement's SQL we can execute it on the
     // connection and return a result as a boolean success indicator as that
     // is the same type of result returned by the raw connection instance.
     bindings = this.cleanBindings(bindings);
-
     return this.connection.insert(sql, bindings);
   }
 
@@ -2174,39 +2391,92 @@ class QueryBuilder {
     return this.connection.update(sql, this.cleanBindings(mergedBindings));
   }
 
+  /// Insert or update a record matching the [attributes], and fill it with [values].
   ///
+  /// Se não existir nenhum registro correspondente a [attributes]:
+  ///   -> executa insert(attributes + values).
+  /// Senão:
+  ///   -> atualiza o primeiro registro correspondente.
+  ///
+  /// Retorna `true` em caso de sucesso, `false` se falhar (ou não alterar nada).
+  Future<bool> updateOrInsert(
+    Map<String, dynamic> attributes, [
+    Map<String, dynamic> values = const {},
+  ]) async {
+    // 1. Verifica se existe algum registro com os atributos fornecidos
+    final bool recordExists = await this.where(attributes).exists();
+
+    if (!recordExists) {
+      // 2. Se não existir, faz insert
+      final inserted = await this.insert({
+        ...attributes,
+        ...values,
+      });
+
+      // O retorno de insert pode variar (bool, int, etc.),
+      // dependendo do seu ConnectionInterface. Ajuste conforme necessário:
+      if (inserted is bool) {
+        return inserted; // true ou false
+      } else if (inserted is num) {
+        return inserted > 0; // se for a contagem de rows inseridas
+      }
+      return inserted != null; // fallback simples
+    } else {
+      // 3. Se existir, atualiza apenas 1 registro
+      final int affectedRows =
+          await this.where(attributes).limit(1).update(values);
+
+      // 4. Converte o número de linhas afetadas em bool
+      return affectedRows > 0;
+    }
+  }
+
   /// Increment a column's value by a given amount.
   ///
-  /// @param  String  $column
-  /// @param  int     $amount
-  /// @param  array   $extra
-  /// @return int
-  ///
-  // dynamic increment($column, $amount = 1, array $extra = [])
-  // {
-  //     $wrapped = this.grammar->wrap($column);
+  /// [column] Nome da coluna que será incrementada.
+  /// [amount] Valor a ser somado à coluna.
+  /// [extra]  Valores adicionais que podem ser atualizados no mesmo update.
+  /// Retorna a quantidade de linhas afetadas (geralmente int).
+  Future<int> increment(String column,
+      [num amount = 1, Map<String, dynamic> extra = const {}]) async {
+    // 2. Wrap do nome da coluna para garantir escape (ex: `"table"."column"`)
+    final wrapped = this.grammar.wrap(column);
+    // 3. Monta o Map de colunas, criando uma expressão do tipo "<coluna> + <amount>"
+    //    e faz merge com possíveis colunas extras:
+    final Map<String, dynamic> columnsToUpdate = {
+      ...extra,
+      column: this.raw('$wrapped + $amount'),
+    };
+    // 4. Chama o update(...) passando as colunas calculadas
+    final int affected = await this.update(columnsToUpdate);
+    // 5. Retorna o número de linhas afetadas (dependerá da implementação do update)
+    return affected;
+  }
 
-  //     $columns = array_merge([$column => this.raw("$wrapped + $amount")], $extra);
-
-  //     return this.update($columns);
-  // }
-
-  ///
   /// Decrement a column's value by a given amount.
   ///
-  /// @param  String  $column
-  /// @param  int     $amount
-  /// @param  array   $extra
-  /// @return int
-  ///
-  // dynamic decrement($column, $amount = 1, array $extra = [])
-  // {
-  //     $wrapped = this.grammar->wrap($column);
+  /// [column] Nome da coluna que será decrementada.
+  /// [amount] Valor a ser subtraído da coluna.
+  /// [extra]  Valores adicionais que podem ser atualizados no mesmo update.
+  /// Retorna a quantidade de linhas afetadas (geralmente int).
+  Future<int> decrement(String column,
+      [num amount = 1, Map<String, dynamic> extra = const {}]) async {
+    // 2. Wrap do nome da coluna para garantir escape (ex: `"table"."column"`)
+    final wrapped = this.grammar.wrap(column);
 
-  //     $columns = array_merge([$column => this.raw("$wrapped - $amount")], $extra);
+    // 3. Monta o Map de colunas, criando uma expressão do tipo "<coluna> - <amount>"
+    //    e faz merge com possíveis colunas extras:
+    final Map<String, dynamic> columnsToUpdate = {
+      ...extra,
+      column: this.raw('$wrapped - $amount'),
+    };
 
-  //     return this.update($columns);
-  // }
+    // 4. Chama o update(...) passando as colunas calculadas
+    final int affected = await this.update(columnsToUpdate);
+
+    // 5. Retorna o número de linhas afetadas (dependerá da implementação do update)
+    return affected;
+  }
 
   ///
   /// Delete a record from the database.
@@ -2235,8 +2505,9 @@ class QueryBuilder {
   ///
   Future<void> truncate() async {
     for (var entry in this.grammar.compileTruncate(this).entries) {
-      var sql = entry.key;
-      var bindings = entry.value;
+      final sql = entry.key;
+      final bindings = entry.value;
+      
       await this.connection.statement(sql, bindings);
     }
   }
@@ -2266,13 +2537,16 @@ class QueryBuilder {
   /// @param  array  $bindings
   /// @return void
   ///
-  dynamic mergeWheres(List<Map<String, dynamic>> wheresP, bindingsP) {
-    //TODO checar se a mesclagem esta correta
-    this.wheresProp = Utils.array_merge_ms(this.wheresProp, wheresP);
+  void mergeWheres(List<Map<String, dynamic>> wheresP, bindingsP) {
+    // this.wheresProp = Utils.array_merge_ms(this.wheresProp, wheresP);
+    // this
+    //     .bindings['where']
+    //     .add(Utils.array_merge(this.bindings['where'], bindingsP));
 
-    this
-        .bindings['where']
-        .add(Utils.array_merge(this.bindings['where'], bindingsP));
+    // Mescla as cláusulas WHERE
+    this.wheresProp.addAll(wheresP);
+    // Mescla os bindings do tipo 'where'
+    this.bindings['where'].addAll(bindings);
   }
 
   ///
@@ -2335,7 +2609,7 @@ class QueryBuilder {
   ///
   /// @return array
   ///
-  dynamic getRawBindings() {
+  Map<String, dynamic> getRawBindings() {
     return this.bindings;
   }
 
@@ -2348,13 +2622,11 @@ class QueryBuilder {
   ///
   /// @throws \InvalidArgumentException
   ///
-  dynamic setBindings(bindings, [type = 'where']) {
-    if (!Utils.map_key_exists(type, this.bindings)) {
+  QueryBuilder setBindings(Map<String, dynamic> bindingsP, [type = 'where']) {
+    if (!bindings.containsKey(type)) {
       throw InvalidArgumentException('Invalid binding type: $type.');
     }
-
-    this.bindings[type] = bindings;
-
+    bindings[type] = bindingsP;
     return this;
   }
 
@@ -2389,7 +2661,9 @@ class QueryBuilder {
   /// @return $this
   ///
   QueryBuilder mergeBindings(QueryBuilder query) {
-    //this.bindings = array_merge_recursive(this._bindings, query.bindings);
+    query.bindings.forEach((key, value) {
+      bindings.putIfAbsent(key, () => []).addAll(value);
+    });
     return this;
   }
 
@@ -2427,14 +2701,13 @@ class QueryBuilder {
   ///
   QueryBuilder useWritePdo() {
     this.useWritePdoProp = true;
-
     return this;
   }
 
   ///
   /// Handle dynamic method calls into the method.
   ///
-  /// @param  String  $method
+  /// @param  String  methodName
   /// @param  array   $parameters
   /// @return mixed
   ///
@@ -2445,13 +2718,38 @@ class QueryBuilder {
   //     if (static::hasMacro($method)) {
   //         return this.macroCall($method, $parameters);
   //     }
-
   //     if (Str::startsWith($method, 'where')) {
   //         return this.dynamicWhere($method, $parameters);
   //     }
-
   //     $className = get_class($this);
-
   //     throw new BadMethodCallException("Call to undefined method {$className}::{$method}()");
   // }
+  /// equivalent to __call
+  dynamic callMethod(
+    String methodName,
+    List<dynamic> positionalArguments, [
+    Map<Symbol, dynamic> namedArguments = const <Symbol, dynamic>{},
+  ]) {
+    switch (methodName) {
+      case 'select':
+        return select(positionalArguments[0]);
+      case 'from':
+        return from(positionalArguments[0]);
+      case 'where':
+        if (positionalArguments.length == 1) {
+          return Function.apply(where, positionalArguments[0]);
+        } else if (positionalArguments.length == 2) {
+          return where(positionalArguments[0], positionalArguments[1]);
+        } else if (positionalArguments.length == 3) {
+          return where(positionalArguments[0], positionalArguments[1],
+              positionalArguments[2]);
+        } else if (positionalArguments.length == 4) {
+          return where(positionalArguments[0], positionalArguments[1],
+              positionalArguments[2], positionalArguments[3]);
+        }
+        break;
+      default:
+        throw Exception("method '$methodName' not exist in QueryBuilder class");
+    }
+  }
 }

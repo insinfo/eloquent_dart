@@ -205,23 +205,24 @@ class QueryMySqlGrammar extends QueryGrammar {
   ///
   /// Prepare the bindings for an update statement.
   ///
-  /// @param  array  $bindings
-  /// @param  array  $values
+  /// [bindings] List<dynamic> bindings
+  /// [values] Map<String, dynamic>
   /// @return array
   ///
-  prepareBindingsForUpdate($bindings, $values) {
-    throw UnimplementedError();
-    // var index = 0;
+  List<dynamic> prepareBindingsForUpdate(bindings, values) {
+    // Obtemos as chaves do Map na ordem de inserção.
+    final keys = values.keys.toList();
 
-    // for ($values as $column => $value) {
-    //     if ($this->isJsonSelector($column) && is_bool($value)) {
-    //         unset($bindings[$index]);
-    //     }
-
-    //     $index++;
-    // }
-
-    // return $bindings;
+    // Itera de trás para frente, removendo os bindings correspondentes
+    // para colunas que são seletores JSON e cujo valor é booleano.
+    for (int i = keys.length - 1; i >= 0; i--) {
+      final column = keys[i];
+      final value = values[column];
+      if (isJsonSelector(column) && value is bool) {
+        bindings.removeAt(i);
+      }
+    }
+    return bindings;
   }
 
   ///

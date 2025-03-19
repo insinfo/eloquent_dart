@@ -58,23 +58,6 @@ class QueryPostgresGrammar extends QueryGrammar {
   }
 
   ///
-  /// Compile a "where time" clause.
-  ///
-  /// [query] QueryBuilder
-  /// [where] dynamic/map/array
-  /// @return string
-  ///
-  String whereTime(QueryBuilder query, dynamic where) {
-    var value = this.parameter(where['value']);
-
-    return this.wrap(where['column']) +
-        '::time ' +
-        where['operator'] +
-        ' ' +
-        value;
-  }
-
-  ///
   /// Compile a date based where clause.
   ///
   /// @param  string  $type
@@ -277,5 +260,41 @@ class QueryPostgresGrammar extends QueryGrammar {
     return {
       'truncate ' + this.wrapTable(query.fromProp) + ' restart identity': []
     };
+  }
+
+  String wrapValue(String value) {
+    if (value == '*') {
+      return value;
+    }
+    if (value.contains('->')) {
+      return wrapJsonSelector(value);
+    }
+    return '"' + value.replaceAll('"', '""') + '"';
+  }
+
+  String wrapJsonSelector(String value) {
+    // Divide a string pelo separador '->'
+    List<String> path = value.split('->');
+
+    // Obtém o campo inicial e aplica wrapValue nele
+    String field = wrapValue(path.removeAt(0));
+
+    // Envolve os demais atributos do caminho
+    List<String> wrappedPath = wrapJsonPathAttributes(path);
+
+    // Remove o último atributo, que será tratado de forma especial
+    String attribute = wrappedPath.removeLast();
+
+    // Se existirem outros atributos no caminho, junta-os com '->'
+    if (wrappedPath.isNotEmpty) {
+      return '$field->${wrappedPath.join("->")}->>$attribute';
+    }
+
+    return '$field->>$attribute';
+  }
+
+  List<String> wrapJsonPathAttributes(List<String> path) {
+    // Para cada atributo do caminho, envolve-o com aspas simples
+    return path.map((attribute) => "'$attribute'").toList();
   }
 }

@@ -8,90 +8,54 @@ class QueryGrammar extends BaseGrammar {
     return operators;
   }
 
-  /// chama um determinado metodo com base no nome
-  /// este metodo é para evitar reflexão dart:mirror
-  dynamic callMethod(
-    String methodName,
-    List<dynamic> positionalArguments, [
-    Map<Symbol, dynamic> namedArguments = const <Symbol, dynamic>{},
-  ]) {
-    switch (methodName.toLowerCase()) {
-      case 'compilecolumns':
-        return compileColumns(positionalArguments[0], positionalArguments[1]);
-      case 'compilefrom':
-        return compileFrom(positionalArguments[0], positionalArguments[1]);
-      case 'compilewheres':
-        return compileWheres(positionalArguments[0]);
-      case 'compilelimit':
-        return compileLimit(positionalArguments[0], positionalArguments[1]);
-      case 'compileoffset':
-        return compileOffset(positionalArguments[0], positionalArguments[1]);
-      //
-      case 'compilegroups':
-        return compileGroups(positionalArguments[0], positionalArguments[1]);
-      case 'compilehaving':
-        return compileHaving(positionalArguments[0]);
-      case 'compileorders':
-        return compileOrders(positionalArguments[0], positionalArguments[1]);
-      case 'compileaggregate':
-        return compileAggregate(positionalArguments[0], positionalArguments[1]);
-      case 'compilejoins':
-        return compileJoins(positionalArguments[0], positionalArguments[1]);
+  late final Map<String, Function> _methodMap;
 
-      //wheres
-      case 'wherenested':
-        return whereNested(positionalArguments[0], positionalArguments[1]);
-      case 'wheresub':
-        return whereSub(positionalArguments[0], positionalArguments[1]);
+  QueryGrammar() {
+    _methodMap = {
+      'compilecolumns': (args) => compileColumns(args[0], args[1]),
+      'compilefrom': (args) => compileFrom(args[0], args[1]),
+      'compilewheres': (args) => compileWheres(args[0]),
+      'compilelimit': (args) => compileLimit(args[0], args[1]),
+      'compileoffset': (args) => compileOffset(args[0], args[1]),
+      'compilegroups': (args) => compileGroups(args[0], args[1]),
+      'compilehaving': (args) => compileHaving(args[0]),
+      'compileorders': (args) => compileOrders(args[0], args[1]),
+      'compileaggregate': (args) => compileAggregate(args[0], args[1]),
+      'compilejoins': (args) => compileJoins(args[0], args[1]),
+      'wherenested': (args) => whereNested(args[0], args[1]),
+      'wheresub': (args) => whereSub(args[0], args[1]),
+      'wherebasic': (args) => whereBasic(args[0], args[1]),
+      'wherebetween': (args) => whereBetween(args[0], args[1]),
+      'whereexists': (args) => whereExists(args[0], args[1]),
+      'wherenotexists': (args) => whereNotExists(args[0], args[1]),
+      'wherein': (args) => whereIn(args[0], args[1]),
+      'wherenotin': (args) => whereNotIn(args[0], args[1]),
+      'whereinsub': (args) => whereInSub(args[0], args[1]),
+      'wherenotinsub': (args) => whereNotInSub(args[0], args[1]),
+      'wherenull': (args) => whereNull(args[0], args[1]),
+      'wherenotnull': (args) => whereNotNull(args[0], args[1]),
+      'wheredate': (args) => whereDate(args[0], args[1]),
+      'wheretime': (args) => whereTime(args[0], args[1]),
+      'whereday': (args) => whereDay(args[0], args[1]),
+      'wheremonth': (args) => whereMonth(args[0], args[1]),
+      'whereyear': (args) => whereYear(args[0], args[1]),
+      'whereraw': (args) => whereRaw(args[0], args[1]),
+      'wherecolumn': (args) => whereColumn(args[0], args[1]),
+      'compilehavings': (args) => compileHavings(args[0], args[1]),
+      'compileunion': (args) => compileUnion(args[0]),
+      'compileunions': (args) => compileUnions(args[0]),
+      'compilelock': (args) => compileLock(args[0], args[1]),
+    };
+  }
 
-      case 'wherebasic':
-        return whereBasic(positionalArguments[0], positionalArguments[1]);
-      case 'wherebetween':
-        return whereBetween(positionalArguments[0], positionalArguments[1]);
-      case 'whereexists':
-        return whereExists(positionalArguments[0], positionalArguments[1]);
-      case 'wherenotexists':
-        return whereNotExists(positionalArguments[0], positionalArguments[1]);
-      case 'wherein':
-        return whereIn(positionalArguments[0], positionalArguments[1]);
-      case 'wherenotin':
-        return whereNotIn(positionalArguments[0], positionalArguments[1]);
-      case 'whereinsub':
-        return whereInSub(positionalArguments[0], positionalArguments[1]);
-      case 'wherenotinsub':
-        return whereNotInSub(positionalArguments[0], positionalArguments[1]);
-      case 'wherenull':
-        return whereNull(positionalArguments[0], positionalArguments[1]);
-      case 'wherenotnull':
-        return whereNotNull(positionalArguments[0], positionalArguments[1]);
-      case 'wheredate':
-        return whereDate(positionalArguments[0], positionalArguments[1]);
-      case 'whereday':
-        return whereDay(positionalArguments[0], positionalArguments[1]);
-      case 'wheremonth':
-        return whereMonth(positionalArguments[0], positionalArguments[1]);
-      case 'whereyear':
-        return whereYear(positionalArguments[0], positionalArguments[1]);
-      case 'whereraw':
-        return whereRaw(positionalArguments[0], positionalArguments[1]);
-
-      case 'wherecolumn':
-        return whereColumn(positionalArguments[0], positionalArguments[1]);
-
-      case 'compilehavings':
-        return compileHavings(positionalArguments[0], positionalArguments[1]);
-
-      case 'compileunion':
-        return compileUnion(positionalArguments[0]);
-
-      case 'compileunions':
-        return compileUnions(positionalArguments[0]);
-      case 'compilelock':
-        return compileLock(positionalArguments[0], positionalArguments[1]);
-
-      default:
-        throw Exception("method '$methodName' not exist in QueryGrammar class");
+  dynamic callMethod(String methodName, List<dynamic> positionalArguments,
+      [Map<Symbol, dynamic>? namedArguments]) {
+    final methodFunction = _methodMap[methodName.toLowerCase()];
+    if (methodFunction == null) {
+      throw Exception("method '$methodName' not exist in QueryGrammar class");
     }
+
+    return methodFunction(positionalArguments);
   }
 
   ///
@@ -149,18 +113,18 @@ class QueryGrammar extends BaseGrammar {
       // To compile the query, we'll spin through each component of the query and
       // see if that component exists. If it does we'll just call the compiler
       // function for the component which is responsible for making the SQL.
-      if (!Utils.is_null_or_empty(query.getProperty(component))) {
+      final proP = query.getProperty(component);
+      var isProp = proP != null;
+      if (proP is List) {
+        isProp = proP.isNotEmpty;
+      } else if (proP is Map) {
+        isProp = proP.isNotEmpty;
+      }
+
+      if (isProp) {
         final methodName = 'compile' + Utils.ucfirst(component);
-
-        //print('QueryGrammar@compileComponents this: ${this}');
-        //print('QueryGrammar@compileComponents property: ${component}');
-        var extraParam = query.getProperty(component);
-        //print('QueryGrammar@compileComponents extraParam $extraParam');
-
-        //sql[component] = Utils.call_method(this, methodName, [query, extraParam]);
+        final extraParam = proP;
         sql[component] = callMethod(methodName, [query, extraParam]);
-        // print('QueryGrammar@compileComponents methodName: $methodName');
-        // print('QueryGrammar@compileComponents sql: $sql');
       }
     }
 
@@ -176,8 +140,6 @@ class QueryGrammar extends BaseGrammar {
   ///
   String compileAggregate(QueryBuilder query, Map<String, dynamic> aggregate) {
     var column = columnize(aggregate['columns']);
-    // print('compileAggregate aggregate: $aggregate');
-    // print('compileAggregate column: $column');
 
     // If the query has a "distinct" constraint and we're not asking for all columns
     // we need to prepend "distinct" onto the column name so that the query takes
@@ -267,13 +229,15 @@ class QueryGrammar extends BaseGrammar {
   ///  @return String
   ///
   String compileJoinConstraint(Map<String, dynamic> clause) {
-    if (clause['nested']) {
+    bool isNested = clause['nested'] ?? false;
+    if (isNested) {
       return this.compileNestedJoinConstraint(clause);
     }
 
     var first = this.wrap(clause['first']);
     var second;
-    if (clause['where']) {
+    bool isWhereClause = clause['where'] ?? false;
+    if (isWhereClause) {
       if (clause['operator'] == 'in' || clause['operator'] == 'not in') {
         second = '(' +
             Utils.implode(', ', Utils.array_fill(0, clause['second'], '?')) +
@@ -311,7 +275,6 @@ class QueryGrammar extends BaseGrammar {
   ///  @return String
   ///
   String compileWheres(QueryBuilder query) {
-    //print('QueryGrammar@compileWheres');
     var sql = <String>[];
 
     if (Utils.array_is_empty(query.wheresProp)) {
@@ -323,7 +286,7 @@ class QueryGrammar extends BaseGrammar {
     // and maintainable since each clause has a very small method that it uses.
     for (var where in query.wheresProp) {
       final methodName = "where${where['type']}";
-      //print('QueryGrammar@compileWheres methodName: $methodName');
+
       //call whereBasic
       //sql.add(where['boolean'] +  ' ' +  Utils.call_method(this, methodName, [query, where]));
 
@@ -420,11 +383,10 @@ class QueryGrammar extends BaseGrammar {
   ///  @return String
   ///
   String whereIn(QueryBuilder query, Map<String, dynamic> where) {
-    //TODO checar isso  if (empty($where['values'])) {
     if (Utils.empty(where['values'])) {
       return '0 = 1';
     }
-    //print('whereIn ${where['values'].runtimeType}' );
+
     List<dynamic> values = where['values'];
 
     var valuesString = this.parameterize(values);
@@ -506,6 +468,17 @@ class QueryGrammar extends BaseGrammar {
   ///
   String whereDate(QueryBuilder query, dynamic where) {
     return this.dateBasedWhere('date', query, where);
+  }
+
+  ///
+  /// Compile a "where time" clause.
+  ///
+  /// [query] QueryBuilder
+  /// [where] dynamic/map/array
+  /// @return string
+  ///
+  String whereTime(QueryBuilder query, dynamic where) {
+    return dateBasedWhere('time', query, where);
   }
 
   ///
@@ -673,6 +646,16 @@ class QueryGrammar extends BaseGrammar {
   }
 
   ///
+  /// Compile the random statement into SQL.
+  ///
+  /// @param  string  $seed
+  /// @return string
+  ///
+  String compileRandom($seed) {
+    return 'RANDOM()';
+  }
+
+  ///
   ///  Compile the "limit" portions of the query.
   ///
   ///  @param  \Illuminate\Database\Query\Builder  $query
@@ -745,8 +728,8 @@ class QueryGrammar extends BaseGrammar {
   ///  @return String
   ///
   String compileExists(QueryBuilder query) {
-    var select = compileSelect(query);
-    return "select exists($select) as {this.wrap('exists')}";
+    final select = compileSelect(query);
+    return "select exists($select) as ${this.wrap('exists')}";
   }
 
   ///
@@ -826,8 +809,8 @@ class QueryGrammar extends BaseGrammar {
   /// @param  array  $values
   /// @return array
   ///
-  prepareBindingsForUpdate($bindings, $values) {
-    return $bindings;
+  prepareBindingsForUpdate(bindingsP, valuesP) {
+    return bindingsP;
   }
 
   ///
@@ -850,7 +833,7 @@ class QueryGrammar extends BaseGrammar {
   ///  @return array
   ///
   Map<String, dynamic> compileTruncate(QueryBuilder query) {
-    return {'truncate ' + this.wrapTable(query.from): []};
+    return {'truncate ' + this.wrapTable(query.fromProp): []};
   }
 
   ///
