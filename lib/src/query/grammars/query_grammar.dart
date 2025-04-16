@@ -45,6 +45,10 @@ class QueryGrammar extends BaseGrammar {
       'compileunion': (args) => compileUnion(args[0]),
       'compileunions': (args) => compileUnions(args[0]),
       'compilelock': (args) => compileLock(args[0], args[1]),
+      'compileexpressions': (args) => compileExpressions(args[0]),
+      'compilerecursionLimit': (args) => compileRecursionLimit(args[0]),
+      'compileinsertUsing': (args) =>
+          compileInsertUsing(args[0], args[1], args[2]),
     };
   }
 
@@ -64,6 +68,7 @@ class QueryGrammar extends BaseGrammar {
   ///  @var array
   ///
   List<String> selectComponents = [
+    'expressions',
     'aggregate',
     'columns',
     'from',
@@ -77,6 +82,82 @@ class QueryGrammar extends BaseGrammar {
     'unions',
     'lock',
   ];
+
+  /// Compila as Common Table Expressions (CTEs) para a query.
+  ///
+  /// Se não houver CTEs em [query.expressionsProp], retorna string vazia.
+  /// Caso contrário, retorna algo como:
+  /// `WITH RECURSIVE "cte1"(col1, col2) AS (…), "cte2" AS (…)`
+  String compileExpressions(QueryBuilder query) {
+    if (query.expressionsProp.isEmpty) {
+      return '';
+    }
+
+    // Define se a cláusula RECURSIVE deve aparecer
+    final recursive = recursiveKeyword(query.expressionsProp);
+
+    // Monta cada CTE
+    final List<String> statements = [];
+    for (final expr in query.expressionsProp) {
+      final name = expr['name'] as String;
+      final sql = expr['query'] as String;
+      final cols = expr['columns'] as List<String>?;
+
+      // Se houver colunas, montar "(col1, col2) "
+      final columnList =
+          (cols != null && cols.isNotEmpty) ? '(${columnize(cols)})' : '';
+      final separator = columnList.isNotEmpty
+          ? ' '
+          : ''; // Adiciona espaço só se houver colunas
+
+      statements.add(
+          '${wrapTable(name)}$separator$columnList as ($sql)'); // Usa 'as' minúsculo
+    }
+
+    // Junta todas as CTEs com vírgula e prépende WITH (+ RECURSIVE se necessário)
+    return 'with $recursive${statements.join(', ')}';
+  }
+
+  /// Retorna 'RECURSIVE ' se alguma expressão em [expressions]
+  /// tiver a flag 'recursive' = true, caso contrário retorna ''.
+  String recursiveKeyword(List<Map<String, dynamic>> expressions) {
+    final needsRecursive = expressions.any((e) => e['recursive'] == true);
+    return needsRecursive ? 'recursive ' : '';
+  }
+
+  /**
+     * Compile the recursion limit.
+     *
+     * @param \Illuminate\Database\Query\Builder $query
+     * @return string
+     */
+  String compileRecursionLimit(QueryBuilder query) {
+    if (query.recursionLimitProp == null) {
+      return '';
+    }
+    return 'option (maxrecursion ${query.recursionLimitProp})';
+  }
+
+  /**
+     * Compile an insert statement using a subquery into SQL.
+     *
+     * @param \Illuminate\Database\Query\Builder $query
+     * @param array $columns
+     * @param string $sql
+     * @return string
+     */
+  String compileInsertUsing(QueryBuilder query, dynamic columns, String sql) {
+    //final expressions = this.compileExpressions(query);
+    //final recursionLimit = this.compileRecursionLimit(query);
+    //return expressions + ' ' + ' ' + recursionLimit;
+    // Obtém o nome da tabela alvo (já configurado no builder)
+    final table = this.wrapTable(query.fromProp);
+    // Formata a lista de colunas alvo
+    final columnsSql = this.columnize(columns);
+    // Monta a instrução INSERT INTO ... SELECT ...
+    // O `sql` recebido já é o "SELECT ..." da subquery
+    return 'insert into $table ($columnsSql) $sql';
+  }
 
   ///
   ///  Compile a select query into SQL.
@@ -799,17 +880,30 @@ class QueryGrammar extends BaseGrammar {
     // // need to compile the where clauses and attach it to the query so only the
     // // intended records are updated by the SQL statements we generate to run.
     var where = this.compileWheres(query);
-    return Utils.trim("update $table$joins set $columns $where");
+    final res = Utils.trim("update $table$joins set $columns $where");
+
+    return this.compileExpressions(query) + ' ' + res;
   }
 
   ///
   /// Prepare the bindings for an update statement.
   ///
-  /// @param  array  $bindings
-  /// @param  array  $values
-  /// @return array
+  /// @param  List  bindingsP
+  /// @param  Map  valuesP
+  /// @return List
   ///
-  prepareBindingsForUpdate(bindingsP, valuesP) {
+  prepareBindingsForUpdate(dynamic bindingsP, dynamic valuesP) {
+    // Obtém os bindings de CTEs, se existirem
+    //final exprBindings = bindingsP['expressions'] ?? <dynamic>[];
+    //print('prepareBindingsForUpdate $valuesP');
+
+    // Mescla os bindings de expressions antes dos valores normais
+    // ignore: unused_local_variable
+    //final mergedValues = [...exprBindings, ...valuesP];
+
+    // Remove o grupo 'expressions' para não causar binding duplicado
+    //bindingsP.remove('expressions');
+
     return bindingsP;
   }
 
@@ -823,7 +917,9 @@ class QueryGrammar extends BaseGrammar {
     var table = this.wrapTable(query.fromProp);
     var where =
         Utils.is_array(query.wheresProp) ? this.compileWheres(query) : '';
-    return Utils.trim("delete from $table " + where);
+    final res = Utils.trim("delete from $table " + where);
+
+    return this.compileExpressions(query) + ' ' + res;
   }
 
   ///

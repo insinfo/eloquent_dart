@@ -17,6 +17,20 @@ import 'package:eloquent/src/utils/utils.dart';
 import '../exceptions/invalid_argument_exception.dart';
 
 class QueryBuilder {
+  /**
+     * The common table expressions.
+     *
+     * @var array
+     */
+  List<Map<String, dynamic>> expressionsProp = [];
+
+  /**
+     * The recursion limit.
+     *
+     * @var int
+     */
+  int? recursionLimitProp;
+
   /// Isaque
   /// Eu adicionei este metodo para mapear uma String para uma propriedade/atributo da Class QueryBuilder
   /// isso permite ler a propriedade/atributo da Class QueryBuilder com base no nome da propriedade
@@ -62,6 +76,10 @@ class QueryBuilder {
         return this.bindingBackups;
       case 'operators':
         return this._operators;
+      case 'recursionLimit':
+        return this.recursionLimitProp;
+      case 'expressions':
+        return this.expressionsProp;
       default:
         print('QueryBuilder@getProperty propertyName');
         return propertyName;
@@ -103,6 +121,7 @@ class QueryBuilder {
     'having': [],
     'order': [],
     'union': [],
+    'expressions': [],
   };
 
   ///
@@ -290,6 +309,81 @@ class QueryBuilder {
   ///
   QueryBuilder(this.connection, this.grammar, this.processor);
 
+  /**
+     * Add a common table expression to the query.
+     *
+     * @param string $name
+     * @param \Closure|\Illuminate\Database\Query\Builder|string $query
+     * @param array|null $columns
+     * @param bool $recursive
+     * @return $this
+     */
+  QueryBuilder withExpression(String name, dynamic query,
+      [dynamic columns, bool recursive = false]) {
+    // createSub retorna [sql, bindings]
+    final sub = this.createSub(query);
+    final sql = sub[0];
+    final bindings = sub[1];
+    this.expressionsProp.add({
+      'name': name,
+      'query': sql,
+      'columns': columns,
+      'recursive': recursive,
+    });
+    this.addBinding(bindings, 'expressions');
+    return this;
+  }
+
+  /**
+     * Add a recursive common table expression to the query.
+     *
+     * @param string $name
+     * @param \Closure|\Illuminate\Database\Query\Builder|string $query
+     * @param array|null $columns
+     * @return $this
+     */
+  QueryBuilder withRecursiveExpression(String name, query, [columns = null]) {
+    return this.withExpression(name, query, columns, true);
+  }
+
+  /**
+     * Set the recursion limit of the query.
+     *
+     * @param int $value
+     * @return $this
+     */
+  QueryBuilder recursionLimit(int value) {
+    this.recursionLimitProp = value;
+    return this;
+  }
+
+  /**
+     * Insert new records into the table using a subquery.
+     *
+     * @param array $columns
+     * @param \Closure|\Illuminate\Database\Query\Builder|string $query
+     * @return bool
+     */
+  Future<dynamic> insertUsing(columns, query) async {
+    final sub = this.createSub(query);
+    final sql = sub[0];
+    final subBindings = sub[1];
+
+    // Obtém os bindings das CTEs (expressions), se houver
+    final List<dynamic> exprBindings = bindings['expressions'] ?? <dynamic>[];
+
+    // Mescla: primeiro os bindings de expressions, depois os da subquery
+    final List<dynamic> mergedBindings = [
+      ...exprBindings,
+      ...subBindings,
+    ];
+
+    final res = await this.connection.insert(
+        this.grammar.compileInsertUsing(this, columns, sql),
+        this.cleanBindings(mergedBindings));
+    return res;
+  }
+
   ///
   /// Set the columns to be selected.
   ///
@@ -390,7 +484,7 @@ class QueryBuilder {
     // format and work with the query before we cast it to a raw SQL string.
 
     if (query is Function) {
-      var callback = query;
+      final callback = query;
       callback(query = this.forSubQuery());
     }
 

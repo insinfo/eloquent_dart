@@ -225,6 +225,20 @@ class QueryMySqlGrammar extends QueryGrammar {
     return bindings;
   }
 
+  /**
+     * Compile an insert statement using a subquery into SQL.
+     *
+     * @param \Illuminate\Database\Query\Builder $query
+     * @param array $columns
+     * @param string $sql
+     * @return string
+     */
+  String compileInsertUsing(QueryBuilder query, columns, String sql) {
+    final insert =
+        "insert into ${this.wrapTable(query.fromProp)} (${this.columnize(columns)}) ";
+    return insert + this.compileExpressions(query) + ' ' + sql;
+  }
+
   ///
   /// Compile a delete statement into SQL.
   ///
