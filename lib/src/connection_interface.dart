@@ -115,29 +115,8 @@ abstract class ConnectionInterface {
   ///
   /// @throws \Throwable
   ///
-  Future<dynamic> transaction(
-      Future<dynamic> Function(Connection ctx) callback, [int? timeoutInSeconds]);
-
-  ///
-  /// Start a new database transaction.
-  ///
-  /// Returns `void`
-  ///
-  //Future<dynamic> beginTransaction();
-
-  ///
-  /// Commit the active database transaction.
-  ///
-  /// Returns `void`
-  ///
-  //Future<dynamic> commit([dynamic transaction]);
-
-  ///
-  /// Rollback the active database transaction.
-  ///
-  /// Returns `void`
-  ///
-  //Future<dynamic> rollBack([dynamic transaction]);
+  Future<dynamic> transaction(Future<dynamic> Function(Connection ctx) callback,
+      [int? timeoutInSeconds]);
 
   ///
   /// Get the number of active transactions.
@@ -153,4 +132,8 @@ abstract class ConnectionInterface {
   /// Returns `List`
   ///
   Future<dynamic> pretend(Function callback);
+
+  String getDatabaseName();
+
+  SchemaGrammar getSchemaGrammar();
 }

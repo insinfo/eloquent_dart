@@ -1,4 +1,6 @@
 import 'package:eloquent/eloquent.dart';
+import 'package:eloquent/src/doctrine/schema/abstract_schema_manager.dart';
+//import 'package:eloquent/src/doctrine/schema/column.dart';
 import 'package:eloquent/src/schema/schema_builder.dart';
 
 /// posgresql Connection implementation
@@ -91,13 +93,6 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   late String _databaseName;
 
   ///
-  /// The instance of Doctrine connection.
-  ///
-  /// @var \Doctrine\DBAL\Connection
-  ///
-  // protected doctrineConnection;
-
-  ///
   /// The table prefix for the connection.
   ///
   /// @var string
@@ -127,8 +122,8 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
       [this._databaseName = '',
       this._tablePrefix = '',
       this._config = const <String, dynamic>{}]) {
-    //this.pdo = pdoP;
-    // print('call Connection construct');
+    //print('lib\src\connection.dart Connection _config $_config');
+
     // First we will setup the default properties. We keep track of the DB
     // name we are connected to since it is needed when some reflective
     // type commands are run such as checking whether a table exists.
@@ -793,8 +788,7 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   /// @return bool
   ///
   bool isDoctrineAvailable() {
-    //return class_exists('Doctrine\DBAL\Connection');
-    return false;
+    return true;
   }
 
   ///
@@ -804,18 +798,18 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   /// @param  String  $column
   /// @return \Doctrine\DBAL\Schema\Column
   ///
-  dynamic getDoctrineColumn($table, $column) {
-    // $schema = this.getDoctrineSchemaManager();
-    // return $schema->listTableDetails($table)->getColumn($column);
-    return null;
-  }
+  // Future<Column> getDoctrineColumn(table, column) async {
+  //   final schema = this.getDoctrineSchemaManager();
+  //   final res = await schema.listTableDetails(table);
+  //   return res.getColumn(column);
+  // }
 
   ///
   /// Get the Doctrine DBAL schema manager for the connection.
   ///
   /// @return \Doctrine\DBAL\Schema\AbstractSchemaManager
   ///
-  dynamic getDoctrineSchemaManager() {
+  AbstractSchemaManager? getDoctrineSchemaManager() {
     //return this.getDoctrineDriver()->getSchemaManager(this.getDoctrineConnection());
     return null;
   }
@@ -1075,6 +1069,10 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   String getDatabaseName() {
     return this._databaseName;
   }
+  // String getDatabaseName() {
+  //   // PDOConfig config;
+  //   return pdo.getConfig().database;
+  // }
 
   ///
   /// Set the name of the connected database.

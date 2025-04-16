@@ -139,7 +139,7 @@ class QueryBuilder {
   ///
   /// @var string | QueryExpression
   ///
-  late dynamic fromProp;
+  dynamic fromProp;
 
   ///
   /// The table joins for the query.
@@ -252,6 +252,7 @@ class QueryBuilder {
     '>=',
     '<>',
     '!=',
+    'in',
     'like',
     'like binary',
     'not like',
@@ -387,11 +388,15 @@ class QueryBuilder {
     // If the given query is a Closure, we will execute it while passing in a new
     // query instance to the Closure. This will give the developer a chance to
     // format and work with the query before we cast it to a raw SQL string.
+
     if (query is Function) {
       var callback = query;
       callback(query = this.forSubQuery());
     }
-    return this.parseSub(query);
+
+    final result = this.parseSub(query);
+
+    return result;
   }
 
   ///
@@ -401,12 +406,16 @@ class QueryBuilder {
   /// `Return` List [String query ,List Bindings]
   ///
   List parseSub(dynamic query) {
-    //if (query is self || query is EloquentBuilder) {
     if (query is QueryBuilder) {
       return [query.toSql(), query.getBindings()];
-      // return [$query->toSql(), $query->getBindings()];
     } else if (query is String) {
       return [query, []];
+    } else if (query is QueryExpression) {
+      // adicionado para lidar com join lateral
+      // Se for uma QueryExpression, obtém o valor (SQL bruto)
+      // e assume que não há bindings associados *a esta expressão* aqui.
+      // Bindings para a expressão bruta devem ser adicionados separadamente se necessário.
+      return [query.getValue(), []];
     } else {
       throw InvalidArgumentException();
     }
@@ -666,28 +675,12 @@ class QueryBuilder {
       }, boolean);
     }
 
-    // Here we will make some assumptions about the operator. If only 2 values are
-    // passed to the method, we will assume that the operator is an equals sign
-    // and keep going. Otherwise, we'll require the operator to be passed in.
-    //  if (func_num_args() == 2) {
-    //      list($value, $operator) = [$operator, '='];
-    //  } else if (this.invalidOperatorAndValue($operator, $value)) {
-    //      throw new InvalidArgumentException('Illegal operator and value combination.');
-    //  }
-
     // If the columns is actually a Closure instance, we will assume the developer
     // wants to begin a nested where statement which is wrapped in parenthesis.
     // We'll add that Closure to the query then return back out immediately.
     if (column is Function) {
       return this.whereNested(column, boolean);
     }
-
-    // If the given operator is not found in the list of valid operators we will
-    // assume that the developer is just short-cutting the '=' operators and
-    // we will set the operators to '=' and set the values appropriately.
-    // if (! in_array(strtolower(operator), this._operators, true)) {
-    //     list($value, $operator) = [$operator, '='];
-    // }
 
     // If the value is a Closure, it means the developer is performing an entire
     // sub-select within the query and we will need to compile the sub-select
@@ -723,15 +716,215 @@ class QueryBuilder {
     return this;
   }
 
-  ///
-  /// Add an "or where" clause to the query.
-  /// [column] String|Map|Function
-  /// @param  String  $operator
-  /// @param  mixed   $value
-  /// @return \Illuminate\Database\Query\Builder|static
-  ///
   QueryBuilder orWhere(dynamic column, [String? operator, dynamic value]) {
     return this.where(column, operator, value, 'or');
+  }
+
+  /// Adiciona uma cláusula WHERE “flexível” à consulta.
+  ///
+  /// Este método tenta emular o comportamento do método `where` do Laravel, onde:
+  ///
+  /// - Se o primeiro parâmetro for um `Map`, ele assume que o mapa contém pares de chave/valor e
+  ///   delega para uma cláusula WHERE aninhada (onde cada chave é comparada com o operador `'='`).
+  /// - Se o primeiro parâmetro for uma função que recebe um `QueryBuilder`, ele invoca essa função
+  ///   para construir uma sub cláusula WHERE aninhada.
+  /// - Se a função for chamada com 2 argumentos (por exemplo: `whereFlex('email', 'test@example.com')`),
+  ///   o método deve interpretar o segundo parâmetro como o valor e assumir implicitamente o operador
+  ///   `'='`.
+  /// - Se for chamada com 3 argumentos (por exemplo: `whereFlex('age', '>', 18)`), o segundo parâmetro
+  ///   é interpretado como o operador e o terceiro como o valor.
+  /// - Se o valor for uma função (Closure) que recebe um `QueryBuilder`, a cláusula será tratada como uma subconsulta.
+  /// - Se o valor for `null`, o método invoca internamente `whereNull`, desde que o operador seja `'='`,
+  ///   `'=='`, `'!='` ou `'<>'`. Caso contrário, se o operador não for compatível com valores nulos,
+  ///   espera-se que lance uma exceção (InvalidArgumentException).
+  ///
+  /// **Limitações e Cenários Problemáticos**:
+  ///
+  /// 1. **Detecção do número de argumentos**:
+  ///    Diferentemente do PHP (que utiliza `func_num_args()`), no Dart os parâmetros opcionais sempre
+  ///    recebem um valor (mesmo que seja o valor padrão). Assim, não há uma forma nativa de diferenciar
+  ///    uma chamada com 2 argumentos de uma chamada com 3 argumentos de forma exata.
+  ///    O método utiliza uma função auxiliar (_countNonDefaultArguments) como heurística para tentar
+  ///    inferir quantos argumentos foram explicitamente passados, mas essa abordagem pode falhar em casos
+  ///    ambíguos.
+  ///
+  /// 2. **Caso do uso de valores nulos**:
+  ///    Por exemplo, se o usuário chamar:
+  ///    ```dart
+  ///    qbFlex.whereFlex('deleted_at', '=', null);
+  ///    ```
+  ///    espera-se que o método interprete isso como uma cláusula "where deleted_at is null".
+  ///    Contudo, devido à heurística utilizada, o método pode interpretar essa chamada como se tivesse
+  ///    sido feita com 2 argumentos – fazendo com que o operador `'='` seja considerado como valor, o que
+  ///    resultará na SQL gerada:
+  ///    ```sql
+  ///    select * from "users" where "deleted_at" = ?
+  ///    ```
+  ///    com um binding cujo valor é `'='` em vez de `null`.
+  ///
+  /// 3. **Operadores não válidos com null**:
+  ///    Se for usado um operador diferente de `'='`, `'=='`, `'!='` ou `'<>'` ao passar explicitamente um valor null,
+  ///    espera-se que o método lance uma exceção. No entanto, se o método interpretar a chamada como tendo
+  ///    apenas 2 parâmetros, essa validação não ocorrerá e o SQL gerado não corresponderá à intenção do
+  ///    desenvolvedor.
+  ///
+  /// **Exemplo de uso esperado (sem problemas):**
+  ///
+  /// ```dart
+  /// // Interpretação de 2 argumentos: operador '=' é inferido
+  /// qbFlex.whereFlex('email', 'test@example.com');
+  /// // Gera: where "email" = ?
+  /// // Binding: ['test@example.com']
+  ///
+  /// // Chamada com 3 argumentos para operadores válidos:
+  /// qbFlex.whereFlex('age', '>', 18);
+  /// // Gera: where "age" > ?
+  /// // Binding: [18]
+  /// ```
+  ///
+  /// **Cenário problemático:**
+  ///
+  /// ```dart
+  /// // A intenção é que este código gere uma cláusula "where deleted_at is null"
+  /// // mas, devido à heurística, pode produzir:
+  /// qbFlex.whereFlex('deleted_at', '=', null);
+  /// // Gera: where "deleted_at" = ?
+  /// // Binding: ['=']   <-- binding incorreto, pois o operador '=' foi interpretado como valor
+  /// ```
+  ///
+  /// Devido a essas limitações intrínsecas da linguagem Dart (especialmente a dificuldade de detectar
+  /// precisamente o número de argumentos passados), é possível que a funcionalidade de `whereFlex` não
+  /// se comporte como o esperado em todos os cenários, sendo recomendada cautela ao utilizá-la em casos
+  /// onde valores nulos e operadores precisam ser diferenciados com precisão.
+  ///
+  /// **Retorno:**
+  /// Retorna a instância atual de `QueryBuilder` para permitir encadeamento de métodos.
+  QueryBuilder whereFlex(dynamic column,
+      [dynamic operator, // Mantido como dynamic
+      dynamic value,
+      String boolean = 'and']) {
+    // Caso 1: Map
+    if (column is Map) {
+      return this.whereNested((query) {
+        column.forEach((k, v) {
+          query.where(k, '=', v);
+        }); // Use where normal aqui
+      }, boolean);
+    }
+
+    // Caso 2: Function no primeiro argumento
+    if (column is Function(QueryBuilder)) {
+      return this.whereNested(column, boolean);
+    }
+
+    // --- Lógica Refinada para Determinar Operador e Valor ---
+    String? finalOperator;
+    dynamic finalValue;
+
+    // Verifica se o SEGUNDO argumento (operator) FOI fornecido
+    if (operator != null) {
+      // Verifica se o TERCEIRO argumento (value) também foi fornecido
+      if (value != null) {
+        // Cenário: where('column', 'op', 'val')
+        // O segundo argumento DEVE ser um operador String válido
+        if (operator is String && isValidOperator(operator)) {
+          finalOperator = operator;
+          finalValue = value;
+        } else {
+          throw InvalidArgumentException(
+              'When 3 arguments are provided, the second must be a valid string operator. Got type ${operator.runtimeType} ("$operator")');
+        }
+      } else {
+        // Cenário: where('column', 'something') - 'something' pode ser operador ou valor
+        // Verifica se 'something' (passado como operator) é um operador String VÁLIDO
+        if (operator is String && isValidOperator(operator)) {
+          // É um operador válido! Tratar como where('column', 'op'). O valor é implicitamente null.
+          finalOperator = operator;
+          finalValue = null;
+          // A validação posterior (invalidOperatorAndValue) tratará se op + null é válido
+        } else {
+          // NÃO é um operador válido. Tratar como where('column', 'value').
+          finalOperator = '='; // Operador implícito
+          finalValue = operator; // O segundo argumento era o valor
+        }
+      }
+    } else {
+      // Cenário where('column') - Segundo argumento (operator) é null.
+      // Tratar como where('column', '=', null), que será pego pela lógica de null abaixo.
+      finalOperator = '=';
+      finalValue = null;
+    }
+    // --- Fim da Lógica Refinada ---
+
+    // Caso 3: Valor final é Função (whereSub)
+    if (finalValue is Function(QueryBuilder)) {
+      // É crucial que 'finalOperator' seja um operador válido aqui.
+      // A lógica acima deve garantir isso ou ter lançado exceção.
+      // Se finalOperator for nulo aqui, algo está errado, usar '=' como fallback seguro.
+      return this.whereSub(column, finalOperator, finalValue, boolean); //?? '='
+    }
+
+    // Caso 4: Valor final é null (whereNull / whereNotNull)
+    if (finalValue == null) {
+      bool not = (finalOperator == '!=' || finalOperator == '<>');
+      if (finalOperator == '=' || finalOperator == '==' || not) {
+        return this.whereNull(column, boolean, not);
+      }
+      // Se não for um operador de (in)igualdade, a validação abaixo DEVE falhar.
+    }
+
+    // Validação final: Verifica combinações ilegais
+    if (this.invalidOperatorAndValue(finalOperator, finalValue)) {
+      // Se esta validação falhar, significa que a lógica acima não tratou
+      // corretamente ou o usuário forneceu uma combinação inválida (ex: '>', null)
+      throw InvalidArgumentException(
+          'Illegal operator "$finalOperator" and value combination ($finalValue). Operator must be "=" or "!=" or "<>" if value is null.');
+    }
+
+    // Caso 5: Cláusula WHERE básica
+    final type = 'Basic';
+    this.wheresProp.add({
+      'type': type,
+      'column': column,
+      'operator': finalOperator, // Definitivamente não nulo aqui
+      'value': finalValue,
+      'boolean': boolean
+    });
+
+    if (!(finalValue is QueryExpression)) {
+      this.addBinding(finalValue, 'where');
+    }
+
+    return this;
+  }
+
+  // --- Manter orWhereFlex, isValidOperator, invalidOperatorAndValue como estão ---
+  QueryBuilder orWhereFlex(dynamic column, [dynamic operator, dynamic value]) {
+    return this.whereFlex(column, operator, value, 'or');
+  }
+
+  bool isValidOperator(String? op) {
+    if (op == null) return false;
+    final allOperators = {..._operators, ...grammar.getOperators()}
+        .map((o) => o.toString().toLowerCase())
+        .toSet();
+    return allOperators.contains(op.toLowerCase());
+  }
+
+  bool invalidOperatorAndValue(String? operator, dynamic value) {
+    if (value == null) {
+      bool isValidNullOp = (operator == '=' ||
+          operator == '==' ||
+          operator == '!=' ||
+          operator == '<>');
+      return !isValidNullOp;
+    }
+    return false;
+  }
+
+  QueryBuilder whereSubQueryValue(String column, Function(QueryBuilder) closure,
+      [String boolean = 'and']) {
+    return this.where(column, '=', closure, boolean);
   }
 
   /**
@@ -830,19 +1023,6 @@ class QueryBuilder {
         }
       }
     }, boolean);
-  }
-
-  ///
-  /// Determine if the given operator and value combination is legal.
-  ///
-  /// @param  String  $operator
-  /// @param  mixed  $value
-  /// @return bool
-  ///
-  bool invalidOperatorAndValue(String operator, dynamic value) {
-    var isOperator = Utils.in_array(operator, this._operators);
-
-    return isOperator && operator != '=' && Utils.is_null(value);
   }
 
   ///
@@ -981,7 +1161,7 @@ class QueryBuilder {
   /// @param  \Closure $callback
   /// @param  String   $boolean
   /// @return $this
-  ///
+  /// Original
   QueryBuilder whereSub(
       String column, String? operator, Function callback, String boolean) {
     var type = 'Sub';
@@ -1003,6 +1183,27 @@ class QueryBuilder {
 
     this.addBinding(query.getBindings(), 'where');
 
+    return this;
+  }
+
+  QueryBuilder whereSubFlex(
+      String column, String? operator, Function callback, String boolean) {
+    final type = 'Sub';
+    final query = this.forSubQuery(); // Use forSubQuery para consistência
+    callback(query);
+
+    // Garante um operador padrão se for nulo, embora a lógica anterior deva prevenir isso
+    operator ??= '=';
+
+    this.wheresProp.add({
+      'type': type,
+      'column': column,
+      'operator': operator, // Operador final determinado
+      'query': query,
+      'boolean': boolean
+    });
+
+    this.addBinding(query.getBindings(), 'where');
     return this;
   }
 
@@ -1077,7 +1278,7 @@ class QueryBuilder {
   QueryBuilder whereIn(String column, dynamic values,
       [String boolean = 'and', bool not = false]) {
     var type = not ? 'NotIn' : 'In';
-    //TODO check isso if (values is static) {
+
     //static se refere ao instancia da propria class
     if (values is QueryBuilder) {
       return this.whereInExistingQuery(column, values, boolean, not);
@@ -1147,12 +1348,12 @@ class QueryBuilder {
   ///
   QueryBuilder whereInSub(
       String column, Function callback, String boolean, bool not) {
-    var type = not ? 'NotInSub' : 'InSub';
+    final type = not ? 'NotInSub' : 'InSub';
 
     // To create the exists sub-select, we will actually create a query and call the
     // provided callback with the query so the developer may set any of the query
     // conditions they want for the in clause, then we'll put it in this array.
-    var query = this.newQuery();
+    final query = this.newQuery();
     callback(query);
 
     this.wheresProp.add(
@@ -1793,13 +1994,13 @@ class QueryBuilder {
   ///
   Future<List<Map<String, dynamic>>> runSelect([int? timeoutInSeconds]) async {
     final sqlStr = this.toSql();
-    //print('QueryGrammar@runSelect sql: $sqlStr');
+
     final bid = this.getBindings();
-    // print('QueryGrammar@runSelect getBindings: $bid');
+
     final com = this.connection;
 
     final results = await com.select(sqlStr, bid, !this.useWritePdoProp);
-    // print('QueryGrammar@runSelect results: $results');
+
     return results;
   }
 
@@ -2507,7 +2708,7 @@ class QueryBuilder {
     for (var entry in this.grammar.compileTruncate(this).entries) {
       final sql = entry.key;
       final bindings = entry.value;
-      
+
       await this.connection.statement(sql, bindings);
     }
   }
@@ -2577,10 +2778,6 @@ class QueryBuilder {
   /// @return array
   ///
   List getBindings() {
-    // return array_flatten(this.bindings);
-
-    //TODO verificar isso
-
     var result = [];
     if (this.bindings['select'] != null) {
       result.addAll(this.bindings['select']);
@@ -2645,7 +2842,6 @@ class QueryBuilder {
     }
 
     if (Utils.is_array(value)) {
-      /// TODO: checar isso pois acho que é array em vez de Map ?
       this.bindings[type] = Utils.array_merge(this.bindings[type], value);
     } else {
       this.bindings[type].add(value);
@@ -2701,6 +2897,58 @@ class QueryBuilder {
   ///
   QueryBuilder useWritePdo() {
     this.useWritePdoProp = true;
+    return this;
+  }
+
+  /// Adiciona um INNER JOIN LATERAL à consulta.
+  ///
+  /// [subquery] pode ser um QueryBuilder, uma Closure (Function) ou uma String SQL bruta.
+  /// [alias] é o alias obrigatório para a subconsulta lateral.
+  /// [onCallback] é uma função que recebe um JoinClause para definir as condições ON.
+  /// Frequentemente para JOIN LATERAL, a condição é `ON TRUE`.
+  QueryBuilder joinLateral(
+      dynamic subquery, String alias, Function(JoinClause) onCallback) {
+    return _addLateralJoin('inner', subquery, alias, onCallback);
+  }
+
+  /// Adiciona um LEFT JOIN LATERAL à consulta.
+  ///
+  /// [subquery] pode ser um QueryBuilder, uma Closure (Function) ou uma String SQL bruta.
+  /// [alias] é o alias obrigatório para a subconsulta lateral.
+  /// [onCallback] é uma função que recebe um JoinClause para definir as condições ON.
+  /// Frequentemente para JOIN LATERAL, a condição é `ON TRUE`.
+  QueryBuilder leftJoinLateral(
+      dynamic subquery, String alias, Function(JoinClause) onCallback) {
+    return _addLateralJoin('left', subquery, alias, onCallback);
+  }
+
+  /// Método auxiliar para adicionar joins laterais.
+  QueryBuilder _addLateralJoin(String type, dynamic subquery, String alias,
+      Function(JoinClause) onCallback) {
+    // Cria a subconsulta e obtém SQL + bindings
+    final res = createSub(subquery);
+
+    final sql = res[0];
+    final bindings = res[1];
+
+    // Cria a expressão para a subconsulta ( "(subconsulta) as alias" )
+    final expression = QueryExpression('($sql) as ${grammar.wrapTable(alias)}');
+
+    // Adiciona os bindings da subconsulta ao tipo 'join'
+    addBinding(bindings, 'join');
+
+    // Cria o JoinClause, marcando como lateral
+    final join = JoinClause(type, expression, this, true);
+
+    // Aplica as condições ON usando o callback fornecido
+    onCallback(join);
+
+    // Adiciona o JoinClause configurado à lista de joins da consulta principal
+    joinsProp.add(join);
+
+    // Adiciona os bindings das cláusulas ON ao tipo 'join'
+    addBinding(join.bindingsLocal, 'join');
+
     return this;
   }
 

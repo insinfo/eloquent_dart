@@ -6,6 +6,11 @@ import 'postgres_pdo.dart';
 class PostgresPDOTransaction extends PDOExecutionContext {
   final PostgreSQLExecutionContext transactionContext;
 
+  @override
+  PDOConfig getConfig() {
+    return super.pdoInstance.config;
+  }
+
   PostgresPDOTransaction(this.transactionContext, PDOInterface pdo) {
     super.pdoInstance = pdo;
   }
@@ -55,4 +60,6 @@ class PostgresPDOTransaction extends PDOExecutionContext {
     final pdoResult = PDOResults(maps, rs.affectedRowCount);
     return pdoResult;
   }
+  
+  
 }

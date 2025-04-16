@@ -151,10 +151,10 @@ class StackZoneSpecification {
       return;
     }
 
-    // TODO(nweiz): Currently this copies a lot of logic from [runZoned]. Just
+    
     // allow [runBinary] to throw instead once issue 18134 is fixed.
     try {
-      // TODO(rnystrom): Is the null-assertion correct here? It is nullable in
+     
       // Zone. Should we check for that here?
       self.parent!.runBinary(_onError!, error, stackChain);
     } on Object catch (newError, newStackTrace) {
@@ -192,7 +192,7 @@ class StackZoneSpecification {
   _Node _createNode([int level = 0]) =>
       _Node(_currentTrace(level + 1), _currentNode);
 
-  // TODO(nweiz): use a more robust way of detecting and tracking errors when
+ 
   // issue 15105 is fixed.
   /// Runs [f] with [_currentNode] set to [node].
   ///

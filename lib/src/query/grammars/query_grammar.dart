@@ -85,15 +85,15 @@ class QueryGrammar extends BaseGrammar {
   ///  @return String
   ///
   String compileSelect(QueryBuilder query) {
-    var queryColumns = query.getColumns();
-    var original = queryColumns != null ? [...queryColumns] : null;
+    final queryColumns = query.getColumns();
+    final original = queryColumns != null ? [...queryColumns] : null;
 
     if (Utils.is_null(query.columnsProp)) {
       query.columnsProp = ['*'];
     }
-    var compiledComps = compileComponents(query);
+    final compiledComps = compileComponents(query);
 
-    var sql = Utils.trim(concatenate(compiledComps));
+    final sql = Utils.trim(concatenate(compiledComps));
 
     query.setColumns(original);
 
@@ -107,8 +107,7 @@ class QueryGrammar extends BaseGrammar {
   ///  @return array Map
   ///
   Map<String, dynamic> compileComponents(QueryBuilder query) {
-    var sql = <String, dynamic>{};
-
+    final sql = <String, dynamic>{};
     for (var component in this.selectComponents) {
       // To compile the query, we'll spin through each component of the query and
       // see if that component exists. If it does we'll just call the compiler
@@ -120,14 +119,12 @@ class QueryGrammar extends BaseGrammar {
       } else if (proP is Map) {
         isProp = proP.isNotEmpty;
       }
-
       if (isProp) {
         final methodName = 'compile' + Utils.ucfirst(component);
         final extraParam = proP;
         sql[component] = callMethod(methodName, [query, extraParam]);
       }
     }
-
     return sql;
   }
 
@@ -180,7 +177,10 @@ class QueryGrammar extends BaseGrammar {
   ///  [table] String|QueryExpression
   ///  `Return` String
   ///
-  String compileFrom(QueryBuilder query, dynamic table) {
+  String? compileFrom(QueryBuilder query, dynamic table) {
+    if (table == null) {
+      return null; // Retorna null se a tabela for nula
+    }
     return 'from ' + this.wrapTable(table);
   }
 

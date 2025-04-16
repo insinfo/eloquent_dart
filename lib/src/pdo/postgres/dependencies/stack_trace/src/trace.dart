@@ -157,7 +157,7 @@ class Trace implements StackTrace {
 
     var frames = lines.take(lines.length - 1).map(Frame.parseVM).toList();
 
-    // TODO(nweiz): Remove this when issue 23614 is fixed.
+  
     if (!lines.last.endsWith('.da')) {
       frames.add(Frame.parseVM(lines.last));
     }
@@ -290,7 +290,7 @@ class Trace implements StackTrace {
         // internal frames. They only ever show up in stack chains and are
         // always surrounded by other traces that are actually useful, so we can
         // just get rid of them.
-        // TODO(nweiz): Get rid of this logic some time after issue 22009 is
+        // 
         // fixed.
         if (!frame.member!.contains('<async>')) return false;
         return frame.line == null;

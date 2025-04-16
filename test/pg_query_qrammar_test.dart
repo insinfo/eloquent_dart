@@ -1,103 +1,12 @@
+// pg_query_qrammar_test.dart
+
+import 'package:eloquent/src/query/processors/postgres_processor.dart';
 import 'package:test/test.dart';
 import 'package:eloquent/eloquent.dart';
-
-class FakeConnection implements ConnectionInterface {
-  @override
-  QueryBuilder table(String table) {
-    throw UnimplementedError();
-  }
-
-  @override
-  QueryExpression raw(value) {
-    throw UnimplementedError();
-  }
-
-  @override
-  Future<Map<String, dynamic>?> selectOne(String query,
-      [List bindings = const [], int? timeoutInSeconds]) {
-    throw UnimplementedError();
-  }
-
-  @override
-  Future<List<Map<String, dynamic>>> select(String query,
-      [List bindings = const [],
-      bool useReadPdo = true,
-      int? timeoutInSeconds]) {
-    throw UnimplementedError();
-  }
-
-  @override
-  Future<PDOResults> insert(String query,
-      [List bindings = const [], int? timeoutInSeconds]) {
-    throw UnimplementedError();
-  }
-
-  @override
-  Future<dynamic> update(String query,
-      [List bindings = const [], int? timeoutInSeconds]) {
-    throw UnimplementedError();
-  }
-
-  @override
-  Future<int> delete(String query,
-      [List bindings = const [], int? timeoutInSeconds]) {
-    throw UnimplementedError();
-  }
-
-  @override
-  Future<PDOResults> statement(String query,
-      [List bindings = const [], int? timeoutInSeconds]) {
-    throw UnimplementedError();
-  }
-
-  @override
-  Future<int> affectingStatement(String query,
-      [List bindings = const [], int? timeoutInSeconds]) {
-    throw UnimplementedError();
-  }
-
-  @override
-  Future<int> unprepared(String query, int? timeoutInSeconds) {
-    throw UnimplementedError();
-  }
-
-  @override
-  dynamic prepareBindings(List bindings) {
-    throw UnimplementedError();
-  }
-
-  @override
-  Future<dynamic> transaction(Future<dynamic> Function(Connection ctx) callback,
-      [int? timeoutInSeconds]) {
-    throw UnimplementedError();
-  }
-
-  @override
-  int transactionLevel() {
-    throw UnimplementedError();
-  }
-
-  @override
-  Future<dynamic> pretend(Function callback) {
-    throw UnimplementedError();
-  }
-}
-
-class FakeQueryBuilder extends QueryBuilder {
-  FakeQueryBuilder({List<String>? columns, String? from})
-      : super(FakeConnection(), QueryPostgresGrammar(), Processor()) {
-    columnsProp = columns;
-    fromProp = from;
-  }
-
-  @override
-  List<dynamic>? getColumns() {
-    return columnsProp;
-  }
-}
+import 'helper.dart';
 
 void main() {
-  late QueryGrammar grammar;
+  late QueryPostgresGrammar grammar;
 
   setUp(() {
     grammar = QueryPostgresGrammar();
@@ -292,28 +201,40 @@ void main() {
 
     // Teste com operador '='
     qb.whereTime('start_time', '=', '10:00:00');
-    expect(grammar.compileSelect(qb), contains('select * from "events" where extract(time from "start_time") = ?'));
+    expect(
+        grammar.compileSelect(qb),
+        contains(
+            'select * from "events" where extract(time from "start_time") = ?'));
 
     // Teste com operador '!='
     qb = QueryBuilder(FakeConnection(), grammar, Processor());
     qb.select(['*']);
     qb.from('events');
     qb.whereTime('start_time', '!=', '10:00:00');
-    expect(grammar.compileSelect(qb), contains('select * from "events" where extract(time from "start_time") != ?'));
+    expect(
+        grammar.compileSelect(qb),
+        contains(
+            'select * from "events" where extract(time from "start_time") != ?'));
 
     // Teste com operador '>'
     qb = QueryBuilder(FakeConnection(), grammar, Processor());
     qb.select(['*']);
     qb.from('events');
     qb.whereTime('start_time', '>', '10:00:00');
-    expect(grammar.compileSelect(qb), contains('select * from "events" where extract(time from "start_time") > ?'));
+    expect(
+        grammar.compileSelect(qb),
+        contains(
+            'select * from "events" where extract(time from "start_time") > ?'));
 
     // Teste com operador '<'
     qb = QueryBuilder(FakeConnection(), grammar, Processor());
     qb.select(['*']);
     qb.from('events');
     qb.whereTime('start_time', '<', '10:00:00');
-    expect(grammar.compileSelect(qb), contains('select * from "events" where extract(time from "start_time") < ?'));
+    expect(
+        grammar.compileSelect(qb),
+        contains(
+            'select * from "events" where extract(time from "start_time") < ?'));
   });
 
   test('compileSelect - sem from', () {
@@ -543,5 +464,170 @@ void main() {
     final sql = grammar.compileSelect(qb);
     expect(sql,
         contains('for update')); // Adapte para a sintaxe do seu banco de dados
+  });
+  //--------- Novos Testes para JOIN LATERAL ---------
+
+  test('compileSelect - joinLateral com subquery QueryBuilder e ON TRUE', () {
+    final qb = QueryBuilder(FakeConnection(), grammar, Processor());
+    final sub = QueryBuilder(FakeConnection(), grammar, Processor())
+        .select(['p.title'])
+        .from('posts as p')
+        .whereColumn('p.user_id', '=', 'u.id') // Correlação
+        .orderBy('p.created_at', 'desc')
+        .limit(1);
+
+    qb.select(['u.name', 'lp.title']).from('users as u').joinLateral(sub, 'lp',
+            (JoinClause join) {
+          join.onTrue(); // Condição ON TRUE comum para lateral
+        });
+
+    final sql = qb.toSql();
+    expect(
+        sql,
+        equalsIgnoringCase(
+            'select "u"."name", "lp"."title" from "users" as "u" inner join LATERAL (select "p"."title" from "posts" as "p" where "p"."user_id" = "u"."id" order by "p"."created_at" desc limit 1) as "lp" on TRUE'));
+    expect(qb.getBindings(), isEmpty); // Nenhum binding neste exemplo
+  });
+
+  test('compileSelect - leftJoinLateral com subquery QueryBuilder e ON TRUE',
+      () {
+    final qb = QueryBuilder(FakeConnection(), grammar, PostgresProcessor());
+    final sub = QueryBuilder(FakeConnection(), grammar, PostgresProcessor())
+        .select(['p.title'])
+        .from('posts as p')
+        .whereColumn('p.user_id', '=', 'u.id')
+        .orderBy('p.created_at', 'desc')
+        .limit(1);
+
+    qb
+        .select(['u.name', 'lp.title'])
+        .from('users as u')
+        .leftJoinLateral(sub, 'lp', (JoinClause join) {
+          join.onTrue();
+        });
+
+    final sql = qb.toSql();
+    expect(
+        sql,
+        equalsIgnoringCase(
+            'select "u"."name", "lp"."title" from "users" as "u" left join LATERAL (select "p"."title" from "posts" as "p" where "p"."user_id" = "u"."id" order by "p"."created_at" desc limit 1) as "lp" on TRUE'));
+    expect(qb.getBindings(), isEmpty);
+  });
+
+  test('compileSelect - joinLateral com Closure e ON TRUE', () {
+    final qb = QueryBuilder(FakeConnection(), grammar, PostgresProcessor());
+
+    qb.select(['u.name', 'lp.title']).from('users as u').joinLateral(
+        (QueryBuilder sub) {
+          sub
+              .select(['p.title'])
+              .from('posts as p')
+              .whereColumn('p.user_id', '=', 'u.id')
+              .orderBy('p.created_at', 'desc')
+              .limit(1);
+        },
+        'lp',
+        (JoinClause join) {
+          join.onTrue();
+        });
+
+    final sql = qb.toSql();
+    expect(
+        sql,
+        equalsIgnoringCase(
+            'select "u"."name", "lp"."title" from "users" as "u" inner join LATERAL (select "p"."title" from "posts" as "p" where "p"."user_id" = "u"."id" order by "p"."created_at" desc limit 1) as "lp" on TRUE'));
+    expect(qb.getBindings(), isEmpty);
+  });
+
+  test('compileSelect - joinLateral com subquery String e ON TRUE', () {
+    final qb = QueryBuilder(FakeConnection(), grammar, PostgresProcessor());
+    const subSql =
+        'select p.title from posts as p where p.user_id = u.id order by p.created_at desc limit 1';
+
+    qb
+        .select(['u.name', 'lp.title'])
+        .from('users as u')
+        .joinLateral(QueryExpression(subSql), 'lp', (JoinClause join) {
+          // Use QueryExpression para SQL bruto
+          join.onTrue();
+        });
+
+    final sql = qb.toSql();
+    // A gramática envolve o alias, mas não o SQL bruto da subconsulta
+    expect(
+        sql,
+        equalsIgnoringCase(
+            'select "u"."name", "lp"."title" from "users" as "u" inner join LATERAL ($subSql) as "lp" on TRUE'));
+    expect(qb.getBindings(), isEmpty);
+  });
+
+  test('compileSelect - joinLateral com condição ON específica', () {
+    final qb = QueryBuilder(
+        FakeConnection(), QueryPostgresGrammar(), PostgresProcessor());
+    // Exemplo menos comum, mas testa a sintaxe ON
+    final sub = QueryBuilder(
+            FakeConnection(), QueryPostgresGrammar(), PostgresProcessor())
+        .select(['t.tag_name'])
+        .from('tags as t')
+        // Use 'where' para comparar coluna com valor
+        .where('t.popularity', '>', 100);
+
+    qb
+        .select(['p.title', 'pt.tag_name'])
+        .from('posts as p')
+        .joinLateral(sub, 'pt', (JoinClause join) {
+          // Condição que depende da tabela lateralizada
+          join.on('pt.tag_name', '=', 'p.primary_tag');
+        });
+
+    final sql = qb.toSql();
+    expect(
+        sql,
+        equalsIgnoringCase(
+            'select "p"."title", "pt"."tag_name" from "posts" as "p" inner join LATERAL (select "t"."tag_name" from "tags" as "t" where "t"."popularity" > ?) as "pt" on "pt"."tag_name" = "p"."primary_tag"'));
+    expect(qb.getBindings(), equals([100])); // Binding da subconsulta
+  });
+
+  test('compileSelect - joinLateral com Bindings na Subconsulta', () {
+    final qb = QueryBuilder(FakeConnection(), grammar, PostgresProcessor());
+    final sub = QueryBuilder(FakeConnection(), grammar, PostgresProcessor())
+        .select(['p.title'])
+        .from('posts as p')
+        .whereColumn('p.user_id', '=', 'u.id')
+        .where('p.status', '=', 'published') // Adiciona binding
+        .orderBy('p.created_at', 'desc')
+        .limit(1);
+
+    qb.select(['u.name', 'lp.title']).from('users as u').joinLateral(sub, 'lp',
+            (JoinClause join) {
+          join.onTrue();
+        });
+
+    final sql = qb.toSql();
+    expect(
+        sql, contains('where "p"."user_id" = "u"."id" and "p"."status" = ?'));
+    // O binding da subconsulta deve ser adicionado aos bindings gerais (na parte 'join')
+    expect(qb.getBindings(), equals(['published']));
+  });
+
+  test('compileSelect - joinLateral com Bindings na cláusula ON', () {
+    final qb = QueryBuilder(FakeConnection(), grammar, PostgresProcessor());
+    // Exemplo artificial para testar binding no ON
+    final sub = QueryBuilder(FakeConnection(), grammar, PostgresProcessor())
+        .select([QueryExpression('1 as one')]); // Subconsulta simples
+
+    qb.select(['u.name']).from('users as u').joinLateral(sub, 'const',
+            (JoinClause join) {
+          // Usa 'where' dentro do join para adicionar binding
+          join.where('u.status', '=', 'active');
+        });
+
+    final sql = qb.toSql();
+    expect(
+        sql,
+        contains(
+            'inner join LATERAL (select 1 as one) as "const" on "u"."status" = ?'));
+    // O binding da cláusula ON (via where) deve ser adicionado aos bindings gerais
+    expect(qb.getBindings(), equals(['active']));
   });
 }

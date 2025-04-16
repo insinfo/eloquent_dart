@@ -21,7 +21,8 @@ dependencies:
   #postgres_fork: 
     #path: ../postgresql-fork 
 
-  mysql_client: ^0.0.27    
+  #mysql_client: ^0.0.27    
+  mysql_dart: ^1.0.0
   # postgres v3 
   postgres: ^3.5.4
   #postgres: 

@@ -1,3 +1,4 @@
+import 'package:eloquent/src/pdo/core/pdo_config.dart';
 import 'package:eloquent/src/pdo/core/pdo_execution_context.dart';
 import 'package:eloquent/src/pdo/core/pdo_interface.dart';
 import 'package:eloquent/src/pdo/core/pdo_result.dart';
@@ -6,6 +7,11 @@ import 'postgres_v3_pdo.dart';
 
 class PostgresV3PDOTransaction extends PDOExecutionContext {
   final TxSession transactionContext;
+
+  @override
+  PDOConfig getConfig() {
+    return super.pdoInstance.config;
+  }
 
   PostgresV3PDOTransaction(this.transactionContext, PDOInterface pdo) {
     super.pdoInstance = pdo;

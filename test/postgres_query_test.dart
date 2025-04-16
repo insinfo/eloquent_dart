@@ -1,10 +1,12 @@
+//postgres_query_test.dart
 import 'package:eloquent/eloquent.dart';
-
 import 'package:test/test.dart';
+import 'helper.dart';
 
 /// test PostgresPDO
 /// config['driver_implementation'] == 'postgres'
 /// run: dart test .\test\postgres_query_test.dart -j 1 --chain-stack-traces --name 'update simple'
+
 void main() {
   late Connection db;
   setUp(() async {
@@ -53,6 +55,46 @@ void main() {
 
     await db.execute(
         '''insert into "temp_location" ("id", "city", "street","id_people") values (1, 'Niteroi', 'Rua B',1)''');
+
+    // Criação das tabelas conforme DDL fornecido
+    await db.execute('''
+      CREATE TABLE "myschema"."organograma" (
+        "id" SERIAL PRIMARY KEY,
+        "id_pai" int4,
+        "ativo" bool NOT NULL,
+        CONSTRAINT "fk_organograma_pai" FOREIGN KEY ("id_pai") REFERENCES "myschema"."organograma" ("id") ON DELETE NO ACTION ON UPDATE NO ACTION
+      );
+    ''');
+
+    await db.execute('''
+       CREATE TABLE "myschema"."organograma_historico" (
+         "id" SERIAL PRIMARY KEY,
+         "id_pai" int4,
+         "id_organograma" int4 NOT NULL,
+         "data_inicio" date NOT NULL,
+         "sigla" varchar(32),
+         "nome" varchar(128),
+         "tipo" varchar(128),
+         "sub_tipo" varchar(128),
+         "ultimo" bool NOT NULL,
+         "secretaria" bool DEFAULT false,
+         "oficial" bool NOT NULL,
+         "recebe_processo" int4 NOT NULL,
+         "protocolo" bool,
+         "ano_exercicio" char(4),
+         "cod_orgao" int4,
+         "cod_unidade" int4,
+         "cod_departamento" int4,
+         "cod_setor" int4,
+         "id_setor" int4,
+         CONSTRAINT "fk_organograma_historico_org" FOREIGN KEY ("id_organograma") REFERENCES "myschema"."organograma" ("id") ON DELETE NO ACTION ON UPDATE NO ACTION,
+         CONSTRAINT "fk_organograma_historico_pai" FOREIGN KEY ("id_pai") REFERENCES "myschema"."organograma" ("id") ON DELETE NO ACTION ON UPDATE NO ACTION,
+         CONSTRAINT "id_organograma_cannot_be_equal_to_id_pai_chk" CHECK (id_organograma <> id_pai)
+       );
+     ''');
+
+    await db.execute(
+        'CREATE INDEX "idx_organograma_historico_id_organograma" ON "myschema"."organograma_historico" USING btree ("id_organograma");');
   });
   group('query', () {
     test('exec command simple', () async {
@@ -252,7 +294,6 @@ void main() {
           .select()
           .whereDate('created_at', '=', DateTime(2024, 07, 20))
           .get();
-      //print('resDate $resDate');
 
       expect(resDate.length, greaterThanOrEqualTo(1));
 
@@ -1175,4 +1216,145 @@ void main() {
       });
     });
   });
+  // --- NOVO TESTE ISOLADO PARA JOIN LATERAL ---
+  test('select com joinLateral para buscar histórico do pai', () async {
+    // 1. Inserir dados de teste para organograma e histórico
+    await db.execute('DELETE FROM organograma_historico;');
+    await db.execute('DELETE FROM organograma;');
+
+    // Criar Pai (id 1)
+    await db
+        .table('organograma')
+        .insertGetId({'id_pai': null, 'ativo': true}); // id = 1
+    await db.table('organograma_historico').insert({
+      'id_organograma': 1,
+      'id_pai': null,
+      'data_inicio': DateTime(2023, 1, 1),
+      'nome': 'Pai V1',
+      'ultimo': false,
+      'oficial': true,
+      'recebe_processo': 1
+    });
+    await db.table('organograma_historico').insert({
+      'id_organograma': 1,
+      'id_pai': null,
+      'data_inicio': DateTime(2023, 6, 1),
+      'nome': 'Pai V2',
+      'ultimo': true,
+      'oficial': true,
+      'recebe_processo': 1
+    }); // Último do pai
+
+    // Criar Filho (id 2), filho do Pai (id 1)
+    await db
+        .table('organograma')
+        .insertGetId({'id_pai': 1, 'ativo': true}); // id = 2
+    // Histórico do Filho
+    await db.table('organograma_historico').insert({
+      'id_organograma': 2,
+      'id_pai': 1,
+      'data_inicio': DateTime(2023, 3, 1),
+      'nome': 'Filho V1',
+      'ultimo': false,
+      'oficial': true,
+      'recebe_processo': 1
+    }); // Pai era V1 nesta data
+    await db.table('organograma_historico').insert({
+      'id_organograma': 2,
+      'id_pai': 1,
+      'data_inicio': DateTime(2023, 8, 1),
+      'nome': 'Filho V2',
+      'ultimo': true,
+      'oficial': true,
+      'recebe_processo': 1
+    }); // Pai era V2 nesta data
+
+    // 2. Construir a query usando QueryBuilder
+    final query = db
+        .table('organograma as o')
+        .selectRaw(
+            'oh.*, o.ativo, ohp.nome AS "nomeOrganogramaPai"') // Usar selectRaw para simplificar
+        .join('organograma_historico as oh', 'oh.id_organograma', '=',
+            QueryExpression('o.id')) // INNER JOIN
+        .leftJoinLateral(
+            // Subconsulta LATERAL para encontrar a data_inicio correta do pai
+            db
+                .table // O QueryBuilder para a subconsulta
+                ('organograma_historico as s')
+                .select([
+                  's.id_organograma',
+                  QueryExpression('max(s.data_inicio) as data_inicio')
+                ])
+                .whereColumn(
+                    's.id_organograma',
+                    '=',
+                    QueryExpression(
+                        'oh.id_pai')) // Correlaciona com o pai do histórico atual (oh)
+                .whereColumn('s.data_inicio', '<=',
+                    QueryExpression('oh.data_inicio')) // Condição de data
+                .groupBy('s.id_organograma'),
+            'temp', // Alias da subconsulta lateral
+            (JoinClause join) {
+          join.onTrue(); // Join LATERAL sempre verdadeiro
+        })
+        .leftJoin('organograma_historico as ohp', (JoinClause join) {
+          // Join final para obter o nome do pai
+          join.on('ohp.id_organograma', '=',
+              QueryExpression('temp.id_organograma'));
+          join.on('ohp.data_inicio', '=', QueryExpression('temp.data_inicio'));
+        })
+        .where('o.id', '=', 2) // Filtrar pelo ID do filho
+        .orderBy('oh.data_inicio', 'desc'); // Ordenar pelo histórico do filho
+
+    // 3. Verificar o SQL gerado (comparação aproximada)
+    final generatedSql = query.toSql();
+
+    // Verificar partes cruciais do SQL gerado
+    expect(generatedSql, containsIgnoringCase('from "organograma" as "o"'));
+    expect(
+        generatedSql,
+        containsIgnoringCase(
+            'inner join "organograma_historico" as "oh" on "oh"."id_organograma" = o.id'));
+    expect(generatedSql, containsIgnoringCase('left join LATERAL'));
+    expect(
+        generatedSql,
+        containsIgnoringCase(
+            'select "s"."id_organograma", max(s.data_inicio) as data_inicio from "organograma_historico" as "s"'));
+    expect(
+        generatedSql,
+        containsIgnoringCase(
+            'where "s"."id_organograma" = oh.id_pai and "s"."data_inicio" <= oh.data_inicio'));
+    expect(generatedSql, containsIgnoringCase('group by "s"."id_organograma"'));
+    expect(generatedSql, containsIgnoringCase(') as "temp" on TRUE'));
+    expect(
+        generatedSql,
+        containsIgnoringCase(
+            'left join "organograma_historico" as "ohp" on "ohp"."id_organograma" = temp.id_organograma and "ohp"."data_inicio" = temp.data_inicio'));
+    expect(generatedSql, containsIgnoringCase('where "o"."id" = ?'));
+    expect(
+        generatedSql, containsIgnoringCase('order by "oh"."data_inicio" desc'));
+
+    // 4. Verificar os bindings
+    expect(query.getBindings(), orderedEquals([2])); // Apenas o ID do filho
+
+    // 5. Executar a query e verificar os resultados
+    final results = await query.get();
+
+    // Deve retornar 2 registros do histórico do filho (id=2)
+    expect(results, hasLength(2));
+
+    // Verificar o registro mais recente do filho (Filho V2, data 2023-08-01)
+    // O pai nessa data era 'Pai V2' (data_inicio 2023-06-01)
+    final filhoV2 = results.firstWhere((r) => r['nome'] == 'Filho V2');
+    expect(filhoV2['nomeOrganogramaPai'], equals('Pai V2'));
+    expect(filhoV2['ativo'], isTrue);
+
+    // Verificar o registro anterior do filho (Filho V1, data 2023-03-01)
+    // O pai nessa data era 'Pai V1' (data_inicio 2023-01-01)
+    final filhoV1 = results.firstWhere((r) => r['nome'] == 'Filho V1');
+    expect(filhoV1['nomeOrganogramaPai'], equals('Pai V1'));
+    expect(filhoV1['ativo'], isTrue);
+  });
+  // --- Fim do novo teste ---
+  //end
 }

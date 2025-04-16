@@ -1,4 +1,5 @@
 import 'package:eloquent/eloquent.dart';
+import 'package:eloquent/src/schema/schema_builder.dart';
 
 import 'container/container.dart';
 
@@ -49,7 +50,6 @@ class DatabaseManager implements ConnectionResolverInterface {
   Future<Connection> connection([String? nameP]) async {
     var re = this.parseConnectionName(nameP);
 
-
     var name = re[0];
     var type = re[1];
     // If we haven't created this connection, we'll create it based on the config
@@ -65,6 +65,17 @@ class DatabaseManager implements ConnectionResolverInterface {
     }
 
     return this.connectionsProp[name];
+  }
+
+  /// Get a schema builder instance for a connection.
+  ///
+  /// [connectionName] O nome da conexão (opcional, usa default se null).
+  /// Retorna um Future<SchemaBuilder>.
+  Future<SchemaBuilder> schema([String? connectionName]) async {
+    // 1. Resolve a conexão (espera que retorne uma Connection concreta)
+    final Connection resolvedConnection = await connection(connectionName);
+    // 2. Obtém o SchemaBuilder a partir da conexão resolvida
+    return resolvedConnection.getSchemaBuilder();
   }
 
   ///
@@ -84,12 +95,12 @@ class DatabaseManager implements ConnectionResolverInterface {
   ///
   /// Disconnect from the given database and remove from local cache.
   ///
-  /// [name] Connection name  
+  /// [name] Connection name
   /// @return void
   ///
   Future<void> purge([String? name]) async {
     await this.disconnect(name);
-    this.connectionsProp.remove(name);    
+    this.connectionsProp.remove(name);
   }
 
   ///
@@ -100,7 +111,7 @@ class DatabaseManager implements ConnectionResolverInterface {
   ///
   Future<void> disconnect([String? name]) async {
     name = name ?? this.getDefaultConnection();
-   
+
     if (Utils.isset(this.connectionsProp[name])) {
       await this.connectionsProp[name].disconnect();
     }

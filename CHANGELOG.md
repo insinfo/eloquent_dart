@@ -97,6 +97,7 @@ final manager = Manager();
 - add option to decode timestamp without timezone and date as local DateTime and decode timestamp with timezone respecting the timezone defined in the connection for driver_implementation postgres
 
 - update postgres_v3 to  ^3.5.4 With that dependency, upgraded minimum SDK to 3.4
+- change mysql_client to mysql_dart ^1.0.0
 
 ```dart
  final manager = Manager();

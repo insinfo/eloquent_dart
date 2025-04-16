@@ -1,7 +1,6 @@
-import 'package:eloquent/src/pdo/core/pdo_interface.dart';
+import 'pdo_config.dart';
+import 'pdo_interface.dart';
 import 'pdo_result.dart';
-
-
 
 abstract class PDOExecutionContext {
   late PDOInterface pdoInstance;
@@ -10,4 +9,6 @@ abstract class PDOExecutionContext {
   Future<int> execute(String statement, [int? timeoutInSeconds]);
   Future<PDOResults> query(String query,
       [dynamic params, int? timeoutInSeconds]);
+
+  PDOConfig getConfig();
 }

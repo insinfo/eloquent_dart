@@ -1,991 +1,678 @@
 import 'package:eloquent/eloquent.dart';
+import 'package:meta/meta.dart';
+import 'dart:async';
 
-/// namespace Illuminate\Database\Schema;
+/// Representa um blueprint para definir ou modificar uma tabela no schema.
+/// Mapeia a funcionalidade da classe Blueprint do Laravel/Illuminate.
 class Blueprint {
-  ///
-  /// The table the blueprint describes.
-  ///
-  /// @var string
-  ///
-  String? _table;
+  /// O nome da tabela que o blueprint descreve.
+  final String _table;
 
-  ///
-  /// The columns that should be added to the table.
-  ///
-  /// @var array
-  ///
-  List _columns = [];
+  /// As colunas que devem ser adicionadas ou modificadas na tabela.
+  final List<Fluent> _columns = [];
 
-  ///
-  /// The commands that should be run for the table.
-  ///
-  /// @var array
-  ///
-  List<Fluent> _commands = [];
+  /// Os comandos (ações) que devem ser executados na tabela.
+  final List<Fluent> _commands = [];
 
-  ///
-  /// The storage engine that should be used for the table.
-  ///
-  /// @var string
-  ///
-  String? engine;
+  // --- Variáveis de Configuração da Tabela (Renomeadas) ---
+  /// O storage engine a ser usado (ex: InnoDB). Acessado pela Gramática.
+  String? tableEngine;
 
-  ///
-  /// The default character set that should be used for the table.
-  ///
-  String? charset;
+  /// O character set padrão para a tabela. Acessado pela Gramática.
+  String? tableCharset;
 
-  ///
-  /// The collation that should be used for the table.
-  ///
-  String? collation;
+  /// A collation padrão para a tabela. Acessado pela Gramática.
+  String? tableCollation;
+  // --- Fim ---
 
-  ///
-  /// Whether to make the table temporary.
-  ///
-  /// @var bool
-  ///
+  /// Indica se a tabela deve ser temporária.
   bool temporaryV = false;
 
-  ///
-  /// Create a new schema blueprint.
-  ///
-  /// @param  string  $table
-  /// @param  \Closure|null  $callback
-  /// @return void
-  ///
-  Blueprint(String tableP, [Function? callback]) {
-    _table = tableP;
-
-    if (!Utils.is_null(callback)) {
-      callback!(this);
+  /// Cria uma nova instância de Blueprint.
+  Blueprint(String tableP, [Function(Blueprint)? callback]) : _table = tableP {
+    if (callback != null) {
+      callback(this);
     }
   }
 
-  ///
-  /// Execute the blueprint against the database.
-  ///
-  /// @param  \Illuminate\Database\Connection  $connection
-  /// @param  \Illuminate\Database\Schema\Grammars\Grammar $grammar
-  /// @return void
-  ///
-  void build(Connection connection, SchemaGrammar grammar) {
-    for (var statement in toSql(connection, grammar)) {
-      connection.statement(statement);
+  /// Executa o blueprint contra a conexão do banco de dados.
+  Future<void> build(Connection connection, SchemaGrammar grammar) async {
+    final statements = toSql(connection, grammar);
+    for (final statement in statements) {
+      // Usa `execute` para DDL pois geralmente não retorna linhas.
+      await connection.execute(statement);
     }
   }
 
-  ///
-  /// Get the raw SQL statements for the blueprint.
-  ///
-  /// @param  \Illuminate\Database\Connection  $connection
-  /// @param  \Illuminate\Database\Schema\Grammars\Grammar  $grammar
-  /// @return array
-  ///
-  List toSql(Connection connection, SchemaGrammar grammar) {
+  /// Gera as instruções SQL para este blueprint.
+  List<String> toSql(Connection connection, SchemaGrammar grammar) {
     addImpliedCommands();
 
-    // var statements = [];
-    // Each type of command has a corresponding compiler function on the schema
-    // grammar which is used to build the necessary SQL statements to build
-    // the blueprint element, so we'll just call that compilers function.
-    // Cada tipo de comando tem uma função de compilação correspondente no esquema
-    // gramática que é usada para construir as instruções SQL necessárias para construir
-    // o elemento blueprint, então vamos chamar essa função de compiladores.
-    //for (var command in _commands) {
-    //  var method = 'compile' + Utils.ucfirst(command['name']);
+    final statements = <String>[];
+    for (final command in _commands) {
+      final commandName = command['name'] as String;
+      final method = 'compile${Utils.ucfirst(commandName)}';
 
-    // if (Utils.method_exists(grammar, method)) {
-    //   var sql =
-    //       Utils.call_method(grammar, method, [this, command, connection]);
-    //   if (!Utils.is_null(sql)) {
-    //     statements = Utils.array_merge(statements, sql as List);
-    //   }
-    // }
-    //}
-    // return statements;
-    throw UnimplementedError();
+      List<String>? sql;
+      try {
+        // Chama o método correspondente na gramática
+        switch (method) {
+          case 'compileCreate':
+            sql = grammar.compileCreate(this, command, connection);
+            break;
+          case 'compileAdd':
+            sql = grammar.compileAdd(this, command);
+            break;
+          case 'compilePrimary':
+            sql = grammar.compilePrimary(this, command);
+            break;
+          case 'compileUnique':
+            sql = grammar.compileUnique(this, command);
+            break;
+          case 'compileIndex':
+            sql = grammar.compileIndex(this, command);
+            break;
+          case 'compileSpatialIndex':
+            sql = grammar.compileSpatialIndex(this, command);
+            break;
+          case 'compileForeign':
+            sql = grammar.compileForeign(this, command);
+            break;
+          case 'compileDrop':
+            sql = grammar.compileDrop(this, command);
+            break;
+          case 'compileDropIfExists':
+            sql = grammar.compileDropIfExists(this, command);
+            break;
+          case 'compileDropColumn':
+            sql = grammar.compileDropColumn(this, command);
+            break;
+          case 'compileDropPrimary':
+            sql = grammar.compileDropPrimary(this, command);
+            break;
+          case 'compileDropUnique':
+            sql = grammar.compileDropUnique(this, command);
+            break;
+          case 'compileDropIndex':
+            sql = grammar.compileDropIndex(this, command);
+            break;
+          case 'compileDropSpatialIndex':
+            sql = grammar.compileDropSpatialIndex(this, command);
+            break;
+          case 'compileDropForeign':
+            sql = grammar.compileDropForeign(this, command);
+            break;
+          case 'compileRename':
+            sql = grammar.compileRename(this, command);
+            break;
+          case 'compileRenameIndex':
+            sql = grammar.compileRenameIndex(this, command);
+            break;
+          case 'compileRenameColumn':
+            sql = grammar.compileRenameColumn(this, command, connection);
+            break;
+          case 'compileChange':
+            sql = grammar.compileChange(this, command, connection);
+            break;
+          // Adicionar compileDropRememberToken se necessário
+          default:
+            print(
+                "Warning: Unknown command type '$commandName' in Blueprint.toSql");
+        }
+      } catch (e) {
+        // Captura erros (especialmente UnimplementedError de gramáticas)
+        print("Error compiling command '$commandName': $e");
+      }
+
+      if (sql != null && sql.isNotEmpty) {
+        statements.addAll(sql);
+      }
+    }
+    return statements;
   }
 
-  ///
-  /// Add the commands that are implied by the blueprint.
-  ///
-  /// @return void
-  ///
+  /// Adiciona comandos implícitos (add, change) se necessário.
+  @protected
   void addImpliedCommands() {
-    if (Utils.count(getAddedColumns()) > 0 && !creating()) {
-      Utils.array_unshift(_commands, createCommand('add'));
+    // Adiciona 'add' se houver colunas novas e não for 'create'
+    if (getAddedColumns().isNotEmpty && !creating()) {
+      if (!_commands.any((cmd) => cmd['name'] == 'add')) {
+        _commands.insert(0, createCommand('add'));
+      }
     }
-
-    if (Utils.count(getChangedColumns()) > 0 && !creating()) {
-      Utils.array_unshift(_commands, createCommand('change'));
+    // Adiciona 'change' se houver colunas modificadas e não for 'create'
+    if (getChangedColumns().isNotEmpty && !creating()) {
+      if (!_commands.any((cmd) => cmd['name'] == 'change')) {
+        _commands.insert(0, createCommand('change'));
+      }
     }
-
+    // Adiciona comandos para índices definidos fluentemente nas colunas
     addFluentIndexes();
   }
 
-  ///
-  /// Add the index commands fluently specified on columns.
-  ///
-  /// @return void
-  ///
+  /// Adiciona comandos para índices definidos fluentemente nas colunas.
+  @protected
   void addFluentIndexes() {
-    // for (var column in columns  ) {
-    //     for (var index in ['primary', 'unique', 'index'] ) {
-    //         // If the index has been specified on the given column, but is simply
-    //         // equal to "true" (boolean), no name has been specified for this
-    //         // index, so we will simply call the index methods without one.
-    //         if ($column->$index == true) {
-    //             this.$index($column->name);
-
-    //             continue 2;
-    //         }
-
-    //         // If the index has been specified on the column and it is something
-    //         // other than boolean true, we will assume a name was provided on
-    //         // the index specification, and pass in the name to the method.
-    //         else if (isset($column->$index)) {
-    //             this.$index($column->name, $column->$index);
-
-    //             continue 2;
-    //         }
-    //     }
-    // }
-  }
-
-  ///
-  /// Determine if the blueprint has a create command.
-  ///
-  /// @return bool
-  ///
-  bool creating() {
-    for (var command in _commands) {
-      if (command['name'] == 'create') {
-        return true;
+    // Itera sobre uma cópia para poder remover atributos do original com segurança
+    for (final column in List.from(_columns)) {
+      void checkAndAddIndex(String indexType, String commandName) {
+        final indexValue = column[indexType];
+        if (indexValue != null) {
+          String? explicitName = (indexValue is String && indexValue.isNotEmpty)
+              ? indexValue
+              : null;
+          // Adiciona o comando de índice de nível de tabela
+          indexCommand(commandName, column['name'], explicitName);
+          // Remove o atributo do Fluent original para não ser processado como modificador
+          column.attributes.remove(indexType);
+        }
       }
+
+      checkAndAddIndex('primary', 'primary');
+      checkAndAddIndex('unique', 'unique');
+      checkAndAddIndex('index', 'index');
+      checkAndAddIndex('spatialIndex', 'spatialIndex');
+    }
+  }
+
+  /// Verifica se existe um comando 'create'.
+  bool creating() => _commands.any((command) => command['name'] == 'create');
+
+  /// Adiciona comando 'create'.
+  Fluent create() => addCommand('create');
+
+  /// Marca a tabela como temporária.
+  void temporary() => temporaryV = true;
+
+  /// Adiciona comando 'drop'.
+  Fluent drop() => addCommand('drop');
+
+  /// Adiciona comando 'dropIfExists'.
+  Fluent dropIfExists() => addCommand('dropIfExists');
+
+  /// Adiciona comando 'dropColumn'. Aceita String ou List<String>.
+  Fluent dropColumn(dynamic columns) {
+    final List<String> columnList;
+    if (columns is String) {
+      columnList = [columns];
+    } else if (columns is List) {
+      columnList = List<String>.from(columns.map((e) => e.toString()));
+    } else {
+      throw ArgumentError('dropColumn expects a String or a List<String>.');
+    }
+    // Adiciona 'dropColumn' com a lista de colunas nos parâmetros
+    return addCommand('dropColumn', {'columns': columnList});
+  }
+
+  /// Adiciona comando 'renameColumn'.
+  Fluent renameColumn(String from, String to) =>
+      addCommand('renameColumn', {'from': from, 'to': to});
+
+  /// Adiciona comando 'dropPrimary'.
+  Fluent dropPrimary([dynamic index]) =>
+      dropIndexCommand('dropPrimary', 'primary', index);
+
+  /// Adiciona comando 'dropUnique'.
+  Fluent dropUnique(String index) =>
+      dropIndexCommand('dropUnique', 'unique', index);
+
+  /// Adiciona comando 'dropIndex'.
+  Fluent dropIndex(String index) =>
+      dropIndexCommand('dropIndex', 'index', index);
+
+  /// Adiciona comando 'dropSpatialIndex'.
+  Fluent dropSpatialIndex(String index) =>
+      dropIndexCommand('dropSpatialIndex', 'spatialIndex', index);
+
+  /// Adiciona comando 'dropForeign'.
+  Fluent dropForeign(String index) =>
+      dropIndexCommand('dropForeign', 'foreign', index);
+
+  /// Adiciona um comando para dropar um índice/constraint.
+  @protected
+  Fluent dropIndexCommand(String command, String type, dynamic index) {
+    List<String>? columns;
+    String? finalIndexName;
+
+    if (index is List) {
+      columns = List<String>.from(index.map((e) => e.toString()));
+      finalIndexName = createIndexName(type, columns);
+    } else if (index is String) {
+      finalIndexName = index;
+    } else if (index == null && command == 'dropPrimary') {
+      finalIndexName = null; // Gramática lida com nome padrão
+    } else if (index != null) {
+      throw ArgumentError(
+          "Index for dropping must be a String, List<String>, or null (for primary).");
+    } else {
+      throw ArgumentError(
+          "Index name is required for dropping $type constraints/indexes.");
     }
 
-    return false;
+    // Adiciona o comando com 'index' (nome) e opcionalmente 'columns'
+    final parameters = <String, dynamic>{'index': finalIndexName};
+    if (columns != null) parameters['columns'] = columns;
+    return addCommand(command, parameters);
   }
 
-  ///
-  /// Indicate that the table needs to be created.
-  ///
-  /// @return \Illuminate\Support\Fluent
-  ///
-  Fluent create() {
-    return addCommand('create');
-  }
+  void dropTimestamps() => dropColumn(['created_at', 'updated_at']);
+  void dropTimestampsTz() => dropTimestamps();
+  void dropSoftDeletes({String column = 'deleted_at'}) => dropColumn(column);
+  void dropSoftDeletesTz({String column = 'deleted_at'}) => dropColumn(column);
 
-  ///
-  /// Indicate that the table needs to be temporary.
-  ///
-  /// @return void
-  ///
-  void temporary() {
-    temporaryV = true;
-  }
+  /// Adiciona comando 'dropRememberToken' (específico).
+  void dropRememberToken() => dropColumn(
+      'remember_token'); // Adiciona comando específico se necessário pela gramática
+  // OU apenas: dropColumn('remember_token'); se a gramática não precisar de comando especial
 
-  ///
-  /// Indicate that the table should be dropped.
-  ///
-  /// @return \Illuminate\Support\Fluent
-  ///
-  Fluent drop() {
-    return addCommand('drop');
-  }
+  Fluent rename(String to) => addCommand('rename', {'to': to});
+  Fluent renameIndex(String from, String to) =>
+      addCommand('renameIndex', {'from': from, 'to': to});
 
-  ///
-  /// Indicate that the table should be dropped if it exists.
-  ///
-  /// @return \Illuminate\Support\Fluent
-  ///
-  Fluent dropIfExists() {
-    return addCommand('dropIfExists');
-  }
+  // --- Métodos de Definição de Índices/Constraints (Nível de Tabela) ---
+  Fluent primary(dynamic columns, [String? name]) =>
+      indexCommand('primary', columns, name);
+  Fluent unique(dynamic columns, [String? name]) =>
+      indexCommand('unique', columns, name);
+  Fluent index(dynamic columns, [String? name]) =>
+      indexCommand('index', columns, name);
+  Fluent spatialIndex(dynamic columns, [String? name]) =>
+      indexCommand('spatialIndex', columns, name);
 
-  ///
-  /// Indicate that the given columns should be dropped.
-  ///
-  /// @param  array|mixed  $columns
-  /// @return \Illuminate\Support\Fluent
-  ///
-  Fluent dropColumn(dynamic columnsP,
-      [dynamic col1, dynamic col2, dynamic col3, dynamic col4, dynamic col5]) {
-    var func_get_args = [];
-    if (col1 != null) {
-      func_get_args.add(col1);
+  /// Adiciona o comando 'foreign', retorna Fluent para encadear .references().on() etc.
+  Fluent foreign(dynamic columns, [String? name]) =>
+      indexCommand('foreign', columns, name);
+
+  @protected
+  Fluent indexCommand(String type, dynamic columns, String? index) {
+    final columnList = (columns is List)
+        ? List<String>.from(columns.map((e) => e.toString()))
+        : [columns.toString()];
+
+    // Gera nome padrão se não fornecido, exceto para foreign
+    index ??= (type != 'foreign') ? createIndexName(type, columnList) : null;
+
+    // Valida se o nome é obrigatório e não foi fornecido/gerado
+    if (index == null && !['foreign', 'primary'].contains(type)) {
+      throw ArgumentError("Index name is required for command type '$type'.");
     }
-    if (col2 != null) {
-      func_get_args.add(col2);
+
+    return addCommand(type, {'index': index, 'columns': columnList});
+  }
+
+  @protected
+  String createIndexName(String type, List<String> columns) {
+    const int maxTotalLength = 63;
+    final tableNamePart = _table.length > maxTotalLength ~/ 3
+        ? _table.substring(0, maxTotalLength ~/ 3)
+        : _table;
+    final columnsPart = columns.join('_');
+    final columnsPartShort = columnsPart.length > maxTotalLength ~/ 3
+        ? columnsPart.substring(0, maxTotalLength ~/ 3)
+        : columnsPart;
+    final index = '${tableNamePart}_${columnsPartShort}_$type'.toLowerCase();
+    String safeIndex = index
+        .replaceAll(RegExp(r'[^a-z0-9_]+'), '_')
+        .replaceAll(RegExp(r'^_+|_+$'), ''); // Remove underscores no início/fim
+    if (safeIndex.isEmpty)
+      safeIndex =
+          '${type}_${columns.hashCode.abs().toRadixString(16)}'; // Fallback se tudo for removido
+    if (safeIndex.length > maxTotalLength) {
+      final hash = safeIndex.hashCode
+          .abs()
+          .toRadixString(16)
+          .padLeft(6, '0')
+          .substring(0, 6);
+      safeIndex = '${safeIndex.substring(0, maxTotalLength - 7)}_$hash';
     }
-    if (col3 != null) {
-      func_get_args.add(col3);
-    }
-    if (col4 != null) {
-      func_get_args.add(col4);
-    }
-    if (col5 != null) {
-      func_get_args.add(col5);
-    }
-    var cols =
-        Utils.is_array(columnsP) ? columnsP : func_get_args; //func_get_args()
-
-    return addCommand('dropColumn', {'columns': cols});
+    return safeIndex;
   }
 
-  ///
-  /// Indicate that the given columns should be renamed.
-  ///
-  /// @param  string  $from
-  /// @param  string  $to
-  /// @return \Illuminate\Support\Fluent
-  ///
-  Fluent renameColumn(String from, String to) {
-    return addCommand('renameColumn', {'from': from, 'to': to});
-  }
-
-  ///
-  /// Indicate that the given primary key should be dropped.
-  ///
-  /// @param  string|array  $index
-  /// @return \Illuminate\Support\Fluent
-  ///
-  Fluent dropPrimary([dynamic index = null]) {
-    return dropIndexCommand('dropPrimary', 'primary', index);
-  }
-
-  ///
-  /// Indicate that the given unique key should be dropped.
-  ///
-  /// @param  string|array  $index
-  /// @return \Illuminate\Support\Fluent
-  ///
-  Fluent dropUnique(dynamic index) {
-    return dropIndexCommand('dropUnique', 'unique', index);
-  }
-
-  ///
-  /// Indicate that the given index should be dropped.
-  ///
-  /// @param  string|array  $index
-  /// @return \Illuminate\Support\Fluent
-  ///
-  Fluent dropIndex(dynamic index) {
-    return dropIndexCommand('dropIndex', 'index', index);
-  }
-
-  ///
-  /// Indicate that the given foreign key should be dropped.
-  ///
-  /// @param  string  $index
-  /// @return \Illuminate\Support\Fluent
-  ///
-  Fluent dropForeign(String index) {
-    return dropIndexCommand('dropForeign', 'foreign', index);
-  }
-
-  ///
-  /// Indicate that the timestamp columns should be dropped.
-  ///
-  /// @return void
-  ///
-  void dropTimestamps() {
-    dropColumn('created_at', 'updated_at');
-  }
-
-  ///
-  /// Indicate that the timestamp columns should be dropped.
-  ///
-  /// @return void
-  ///
-  void dropTimestampsTz() {
-    dropTimestamps();
-  }
-
-  ///
-  /// Indicate that the soft delete column should be dropped.
-  ///
-  /// @return void
-  ///
-  void dropSoftDeletes() {
-    dropColumn('deleted_at');
-  }
-
-  ///
-  /// Indicate that the remember token column should be dropped.
-  ///
-  /// @return void
-  ///
-  void dropRememberToken() {
-    dropColumn('remember_token');
-  }
-
-  ///
-  /// Rename the table to a given name.
-  ///
-  /// @param  string  $to
-  /// @return \Illuminate\Support\Fluent
-  ///
-  Fluent rename(String to) {
-    return addCommand('rename', {'to': to});
-  }
-
-  ///
-  /// Specify the primary key(s) for the table.
-  ///
-  /// @param  string|array  $columns
-  /// @param  string  $name
-  /// @return \Illuminate\Support\Fluent
-  ///
-  Fluent primary(dynamic columns, [String? name]) {
-    return indexCommand('primary', columns, name);
-  }
-
-  ///
-  /// Specify a unique index for the table.
-  ///
-  /// @param  string|array  $columns
-  /// @param  string  $name
-  /// @return \Illuminate\Support\Fluent
-  ///
-  Fluent unique(dynamic columns, [String? name]) {
-    return indexCommand('unique', columns, name);
-  }
-
-  ///
-  /// Specify an index for the table.
-  ///
-  /// @param  string|array  $columns
-  /// @param  string  $name
-  /// @return \Illuminate\Support\Fluent
-  ///
-  Fluent index(dynamic columns, [String? name]) {
-    return indexCommand('index', columns, name);
-  }
-
-  ///
-  /// Specify a foreign key for the table.
-  ///
-  /// @param  string|array  $columns
-  /// @param  string  $name
-  /// @return \Illuminate\Support\Fluent
-  ///
-  Fluent foreign(dynamic columns, [String? name]) {
-    return indexCommand('foreign', columns, name);
-  }
-
-  ///
-  /// Create a new auto-incrementing integer (4-byte) column on the table.
-  ///
-  /// @param  string  $column
-  /// @return \Illuminate\Support\Fluent
-  ///
-  Fluent increments(String column) {
-    return unsignedInteger(column, true);
-  }
-
-  ///
-  /// Create a new auto-incrementing small integer (2-byte) column on the table.
-  ///
-  /// @param  string  $column
-  /// @return \Illuminate\Support\Fluent
-  ///
-  Fluent smallIncrements(String column) {
-    return unsignedSmallInteger(column, true);
-  }
-
-  ///
-  /// Create a new auto-incrementing medium integer (3-byte) column on the table.
-  ///
-  /// @param  string  $column
-  /// @return \Illuminate\Support\Fluent
-  ///
-  mediumIncrements(String column) {
-    return unsignedMediumInteger(column, true);
-  }
-
-  ///
-  /// Create a new auto-incrementing big integer (8-byte) column on the table.
-  ///
-  /// @param  string  $column
-  /// @return \Illuminate\Support\Fluent
-  ///
-  bigIncrements(String column) {
-    return unsignedBigInteger(column, true);
-  }
-
-  ///
-  /// Create a new char column on the table.
-  ///
-  /// @param  string  $column
-  /// @param  int  $length
-  /// @return \Illuminate\Support\Fluent
-  ///
-  char(String column, [int length = 255]) {
-    return this.addColumn('char', column, {'length': length});
-  }
-
-  ///
-  /// Create a new string column on the table.
-  ///
-  /// @param  string  $column
-  /// @param  int  $length
-  /// @return \Illuminate\Support\Fluent
-  ///
-  string(String column, [int length = 255]) {
-    return this.addColumn('string', column, {'length': length});
-  }
-
-  ///
-  /// Create a new text column on the table.
-  ///
-  /// @param  string  $column
-  /// @return \Illuminate\Support\Fluent
-  ///
-  text(String column) {
-    return this.addColumn('text', column);
-  }
-
-  ///
-  /// Create a new medium text column on the table.
-  ///
-  /// @param  string  $column
-  /// @return \Illuminate\Support\Fluent
-  ///
-  mediumText(String column) {
-    return this.addColumn('mediumText', column);
-  }
-
-  ///
-  /// Create a new long text column on the table.
-  ///
-  /// @param  string  $column
-  /// @return \Illuminate\Support\Fluent
-  ///
-  longText(String column) {
-    return this.addColumn('longText', column);
-  }
-
-  ///
-  /// Create a new integer (4-byte) column on the table.
-  ///
-  /// @param  string  $column
-  /// @param  bool  $autoIncrement
-  /// @param  bool  $unsigned
-  /// @return \Illuminate\Support\Fluent
-  ///
+  // --- Definições de Coluna (Métodos Builder) ---
+  // (Implementações como antes, chamando addColumn)
+  Fluent increments(String column) => unsignedBigInteger(column, true);
+  Fluent tinyIncrements(String column) => unsignedTinyInteger(column, true);
+  Fluent smallIncrements(String column) => unsignedSmallInteger(column, true);
+  Fluent mediumIncrements(String column) => unsignedMediumInteger(column, true);
+  Fluent bigIncrements(String column) => unsignedBigInteger(column, true);
+  Fluent id([String column = 'id']) => unsignedBigInteger(column, true);
+  Fluent char(String column, [int length = 255]) =>
+      addColumn('char', column, {'length': length});
+  Fluent string(String column, [int length = 255]) =>
+      addColumn('string', column, {'length': length});
+  Fluent text(String column) => addColumn('text', column);
+  Fluent mediumText(String column) => addColumn('mediumText', column);
+  Fluent longText(String column) => addColumn('longText', column);
   Fluent integer(String column,
-      [bool autoIncrement = false, bool unsigned = false]) {
-    return addColumn('integer', column,
-        {'autoIncrement': autoIncrement, 'unsigned': unsigned});
+          [bool autoIncrement = false, bool unsigned = false]) =>
+      addColumn('integer', column,
+          {'autoIncrement': autoIncrement, 'unsigned': unsigned});
+  Fluent tinyInteger(String column,
+          [bool autoIncrement = false, bool unsigned = false]) =>
+      addColumn('tinyInteger', column,
+          {'autoIncrement': autoIncrement, 'unsigned': unsigned});
+  Fluent smallInteger(String column,
+          [bool autoIncrement = false, bool unsigned = false]) =>
+      addColumn('smallInteger', column,
+          {'autoIncrement': autoIncrement, 'unsigned': unsigned});
+  Fluent mediumInteger(String column,
+          [bool autoIncrement = false, bool unsigned = false]) =>
+      addColumn('mediumInteger', column,
+          {'autoIncrement': autoIncrement, 'unsigned': unsigned});
+  Fluent bigInteger(String column,
+          [bool autoIncrement = false, bool unsigned = false]) =>
+      addColumn('bigInteger', column,
+          {'autoIncrement': autoIncrement, 'unsigned': unsigned});
+  Fluent unsignedInteger(String column, [bool autoIncrement = false]) =>
+      integer(column, autoIncrement, true);
+  Fluent unsignedTinyInteger(String column, [bool autoIncrement = false]) =>
+      tinyInteger(column, autoIncrement, true);
+  Fluent unsignedSmallInteger(String column, [bool autoIncrement = false]) =>
+      smallInteger(column, autoIncrement, true);
+  Fluent unsignedMediumInteger(String column, [bool autoIncrement = false]) =>
+      mediumInteger(column, autoIncrement, true);
+  Fluent unsignedBigInteger(String column, [bool autoIncrement = false]) =>
+      bigInteger(column, autoIncrement, true);
+  Fluent unsignedId([String column = 'id']) => unsignedBigInteger(column, true);
+  Fluent foreignId(String column) =>
+      addColumn('bigInteger', column, {'unsigned': true});
+  Fluent foreignIdFor(Type modelType, [String? column]) {
+    final className = modelType.toString();
+    final defaultColumnName = '${Utils.toSnakeCase(className)}_id';
+    return foreignId(column ?? defaultColumnName);
   }
 
-  ///
-  /// Create a new tiny integer (1-byte) column on the table.
-  ///
-  /// @param  string  $column
-  /// @param  bool  $autoIncrement
-  /// @param  bool  $unsigned
-  /// @return \Illuminate\Support\Fluent
-  ///
-  tinyInteger(String column, [bool autoIncrement = false, unsigned = false]) {
-    return addColumn('tinyInteger', column,
-        {'autoIncrement': autoIncrement, 'unsigned': unsigned});
+  Fluent float(String column, [int total = 8, int places = 2]) =>
+      addColumn('float', column, {'total': total, 'places': places});
+  Fluent double(String column, [int? total, int? places]) =>
+      addColumn('double', column, {'total': total, 'places': places});
+  Fluent decimal(String column, [int total = 8, int places = 2]) =>
+      addColumn('decimal', column, {'total': total, 'places': places});
+  Fluent unsignedDecimal(String column, [int total = 8, int places = 2]) =>
+      addColumn('decimal', column,
+          {'total': total, 'places': places, 'unsigned': true});
+  Fluent boolean(String column) => addColumn('boolean', column);
+  Fluent enumeration(String column, List<String> allowed) =>
+      addColumn('enum', column, {'allowed': allowed});
+  Fluent json(String column) => addColumn('json', column);
+  Fluent jsonb(String column) => addColumn('jsonb', column);
+  Fluent date(String column) => addColumn('date', column);
+  Fluent dateTime(String column, {int precision = 0}) =>
+      addColumn('dateTime', column, {'precision': precision});
+  Fluent dateTimeTz(String column, {int precision = 0}) =>
+      addColumn('dateTimeTz', column, {'precision': precision});
+  Fluent time(String column, {int precision = 0}) =>
+      addColumn('time', column, {'precision': precision});
+  Fluent timeTz(String column, {int precision = 0}) =>
+      addColumn('timeTz', column, {'precision': precision});
+  Fluent timestamp(String column, {int precision = 0}) =>
+      addColumn('timestamp', column, {'precision': precision});
+  Fluent timestampTz(String column, {int precision = 0}) =>
+      addColumn('timestampTz', column, {'precision': precision});
+
+  /// Adiciona colunas 'created_at' e 'updated_at' nullable.
+  void nullableTimestamps({int precision = 0}) {
+    timestamp('created_at', precision: precision);
+    this.nullable();
+    timestamp('updated_at', precision: precision);
+    this.nullable();
   }
 
-  ///
-  /// Create a new small integer (2-byte) column on the table.
-  ///
-  /// @param  string  $column
-  /// @param  bool  $autoIncrement
-  /// @param  bool  $unsigned
-  /// @return \Illuminate\Support\Fluent
-  ///
-  smallInteger(String column,
-      [bool autoIncrement = false, bool unsigned = false]) {
-    return addColumn('smallInteger', column,
-        {'autoIncrement': autoIncrement, 'unsigned': unsigned});
+  /// Adiciona colunas 'created_at' e 'updated_at'.
+  void timestamps({int precision = 0}) {
+    timestamp('created_at', precision: precision);
+    timestamp('updated_at', precision: precision);
   }
 
-  ///
-  /// Create a new medium integer (3-byte) column on the table.
-  ///
-  /// @param  string  $column
-  /// @param  bool  $autoIncrement
-  /// @param  bool  $unsigned
-  /// @return \Illuminate\Support\Fluent
-  ///
-  mediumInteger(String column,
-      [bool autoIncrement = false, bool unsigned = false]) {
-    return addColumn('mediumInteger', column,
-        {'autoIncrement': autoIncrement, 'unsigned': unsigned});
+  /// Adiciona colunas 'created_at' e 'updated_at' com timezone.
+  void timestampsTz({int precision = 0}) {
+    timestampTz('created_at', precision: precision);
+    timestampTz('updated_at', precision: precision);
   }
 
-  ///
-  /// Create a new big integer (8-byte) column on the table.
-  ///
-  /// @param  string  $column
-  /// @param  bool  $autoIncrement
-  /// @param  bool  $unsigned
-  /// @return \Illuminate\Support\Fluent
-  ///
-  bigInteger(String column,
-      [bool autoIncrement = false, bool unsigned = false]) {
-    return addColumn('bigInteger', column,
-        {'autoIncrement': autoIncrement, 'unsigned': unsigned});
+  /// Adiciona coluna 'deleted_at' nullable para soft deletes.
+  Fluent softDeletes({String column = 'deleted_at', int precision = 0}) {
+    timestamp(column, precision: precision);
+    return this.nullable();
   }
 
-  ///
-  /// Create a new unsigned tiny integer (1-byte) column on the table.
-  ///
-  /// @param  string  $column
-  /// @param  bool  $autoIncrement
-  /// @return \Illuminate\Support\Fluent
-  ///
-  unsignedTinyInteger(String column, [bool autoIncrement = false]) {
-    return tinyInteger(column, autoIncrement, true);
+  /// Adiciona coluna 'deleted_at' nullable com timezone para soft deletes.
+  Fluent softDeletesTz({String column = 'deleted_at', int precision = 0}) {
+    timestampTz(column, precision: precision);
+    return this.nullable();
   }
 
-  ///
-  /// Create a new unsigned small integer (2-byte) column on the table.
-  ///
-  /// @param  string  $column
-  /// @param  bool  $autoIncrement
-  /// @return \Illuminate\Support\Fluent
-  ///
-  unsignedSmallInteger(String column, [bool autoIncrement = false]) {
-    return smallInteger(column, autoIncrement, true);
+  Fluent binary(String column) => addColumn('binary', column);
+  Fluent uuid(String column) => addColumn('uuid', column);
+  Fluent foreignUuid(String column) => addColumn('uuid', column);
+  Fluent ipAddress(String column) => addColumn('ipAddress', column);
+  Fluent macAddress(String column) => addColumn('macAddress', column);
+  Fluent geometry(String column) => addColumn('geometry', column);
+  Fluent point(String column, {int? srid}) =>
+      addColumn('point', column, {'srid': srid});
+  Fluent lineString(String column, {int? srid}) =>
+      addColumn('lineString', column, {'srid': srid});
+  Fluent polygon(String column, {int? srid}) =>
+      addColumn('polygon', column, {'srid': srid});
+  Fluent geometryCollection(String column, {int? srid}) =>
+      addColumn('geometryCollection', column, {'srid': srid});
+  Fluent multiPoint(String column, {int? srid}) =>
+      addColumn('multiPoint', column, {'srid': srid});
+  Fluent multiLineString(String column, {int? srid}) =>
+      addColumn('multiLineString', column, {'srid': srid});
+  Fluent multiPolygon(String column, {int? srid}) =>
+      addColumn('multiPolygon', column, {'srid': srid});
+  void morphs(String name, [String? indexName]) {
+    unsignedBigInteger("${name}_id");
+    string("${name}_type");
+    index(["${name}_id", "${name}_type"], indexName);
   }
 
-  ///
-  /// Create a new unsigned medium integer (3-byte) column on the table.
-  ///
-  /// @param  string  $column
-  /// @param  bool  $autoIncrement
-  /// @return \Illuminate\Support\Fluent
-  ///
-  unsignedMediumInteger(String column, [bool autoIncrement = false]) {
-    return mediumInteger(column, autoIncrement, true);
+  void nullableMorphs(String name, [String? indexName]) {
+    unsignedBigInteger("${name}_id");
+    this.nullable();
+    string("${name}_type");
+    this.nullable();
+    index(["${name}_id", "${name}_type"], indexName);
   }
 
-  ///
-  /// Create a new unsigned integer (4-byte) column on the table.
-  ///
-  /// @param  string  $column
-  /// @param  bool  $autoIncrement
-  /// @return \Illuminate\Support\Fluent
-  ///
-  unsignedInteger(String column, [bool autoIncrement = false]) {
-    return integer(column, autoIncrement, true);
+  void uuidMorphs(String name, [String? indexName]) {
+    uuid("${name}_id");
+    string("${name}_type");
+    index(["${name}_id", "${name}_type"], indexName);
   }
 
-  ///
-  /// Create a new unsigned big integer (8-byte) column on the table.
-  ///
-  /// @param  string  $column
-  /// @param  bool  $autoIncrement
-  /// @return \Illuminate\Support\Fluent
-  ///
-  unsignedBigInteger(String column, [bool autoIncrement = false]) {
-    return bigInteger(column, autoIncrement, true);
+  void nullableUuidMorphs(String name, [String? indexName]) {
+    uuid("${name}_id");
+    this.nullable();
+    string("${name}_type");
+    this.nullable();
+    index(["${name}_id", "${name}_type"], indexName);
   }
 
-  ///
-  /// Create a new float column on the table.
-  ///
-  /// @param  string  $column
-  /// @param  int     $total
-  /// @param  int     $places
-  /// @return \Illuminate\Support\Fluent
-  ///
-  float(String column, [int total = 8, int places = 2]) {
-    return addColumn('float', column, {'total': total, 'places': places});
+  Fluent rememberToken() {
+    addColumn('string', 'remember_token', {'length': 100});
+    return nullable();
   }
 
-  ///
-  /// Create a new double column on the table.
-  ///
-  /// @param  string   $column
-  /// @param  int|null    $total
-  /// @param  int|null $places
-  /// @return \Illuminate\Support\Fluent
-  ///
-  double(String column, [int? total = null, int? places = null]) {
-    return addColumn('double', column, {'total': total, 'places': places});
-  }
-
-  ///
-  /// Create a new decimal column on the table.
-  ///
-  /// @param  string  $column
-  /// @param  int     $total
-  /// @param  int     $places
-  /// @return \Illuminate\Support\Fluent
-  ///
-  decimal(String column, [int total = 8, int places = 2]) {
-    return addColumn('decimal', column, {'total': total, 'places': places});
-  }
-
-  ///
-  /// Create a new boolean column on the table.
-  ///
-  /// @param  string  $column
-  /// @return \Illuminate\Support\Fluent
-  ///
-  boolean(String column) {
-    return addColumn('boolean', column);
-  }
-
-  ///
-  /// Create a new enum column on the table.
-  ///
-  /// @param  string  $column
-  /// @param  array   $allowed
-  /// @return \Illuminate\Support\Fluent
-  ///
-  enumeration(String column, allowed) {
-    return addColumn('enum', column, {'allowed': allowed});
-  }
-
-  ///
-  /// Create a new json column on the table.
-  ///
-  /// @param  string  $column
-  /// @return \Illuminate\Support\Fluent
-  ///
-  json(String column) {
-    return addColumn('json', column);
-  }
-
-  ///
-  /// Create a new jsonb column on the table.
-  ///
-  /// @param  string  $column
-  /// @return \Illuminate\Support\Fluent
-  ///
-  jsonb(String column) {
-    return addColumn('jsonb', column);
-  }
-
-  ///
-  /// Create a new date column on the table.
-  ///
-  /// @param  string  $column
-  /// @return \Illuminate\Support\Fluent
-  ///
-  date(String column) {
-    return addColumn('date', column);
-  }
-
-  ///
-  /// Create a new date-time column on the table.
-  ///
-  /// @param  string  $column
-  /// @return \Illuminate\Support\Fluent
-  ///
-  dateTime(String column) {
-    return addColumn('dateTime', column);
-  }
-
-  ///
-  /// Create a new date-time column (with time zone) on the table.
-  ///
-  /// @param  string  $column
-  /// @return \Illuminate\Support\Fluent
-  ///
-  dateTimeTz(String column) {
-    return addColumn('dateTimeTz', column);
-  }
-
-  ///
-  /// Create a new time column on the table.
-  ///
-  /// @param  string  $column
-  /// @return \Illuminate\Support\Fluent
-  ///
-  time(String column) {
-    return addColumn('time', column);
-  }
-
-  ///
-  /// Create a new time column (with time zone) on the table.
-  ///
-  /// @param  string  $column
-  /// @return \Illuminate\Support\Fluent
-  ///
-  timeTz(String column) {
-    return addColumn('timeTz', column);
-  }
-
-  ///
-  /// Create a new timestamp column on the table.
-  ///
-  /// @param  string  $column
-  /// @return \Illuminate\Support\Fluent
-  ///
-  Fluent timestamp(String column) {
-    return addColumn('timestamp', column);
-  }
-
-  ///
-  /// Create a new timestamp (with time zone) column on the table.
-  ///
-  /// @param  string  $column
-  /// @return \Illuminate\Support\Fluent
-  ///
-  timestampTz(String column) {
-    return addColumn('timestampTz', column);
-  }
-
-  ///
-  /// Add nullable creation and update timestamps to the table.
-  ///
-  /// @return void
-  ///
-  nullableTimestamps() {
-    // this.timestamp('created_at')->nullable();
-    // this.timestamp('updated_at')->nullable();
-  }
-
-  ///
-  /// Add creation and update timestamps to the table.
-  ///
-  /// @return void
-  ///
-  timestamps() {
-    this.timestamp('created_at');
-    this.timestamp('updated_at');
-  }
-
-  ///
-  /// Add creation and update timestampTz columns to the table.
-  ///
-  /// @return void
-  ///
-  timestampsTz() {
-    this.timestampTz('created_at');
-    this.timestampTz('updated_at');
-  }
-
-  ///
-  /// Add a "deleted at" timestamp for the table.
-  ///
-  /// @return \Illuminate\Support\Fluent
-  ///
-  softDeletes() {
-    //return this.timestamp('deleted_at')->nullable();
-  }
-
-  ///
-  /// Create a new binary column on the table.
-  ///
-  /// @param  string  $column
-  /// @return \Illuminate\Support\Fluent
-  ///
-  binary($column) {
-    return this.addColumn('binary', $column);
-  }
-
-  ///
-  /// Create a new uuid column on the table.
-  ///
-  /// @param  string  $column
-  /// @return \Illuminate\Support\Fluent
-  ///
-  uuid($column) {
-    return this.addColumn('uuid', $column);
-  }
-
-  ///
-  /// Add the proper columns for a polymorphic table.
-  ///
-  /// @param  string  $name
-  /// @param  string|null  $indexName
-  /// @return void
-  ///
-  morphs(String name, [String? indexName]) {
-    this.unsignedInteger("${name}_id");
-
-    this.string("${name}_type");
-
-    this.index(["${name}_id", "${name}_type"], indexName);
-  }
-
-  ///
-  /// Adds the `remember_token` column to the table.
-  ///
-  /// @return \Illuminate\Support\Fluent
-  ///
-  rememberToken() {
-    //return this.string('remember_token', 100)->nullable();
-  }
-
-  ///
-  /// Create a new drop index command on the blueprint.
-  ///
-  /// @param  string  $command
-  /// @param  string  $type
-  /// @param  string|array  $index
-  /// @return \Illuminate\Support\Fluent
-  ///
-  dropIndexCommand(String command, String type, dynamic index) {
-    var cols = [];
-
-    // If the given "index" is actually an array of columns, the developer means
-    // to drop an index merely by specifying the columns involved without the
-    // conventional name, so we will build the index name from the columns.
-    if (Utils.is_array(index)) {
-      cols = index;
-
-      index = this.createIndexName(type, cols);
-    }
-
-    return this.indexCommand(command, cols, index);
-  }
-
-  ///
-  /// Add a new index command to the blueprint.
-  ///
-  /// @param  string        $type
-  /// @param  string|array  $columns
-  /// @param  string        $index
-  /// @return \Illuminate\Support\Fluent
-  ///
-  indexCommand(String type, dynamic columnsP, String? index) {
-    var cols = columnsP;
-
-    // If no name was specified for this index, we will create one using a basic
-    // convention of the table name, followed by the columns, followed by an
-    // index type, such as primary or index, which makes the index unique.
-    if (Utils.is_null(index)) {
-      index = this.createIndexName(type, cols);
-    }
-
-    return this.addCommand(type, {'index': index, 'columns': cols});
-  }
-
-  ///
-  /// Create a default index name for the table.
-  ///
-  /// @param  string  $type
-  /// @param  array   $columns
-  /// @return string
-  ///
-  createIndexName(String type, List columns) {
-    var index = Utils.strtolower(
-        this._table! + '_' + Utils.implode('_', columns) + '_' + type);
-
-    return Utils.str_replace(['-', '.'], '_', index);
-  }
-
-  ///
-  /// Add a new column to the blueprint.
-  ///
-  /// @param  string  $type
-  /// @param  string  $name
-  /// @param  array   $parameters
-  /// @return \Illuminate\Support\Fluent
-  ///
+  // --- Métodos Internos ---
+  @protected
   Fluent addColumn(String type, String name,
       [Map<String, dynamic> parameters = const {}]) {
-    var attributes =
-        Utils.map_merge_sd({'type': type, 'name': name}, parameters);
-    var column = new Fluent(attributes);
-    this._columns.add(column);
+    final attributes = {
+      'type': type,
+      'name': name,
+      'change': false,
+      ...parameters
+    };
+    final column = Fluent(attributes);
+    _columns.add(column);
     return column;
   }
 
-  ///
-  /// Remove a column from the schema blueprint.
-  ///
-  /// @param  string  $name
-  /// @return $this
-  ///
-  removeColumn(String name) {
-    // this.columns = array_values(array_filter(this.columns, function ($c) use ($name) {
-    //     return $c['attributes']['name'] != $name;
-    // }));
-
-    return this;
+  @protected
+  void removeColumn(String name) {
+    _columns.removeWhere((col) => col['name'] == name);
   }
 
-  ///
-  /// Add a new command to the blueprint.
-  ///
-  /// @param  string  $name
-  /// @param  array  $parameters
-  /// @return \Illuminate\Support\Fluent
-  ///
+  @protected
   Fluent addCommand(String name, [Map<String, dynamic>? parameters]) {
-    var command = createCommand(name, parameters);
+    final command = createCommand(name, parameters);
     _commands.add(command);
-
     return command;
   }
 
-  ///
-  /// Create a new Fluent command.
-  ///
-  /// [name]  String
-  /// [parameters]  Map
-  /// Return \Support\Fluent
-  ///
+  @protected
   Fluent createCommand(String name, [Map<String, dynamic>? parameters]) {
-    var attributesP = <String, dynamic>{'name': name};
-    if (parameters != null) {
-      attributesP.addAll(parameters);
+    return Fluent({'name': name, ...?parameters});
+  }
+
+  // --- Getters ---
+  String getTable() => _table;
+  List<Fluent> getColumns() => List.unmodifiable(_columns);
+  List<Fluent> getCommands() => List.unmodifiable(_commands);
+  List<Fluent> getAddedColumns() =>
+      _columns.where((c) => c['change'] != true).toList();
+  List<Fluent> getChangedColumns() =>
+      _columns.where((c) => c['change'] == true).toList();
+
+  // --- Chaining para Modificadores (Operam no último Fluent da coluna adicionada) ---
+  Fluent _getLastColumnFluent() {
+    if (_columns.isEmpty) throw StateError("No column defined yet.");
+    return _columns.last;
+  }
+
+  Fluent nullable([bool value = true]) {
+    final col = _getLastColumnFluent();
+    col['nullable'] = value;
+    return col;
+  }
+
+  Fluent useCurrent() {
+    final col = _getLastColumnFluent();
+    col['useCurrent'] = true;
+    return col;
+  }
+
+  Fluent useCurrentOnUpdate() {
+    final col = _getLastColumnFluent();
+    col['useCurrentOnUpdate'] = true;
+    return col;
+  }
+
+  Fluent defaultTo(dynamic value) {
+    final col = _getLastColumnFluent();
+    col['default'] = value;
+    return col;
+  }
+
+  Fluent unsigned() {
+    final col = _getLastColumnFluent();
+    col['unsigned'] = true;
+    return col;
+  }
+
+  Fluent comment(String comment) {
+    final col = _getLastColumnFluent();
+    col['comment'] = comment;
+    return col;
+  }
+
+  Fluent after(String column) {
+    final col = _getLastColumnFluent();
+    col['after'] = column;
+    return col;
+  }
+
+  Fluent first() {
+    final col = _getLastColumnFluent();
+    col['first'] = true;
+    return col;
+  }
+
+  Fluent storedAs(String expression) {
+    final col = _getLastColumnFluent();
+    col['storedAs'] = expression;
+    return col;
+  }
+
+  Fluent virtualAs(String expression) {
+    final col = _getLastColumnFluent();
+    col['virtualAs'] = expression;
+    return col;
+  }
+
+  Fluent charset(String charset) {
+    final col = _getLastColumnFluent();
+    col['charset'] = charset;
+    return col;
+  }
+
+  Fluent collation(String collation) {
+    final col = _getLastColumnFluent();
+    col['collation'] = collation;
+    return col;
+  }
+
+  Fluent srid(int srid) {
+    final col = _getLastColumnFluent();
+    col['srid'] = srid;
+    return col;
+  }
+
+  Fluent change() {
+    if (_columns.isNotEmpty) {
+      _columns.last['change'] = true;
     }
-    return Fluent(attributesP);
+    return _getLastColumnFluent();
   }
 
-  ///
-  /// Get the table the blueprint describes.
-  ///
-  /// @return string
-  ///
-  String getTable() {
-    return _table!;
+  // --- Chaining para Foreign Keys (Operam no último comando 'foreign' adicionado) ---
+  Fluent _getLastCommandFluent(String expectedName) {
+    if (_commands.isEmpty || _commands.last['name'] != expectedName)
+      throw StateError(
+          "Cannot apply foreign key modifier. Last command was not '$expectedName'.");
+    return _commands.last;
   }
 
-  ///
-  /// Get the columns on the blueprint.
-  ///
-  /// @return array
-  ///
-  List getColumns() {
-    return _columns;
+  Fluent references(dynamic columns) {
+    final command = _getLastCommandFluent('foreign');
+    command['references'] = (columns is List)
+        ? List<String>.from(columns.map((e) => e.toString()))
+        : [columns.toString()];
+    return command;
   }
 
-  ///
-  /// Get the commands on the blueprint.
-  ///
-  /// @return array
-  ///
-  List getCommands() {
-    return _commands;
+  Fluent on(String table) {
+    final command = _getLastCommandFluent('foreign');
+    command['on'] = table;
+    return command;
   }
 
-  ///
-  /// Get the columns on the blueprint that should be added.
-  ///
-  /// @return array
-  ///
-  List getAddedColumns() {
-    return Utils.array_filter(this._columns, (column) {
-      return !column['change'];
-    });
-    //return [];
+  Fluent onDelete(String action) {
+    final command = _getLastCommandFluent('foreign');
+    command['onDelete'] = action.toUpperCase();
+    return command;
   }
 
-  ///
-  /// Get the columns on the blueprint that should be changed.
-  ///
-  /// @return array
-  ///
-  List getChangedColumns() {
-    return Utils.array_filter(this._columns, (column) {
-      return column['change'];
-    });
+  Fluent onUpdate(String action) {
+    final command = _getLastCommandFluent('foreign');
+    command['onUpdate'] = action.toUpperCase();
+    return command;
   }
+
+  Fluent deferrable([bool value = true]) {
+    final command = _getLastCommandFluent('foreign');
+    command['deferrable'] = value;
+    return command;
+  }
+
+  Fluent initiallyImmediate([bool value = true]) {
+    final command = _getLastCommandFluent('foreign');
+    command['initiallyImmediate'] = value;
+    return command;
+  }
+
+  Fluent notDeferrable() => deferrable(false);
+  Fluent initiallyDeferred() => initiallyImmediate(false);
 }

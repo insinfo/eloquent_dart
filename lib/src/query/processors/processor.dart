@@ -27,10 +27,7 @@ class Processor {
       [String sequence = 'id']) async {
     final resp = await query.getConnection().insert(sql, values);
     final id = resp.isNotEmpty ? resp.first[sequence] : null;   
-    return id;
-    //var id = query.getConnection().getPdo().lastInsertId(sequence);
-    //return is_numeric($id) ? (int) $id : $id;
-    //return -1;
+    return id;    
   }
 
   ///

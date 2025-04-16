@@ -297,4 +297,99 @@ class QueryPostgresGrammar extends QueryGrammar {
     // Para cada atributo do caminho, envolve-o com aspas simples
     return path.map((attribute) => "'$attribute'").toList();
   }
+
+  ///
+  ///  Compile the "join" portions of the query.
+  ///
+  ///  @param  \Illuminate\Database\Query\Builder  $query
+  ///  @param  array  $joins
+  ///  @return String
+  ///
+  String compileJoins(QueryBuilder query, List<JoinClause> joins) {
+    final sql = <String>[];
+
+    for (var join in joins) {
+      final table = this.wrapTable(join.table);
+      final type = join.type.toLowerCase();
+
+      // Adiciona a palavra-chave LATERAL se join.isLateral for true
+      final lateral = join.isLateral ? ' LATERAL' : '';
+
+      // Se for um cross join sem cláusulas, retorna apenas "cross join <table>"
+      if (type == 'cross' && (join.clauses.isEmpty)) {
+        sql.add("cross join $table");
+        continue;
+      }
+
+      // Compila as cláusulas ON para os demais joins
+      final clauses = <String>[];
+      for (var clause in join.clauses) {
+        clauses.add(this.compileJoinConstraint(clause));
+      }
+      var clausesString = '';
+      if (clauses.isNotEmpty) {
+        // Remove o booleano inicial (AND/OR) da primeira cláusula
+        clauses[0] = this.removeLeadingBoolean(clauses[0]);
+        clausesString = clauses.join(' ');
+      } else if (join.isLateral) {
+        // Para JOIN LATERAL, é comum não ter ON ou usar ON TRUE.
+        // Se nenhuma cláusula ON foi fornecida explicitamente,
+        // podemos assumir ON TRUE ou deixar vazio dependendo do dialeto SQL.
+        // Adicionar ON TRUE é mais seguro e explícito para LATERAL.
+        clausesString = 'TRUE'; // Compila para ON TRUE
+      }
+
+      // Junta as partes: TIPO JOIN [LATERAL] TABELA ON CONDICOES
+      // Garante que haja 'on' apenas se houver cláusulas ou se for lateral (assumindo ON TRUE)
+      final onClause = clausesString.isNotEmpty ? ' on $clausesString' : '';
+      sql.add("$type join$lateral $table$onClause");
+    }
+
+    return sql.join(' '); // Junta todos os joins com espaço
+  }
+
+  // ///
+  // ///  Create a join clause constraint segment.
+  // ///
+  // ///  @param  array  $clause
+  // ///  @return String
+  // ///
+  String compileJoinConstraint(Map<String, dynamic> clause) {
+    bool isNested = clause['nested'] ?? false;
+    if (isNested) {
+      return this.compileNestedJoinConstraint(clause);
+    }
+
+    // Se o primeiro elemento for QueryExpression('TRUE'), retorna 'TRUE'
+    if (clause['first'] is QueryExpression &&
+        (clause['first'] as QueryExpression).getValue() == 'TRUE') {
+      // Ignora operador e segundo operando para ON TRUE
+      return "${clause['boolean']} TRUE";
+    }
+
+    var first = this.wrap(clause['first']);
+    dynamic second;
+    bool isWhereClause = clause['where'] ?? false;
+
+    if (isWhereClause) {
+      // Lógica para WHERE IN / NOT IN (placeholders)
+      if ((clause['operator'] == 'in' || clause['operator'] == 'not in') &&
+          clause['second'] is List) {
+        // O número de placeholders é baseado no número de valores nos bindings.
+        // Precisamos acessar os bindings originais aqui, o que complica.
+        // A abordagem mais simples é deixar o parameterize lidar com listas.
+        // O valor aqui pode ser a lista diretamente, e parameterize tratará.
+        second = this.parameterize(clause['second']); // Gera (?, ?, ?)
+        // Nota: Isso assume que compileJoinConstraint não precisa mais dos
+        // valores reais, apenas dos placeholders, e que os valores
+        // estão sendo adicionados aos bindings corretamente em outro lugar.
+      } else {
+        second = '?'; // Placeholder para where simples
+      }
+    } else {
+      second = this.wrap(clause['second']); // Coluna ou valor direto
+    }
+
+    return "${clause['boolean']} $first ${clause['operator']} $second";
+  }
 }

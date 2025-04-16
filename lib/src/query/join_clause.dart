@@ -12,7 +12,7 @@ class JoinClause {
   ///
   /// The table the join clause is joining to.
   ///
-  /// @var string|QueryExpression
+  /// @var string | QueryExpression
   ///
   dynamic table;
 
@@ -30,13 +30,21 @@ class JoinClause {
   ///
   List bindingsLocal = [];
 
+  bool isLateral; // <-- Adicionado
+
+  /// Adiciona uma cláusula ON TRUE.
+  JoinClause onTrue([String boolean = 'and']) {   
+    return this.on(QueryExpression('TRUE'), null, null, boolean, false);
+  }
+
   ///
   /// Create a new join clause instance.
   ///
   /// @param  String  $type
   /// @param  String  $table
   ///
-  JoinClause(this.type, this.table, [QueryBuilder? parentQuery]) {
+  JoinClause(this.type, this.table,
+      [QueryBuilder? parentQuery, this.isLateral = false]) {
     //: super(parentQuery.getConnection(), parentQuery.getGrammar(),  parentQuery.getProcessor())
     //public function __construct(Builder $parentQuery, $type, $table)
     /// TODO implement extends QueryBuilder
@@ -71,8 +79,8 @@ class JoinClause {
   ///
   /// On clauses can be chained, e.g.
   ///
-  ///  $join->on('contacts.user_id', '=', 'users.id')
-  ///       ->on('contacts.info_id', '=', 'info.id')
+  ///  join.on('contacts.user_id', '=', 'users.id')
+  ///       .on('contacts.info_id', '=', 'info.id')
   ///
   /// will produce the following SQL:
   ///
@@ -87,14 +95,6 @@ class JoinClause {
   ///
   /// @throws \InvalidArgumentException
   ///
-  //  dynamic on(first, [operator , second = null, boolean = 'and'])
-  //   {
-  //       if (first is Function) {
-  //           return this.whereNested(first, boolean);
-  //       }
-
-  //       return whereColumn(first, operator, second, boolean);
-  //   }
   JoinClause on(dynamic first,
       [String? operator,
       dynamic second,
@@ -260,14 +260,18 @@ class JoinClause {
   /// @return \Illuminate\Database\Query\JoinClause
   ///
   JoinClause nest(Function callback, [String boolean = 'and']) {
-    var join = JoinClause(this.type, this.table);
+    final join = JoinClause(this.type, this.table);
 
     callback(join);
 
     if (Utils.count(join.clauses) != 0) {
       var nested = true;
 
-      this.clauses.add({'nested': nested, 'join': join, 'boolean': boolean});
+      this.clauses.add({
+        'nested': nested,
+        'join': join,
+        'boolean': boolean,
+      });
       this.bindingsLocal =
           Utils.array_merge(this.bindingsLocal, join.bindingsLocal);
     }
