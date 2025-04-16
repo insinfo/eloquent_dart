@@ -11,7 +11,7 @@ class FakeConnection implements ConnectionInterface {
 
   @override
   QueryExpression raw(value) {
-    throw UnimplementedError();
+    return QueryExpression(value);
   }
 
   @override
