@@ -1,6 +1,6 @@
+//query_builder_cte_test.dart
 import 'package:test/test.dart';
 import 'package:eloquent/eloquent.dart';
-
 import 'helper.dart';
 
 void main() {
@@ -240,4 +240,119 @@ void main() {
     expect(capturedBindings, orderedEquals(['pending']),
         reason: 'Captured bindings did not match');
   });
+
+  // **** NOVO TESTE ****
+  test('count with recursive CTE includes CTE bindings correctly', () async {
+    final builder = QueryBuilder(connection, grammar, processor);
+    final db = MockDatabaseManager(connection, grammar, processor);
+    final int idInicial = 555;
+    final String cteName = 'organograma_arvore_count';
+
+    final cteDefinition = db
+        .query()
+        .select('og.id')
+        .from('public.organograma as og') // CTE usa schema explícito
+        .where('og.id', '=', idInicial)
+        .unionAll(db
+            .query()
+            .select('filho.id')
+            .from('public.organograma as filho') // CTE usa schema explícito
+            .join('$cteName as pai', 'filho.id_pai', '=', 'pai.id'));
+
+    builder
+        .from('sw_processo as p') // Tabela principal SEM schema explícito
+        .withRecursiveExpression(cteName, cteDefinition)
+        .join('public.organograma_historico as oh', 'oh.id', '=', // Join usa schema explícito
+            'p.id_organograma_historico_origem', 'left')
+        .whereIn('oh.id_organograma', (QueryBuilder subQuery) {
+      subQuery.select('id').from(cteName);
+    }).where('p.cod_situacao', '=', 2);
+
+    await builder.count();
+
+    expect(connection.selectCallCount, 1);
+
+    final capturedSql = connection.lastSelectSql;
+    final capturedBindings = connection.lastSelectBindings;
+
+    // *** CORRIGIDO: Remove 'public.' da tabela principal na string esperada ***
+    final expectedCountSql = '''
+with recursive "$cteName" as (select "og"."id" from "public"."organograma" as "og" where "og"."id" = ? union all select "filho"."id" from "public"."organograma" as "filho" inner join "$cteName" as "pai" on "filho"."id_pai" = "pai"."id") select count(*) as aggregate from "sw_processo" as "p" left join "public"."organograma_historico" as "oh" on "oh"."id" = "p"."id_organograma_historico_origem" where "oh"."id_organograma" in (select "id" from "$cteName") and "p"."cod_situacao" = ?'''
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+
+    expect(capturedSql, equals(expectedCountSql),
+        reason: 'Compiled COUNT SQL with CTE did not match');
+
+    final expectedBindings = [idInicial, 2];
+    expect(capturedBindings, orderedEquals(expectedBindings),
+        reason:
+            'Captured bindings for COUNT did not match or were in wrong order');
+  });
+
+   test('get with recursive CTE includes CTE bindings correctly', () async {
+     final builder = QueryBuilder(connection, grammar, processor);
+     final db = MockDatabaseManager(connection, grammar, processor);
+     final int idInicial = 555;
+     final String cteName = 'organograma_arvore_get';
+
+     final cteDefinition = db.query()
+         .select('og.id')
+         .from('public.organograma as og') // CTE usa schema explícito
+         .where('og.id', '=', idInicial)
+         .unionAll(db.query()
+             .select('filho.id')
+             .from('public.organograma as filho') // CTE usa schema explícito
+             .join('$cteName as pai', 'filho.id_pai', '=', 'pai.id'));
+
+     builder
+         .from('sw_processo as p') // Tabela principal SEM schema explícito
+         .withRecursiveExpression(cteName, cteDefinition)
+         .join('public.organograma_historico as oh', 'oh.id', '=', // Join usa schema explícito
+              'p.id_organograma_historico_origem', 'left')
+         .whereIn('oh.id_organograma', (QueryBuilder subQuery) {
+           subQuery.select('id').from(cteName);
+         })
+         .where('p.cod_situacao', '=', 3)
+         .select('p.*');
+
+     await builder.get();
+
+     expect(connection.selectCallCount, 1);
+
+     final capturedSql = connection.lastSelectSql;
+     final capturedBindings = connection.lastSelectBindings;
+
+     // *** CORRIGIDO: Remove 'public.' da tabela principal na string esperada ***
+      final expectedGetSql = '''
+ with recursive "$cteName" as (select "og"."id" from "public"."organograma" as "og" where "og"."id" = ? union all select "filho"."id" from "public"."organograma" as "filho" inner join "$cteName" as "pai" on "filho"."id_pai" = "pai"."id") select "p".* from "sw_processo" as "p" left join "public"."organograma_historico" as "oh" on "oh"."id" = "p"."id_organograma_historico_origem" where "oh"."id_organograma" in (select "id" from "$cteName") and "p"."cod_situacao" = ?'''
+         .replaceAll(RegExp(r'\s+'), ' ')
+         .trim();
+
+     expect(capturedSql, equals(expectedGetSql), reason: 'Compiled GET SQL with CTE did not match');
+
+     final expectedBindings = [idInicial, 3];
+     expect(capturedBindings, orderedEquals(expectedBindings), reason: 'Captured bindings for GET did not match or were in wrong order');
+   });
+}
+
+// Helper DatabaseManager (simulado ou real, dependendo do setup do teste)
+// Para simplificar, podemos mockar um db.query() que retorna um builder
+// ou usar a instância global se configurada.
+// Exemplo de mock simples:
+class MockDatabaseManager {
+  final FakeConnection _connection;
+  final QueryGrammar _grammar;
+  final Processor _processor;
+
+  MockDatabaseManager(this._connection, this._grammar, this._processor);
+
+  QueryBuilder query() {
+    return QueryBuilder(_connection, _grammar, _processor);
+  }
+
+  // Adicione table() se necessário para a definição da CTE
+  QueryBuilder table(String name) {
+    return query().from(name);
+  }
 }

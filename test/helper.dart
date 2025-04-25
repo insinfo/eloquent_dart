@@ -3,15 +3,26 @@
 import 'package:eloquent/eloquent.dart';
 import 'package:test/test.dart';
 
+// helper.dart (ou onde sua FakeConnection está definida)
+//import 'package:eloquent/eloquent.dart';
+import 'dart:async';
+
 class FakeConnection implements ConnectionInterface {
-  // Propriedades para "espionar" a chamada a insert
+  // --- Propriedades para insert (existentes) ---
   String? lastInsertSql;
   List<dynamic>? lastInsertBindings;
   int insertCallCount = 0;
 
+  // --- NOVAS Propriedades para select ---
+  String? lastSelectSql;
+  List<dynamic>? lastSelectBindings;
+  int selectCallCount = 0;
+  // Você pode adicionar mocks para o resultado se precisar testar a resposta
+  List<Map<String, dynamic>> mockSelectResult = [];
+
   @override
   QueryBuilder table(String table) {
-    // Retorne um builder funcional para subqueries, mas usando esta conexão fake
+    // Use a gramática correta aqui
     return QueryBuilder(this, QueryPostgresGrammar(), Processor()).from(table);
   }
 
@@ -23,8 +34,12 @@ class FakeConnection implements ConnectionInterface {
   @override
   Future<Map<String, dynamic>?> selectOne(String query,
       [List bindings = const [], int? timeoutInSeconds]) async {
-    //print('FakeConnection.selectOne called (unimplemented)');
-    return null; // Ou um valor simulado se necessário
+    // Pode espionar aqui também se precisar testar selectOne
+    lastSelectSql = query;
+    lastSelectBindings = List.from(bindings);
+    selectCallCount++;
+    // Retorna o primeiro item do mock ou null
+    return mockSelectResult.isNotEmpty ? mockSelectResult.first : null;
   }
 
   @override
@@ -32,115 +47,142 @@ class FakeConnection implements ConnectionInterface {
       [List bindings = const [],
       bool useReadPdo = true,
       int? timeoutInSeconds]) async {
-    //print('FakeConnection.select called (unimplemented)');
-    return []; // Ou um valor simulado
+    // *** LÓGICA DE CAPTURA PARA SELECT ***
+    lastSelectSql = query;
+    lastSelectBindings = List.from(bindings); // Copia os bindings
+    selectCallCount++;
+
+    // print('--- FakeConnection.select CALLED ---');
+    // print('SQL: $query');
+    // print('Bindings: $bindings');
+    // print('------------------------------------');
+
+    // Retorna o resultado mockado
+    // Para o teste de count, ele espera um resultado como [{'aggregate': valor}]
+    // Para get, ele espera a lista de mapas. Ajuste mockSelectResult se necessário
+    // antes de chamar builder.count() ou builder.get() no teste,
+    // ou simplesmente retorne um valor genérico como [] se o resultado não importar.
+    // Se o SQL for um COUNT, simule a resposta correta:
+    if (query.toLowerCase().contains('count(*) as aggregate') ||
+        query.toLowerCase().contains('count("')) {
+      //print('FakeConnection returning mocked COUNT result.');
+      return Future.value([
+        {'aggregate': 10}
+      ]); // Exemplo: 10 registros
+    }
+
+    //print('FakeConnection returning mocked GET result (length: ${mockSelectResult.length}).');
+    return Future.value(
+        mockSelectResult); // Retorna a lista mock (pode estar vazia)
   }
 
-  // *** MODIFICAÇÃO PRINCIPAL AQUI ***
   @override
   Future<PDOResults> insert(String query,
       [List bindings = const [], int? timeoutInSeconds]) async {
-    // Grava os argumentos passados
     lastInsertSql = query;
-    lastInsertBindings = List.from(bindings); // Cria uma cópia
+    lastInsertBindings = List.from(bindings);
     insertCallCount++;
-
-    //print('FakeConnection.insert CALLED with SQL: $query');
-    //print('FakeConnection.insert CALLED with Bindings: $bindings');
-
-    // Retorna um resultado simulado (não importa muito para este teste)
-    // O importante é que seja um Future<PDOResults>
-    return PDOResults([], 1); // Ex: 1 linha afetada
+    // print('--- FakeConnection.insert CALLED ---');
+    // print('SQL: $query');
+    // print('Bindings: $bindings');
+    // print('------------------------------------');
+    // Retorna sucesso simulado com 1 linha afetada e sem linhas retornadas
+    return PDOResults([], 1);
   }
-  // *** FIM DA MODIFICAÇÃO ***
 
   @override
   Future<dynamic> update(String query,
       [List bindings = const [], int? timeoutInSeconds]) async {
-    //print('FakeConnection.update called (unimplemented)');
-    return 0; // Ex: 0 linhas afetadas
+    // Poderia adicionar captura aqui se necessário
+    return 1; // Simula 1 linha afetada
   }
 
   @override
   Future<int> delete(String query,
       [List bindings = const [], int? timeoutInSeconds]) async {
-    // print('FakeConnection.delete called (unimplemented)');
-    return 0;
+    // Poderia adicionar captura aqui se necessário
+    return 1; // Simula 1 linha afetada
   }
 
   @override
   Future<PDOResults> statement(String query,
       [List bindings = const [], int? timeoutInSeconds]) async {
-    // print('FakeConnection.statement called (unimplemented)');
+    // Poderia adicionar captura aqui se necessário
     return PDOResults([], 0);
   }
 
   @override
   Future<int> affectingStatement(String query,
       [List bindings = const [], int? timeoutInSeconds]) async {
-    // print('FakeConnection.affectingStatement called (unimplemented)');
+    // Poderia adicionar captura aqui se necessário
     return 0;
   }
 
   @override
   Future<int> unprepared(String query, int? timeoutInSeconds) async {
-    // print('FakeConnection.unprepared called (unimplemented)');
+    // Poderia adicionar captura aqui se necessário
     return 0;
   }
 
   @override
   dynamic prepareBindings(List bindings) {
-    // Implementação simples para testes: apenas retorna os bindings
-    // A implementação real faria conversões (DateTime -> String, bool -> int/bool)
-    return bindings;
+    return bindings; // Implementação simples para testes
   }
 
   @override
   Future<dynamic> transaction(Future<dynamic> Function(Connection ctx) callback,
       [int? timeoutInSeconds]) async {
-    //print('FakeConnection.transaction called (simulating success)');
-    // Simula a execução do callback dentro de uma transação fake
-    return await callback(
-        this as Connection); // Passa a própria fake connection
+    // Simula execução direta sem transação real
+    return await callback(this as Connection);
   }
 
   @override
   int transactionLevel() {
-    return 0; // Simula que não há transação ativa
+    return 0;
   }
 
   @override
   Future<dynamic> pretend(Function callback) async {
-    //print('FakeConnection.pretend called (unimplemented)');
+    // Simula o modo pretend retornando queries vazias (ou mocks se necessário)
+    //print("FakeConnection: Pretend mode called (returning empty list)");
+    try {
+      await callback(this); // Executa o callback para gerar chamadas internas
+    } catch (e) {
+      // Ignora erros dentro do pretend, pois o objetivo é capturar SQL
+      //print("FakeConnection: Ignored error during pretend: $e");
+    }
+    // No pretend real, você coletaria o SQL gerado. Aqui, retornamos vazio.
     return [];
   }
 
   @override
   String getDatabaseName() {
-    return 'fakedb'; // Nome dummy
+    return 'fakedb';
   }
 
   @override
   SchemaGrammar getSchemaGrammar() {
-    // Retorna a gramática de schema apropriada para evitar erros
-    // na gramática de query que pode precisar dela.
-    return SchemaPostgresGrammar(); // Ou a SchemaGrammar relevante
+    return SchemaPostgresGrammar(); // Usa a gramática correta
   }
 
-  // Método `getConfig` adicionado para compatibilidade, se necessário
+  // Método `getConfig` adicionado para compatibilidade
   dynamic getConfig(String option) {
-    // Retorna um valor dummy ou um mapa vazio, dependendo do que a gramática precisa
-    // Exemplo básico:
-    if (option == 'schema' || option == 'database') return 'fakedb';
-    if (option == 'charset') return 'utf8'; // Exemplo
-    return null; // Ou {}
+    if (option == 'schema') return 'public'; // Exemplo, ajuste se necessário
+    if (option == 'database') return 'fakedb';
+    if (option == 'charset') return 'utf8';
+    return null;
   }
 
-  // Adiciona um método para resetar o estado antes de cada teste
+  // *** ATUALIZAÇÃO no reset ***
   void reset() {
     lastInsertSql = null;
     lastInsertBindings = null;
     insertCallCount = 0;
+    // Reseta os novos campos de select
+    lastSelectSql = null;
+    lastSelectBindings = null;
+    selectCallCount = 0;
+    mockSelectResult = []; // Limpa o mock de resultado
   }
 }
 

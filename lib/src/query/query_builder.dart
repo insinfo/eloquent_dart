@@ -2872,9 +2872,20 @@ class QueryBuilder {
   /// @return array
   ///
   List getBindings() {
-    var result = [];
+    var result = <dynamic>[]; // Usar lista tipada
+
+    // 1. Adiciona bindings de CTEs ('expressions') PRIMEIRO
+    if (bindings['expressions'] is List &&
+        bindings['expressions']!.isNotEmpty) {
+      result.addAll(bindings['expressions']!);
+    }
+
     if (this.bindings['select'] != null) {
       result.addAll(this.bindings['select']);
+    }
+    if (bindings['from'] is List && bindings['from']!.isNotEmpty) {
+      // Adicionado para 'fromRaw'
+      result.addAll(bindings['from']!);
     }
     if (this.bindings['join'] != null) {
       result.addAll(this.bindings['join']);
