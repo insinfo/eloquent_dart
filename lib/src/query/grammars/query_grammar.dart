@@ -102,6 +102,7 @@ class QueryGrammar extends BaseGrammar {
       final name = expr['name'] as String;
       final sql = expr['query'] as String;
       final cols = expr['columns'] as List<String>?;
+      final isMaterialized = expr['materialized'] == true;
 
       // Se houver colunas, montar "(col1, col2) "
       final columnList =
@@ -110,8 +111,11 @@ class QueryGrammar extends BaseGrammar {
           ? ' '
           : ''; // Adiciona espaço só se houver colunas
 
+      //  Adiciona o hint MATERIALIZED se a flag for true
+      final materializedHint = isMaterialized ? ' MATERIALIZED' : '';
+
       statements.add(
-          '${wrapTable(name)}$separator$columnList as ($sql)'); // Usa 'as' minúsculo
+          '${wrapTable(name)}$separator$columnList as$materializedHint ($sql)'); // Usa 'as' minúsculo
     }
 
     // Junta todas as CTEs com vírgula e prépende WITH (+ RECURSIVE se necessário)

@@ -319,7 +319,7 @@ class QueryBuilder {
      * @return $this
      */
   QueryBuilder withExpression(String name, dynamic query,
-      [dynamic columns, bool recursive = false]) {
+      [dynamic columns, bool recursive = false, bool materialized = false]) {
     // createSub retorna [sql, bindings]
     final sub = this.createSub(query);
     final sql = sub[0];
@@ -329,6 +329,7 @@ class QueryBuilder {
       'query': sql,
       'columns': columns,
       'recursive': recursive,
+      'materialized': materialized,
     });
     this.addBinding(bindings, 'expressions');
     return this;
@@ -342,8 +343,34 @@ class QueryBuilder {
      * @param array|null $columns
      * @return $this
      */
-  QueryBuilder withRecursiveExpression(String name, query, [columns = null]) {
-    return this.withExpression(name, query, columns, true);
+  QueryBuilder withRecursiveExpression(String name, query,
+      [columns = null, bool materialized = false]) {
+    return this.withExpression(name, query, columns, true, materialized);
+  }
+
+  /**
+   * Add a **MATERIALIZED** common table expression to the query.
+   * (Implied non-recursive)
+   *
+   * @param string $name
+   * @param \Closure|\Illuminate\Database\Query\Builder|string $query
+   * @param array|null $columns
+   * @return $this
+   */
+  QueryBuilder withMaterializedExpression(String name, dynamic query,
+      [dynamic columns]) {
+    final sub = this.createSub(query);
+    final sql = sub[0];
+    final bindings = sub[1];
+    this.expressionsProp.add({
+      'name': name,
+      'query': sql, // O SQL da subquery
+      'columns': columns,
+      'recursive': false, // Materialized implica não-recursivo na forma simples
+      'materialized': true, // A NOVA FLAG!
+    });
+    this.addBinding(bindings, 'expressions');
+    return this;
   }
 
   /**
