@@ -25,6 +25,8 @@ dependencies:
   mysql_dart: ^1.0.0
   # postgres v3 
   postgres: ^3.5.4
+  collection: ^1.19.1
+  meta: ^1.17.0
   #postgres: 
     #path: ../postgresql-v3
   # postgres:
