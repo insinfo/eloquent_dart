@@ -308,6 +308,12 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
     return this.statement(query, bindings, timeoutInSeconds);
   }
 
+  /// alias for statement
+  Future<PDOResults> rawQuery(query,
+      [bindings = const [], int? timeoutInSeconds]) async {
+    return this.statement(query, bindings, timeoutInSeconds);
+  }
+
   ///
   /// Run an update statement against the database.
   ///

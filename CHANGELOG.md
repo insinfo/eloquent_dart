@@ -98,6 +98,7 @@ final manager = Manager();
 
 - update postgres_v3 to  ^3.5.4 With that dependency, upgraded minimum SDK to 3.4
 - change mysql_client to mysql_dart ^1.0.0
+- change postgres_fork ^2.8.4 to postgres_fork ^2.8.5
 
 ```dart
  final manager = Manager();

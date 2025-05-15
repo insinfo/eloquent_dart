@@ -33,7 +33,7 @@ class JoinClause {
   bool isLateral; // <-- Adicionado
 
   /// Adiciona uma cláusula ON TRUE.
-  JoinClause onTrue([String boolean = 'and']) {   
+  JoinClause onTrue([String boolean = 'and']) {
     return this.on(QueryExpression('TRUE'), null, null, boolean, false);
   }
 
