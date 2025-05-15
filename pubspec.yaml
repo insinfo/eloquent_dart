@@ -27,6 +27,7 @@ dependencies:
   postgres: ^3.5.4
   collection: ^1.19.1
   meta: ^1.17.0
+  path: ^1.9.1
   #postgres: 
     #path: ../postgresql-v3
   # postgres:
