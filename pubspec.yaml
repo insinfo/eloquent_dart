@@ -1,5 +1,5 @@
 name: eloquent
-version: 3.3.0
+version: 3.3.1
 description: eloquent query builder port from PHP Laravel
 homepage: https://github.com/insinfo/eloquent_dart
 #publish_to: none

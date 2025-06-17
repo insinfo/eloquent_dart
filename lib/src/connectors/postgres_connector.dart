@@ -24,7 +24,7 @@ class PostgresConnector extends Connector implements ConnectorInterface {
 
     //var dsn = getDsn(config);
     //var options = getOptions(config);
-    var connection = await createConnection(config);
+    final connection = await createConnection(config);
 
     // if (config.containsKey('charset') && config['charset'] != null) {
     //   var charset = config['charset'];
@@ -123,27 +123,48 @@ class PostgresConnector extends Connector implements ConnectorInterface {
     return dsn;
   }
 
+  /// Converte o parâmetro `schema` (String ou List<String>) no formato
+  /// `"esquema1","esquema2"` aceito pelo comando
+  /// `SET search_path TO …`.
   ///
-  /// Format the schema for the DSN.
-  ///
-  /// @param  array|string  $schema
-  /// @return string
+  /// *  Aceita `null`, string vazia ou itens vazios no meio da lista
+  ///    – eles são simplesmente ignorados.
+  /// *  Mantém itens que **já** estejam entre aspas duplas, sem duplicá-las.
+  /// *  Remove espaços em volta de cada nome.
+  /// *  Elimina esquemas duplicados, preservando a primeira ocorrência.
   ///
   String formatSchema(dynamic schema) {
-    String result = '';
-    if (schema is List<String>) {
-      result = schema.map((e) => '"$e"').join(',');
-    } else if (schema is String) {
-      if (schema.contains(',')) {
-        final parts = schema.split(',');
-        result = parts.map((e) => '"$e"').join(',');
-      } else {
-        result = '"$schema"';
-      }
+    // 1. Quebra em partes
+    final List<String> parts;
+    if (schema is String) {
+      parts = schema.split(',');
+    } else if (schema is Iterable) {
+      parts = schema.cast<String>().toList();
+    } else if (schema == null) {
+      return '';
     } else {
-      throw Exception('schema is not String or List<String>');
+      throw ArgumentError('schema deve ser String ou List<String>');
     }
-    return result;
+
+    // 2. Normaliza, filtra vazios, evita duplicatas
+    final seen = <String>{};
+    final buffer = StringBuffer();
+    for (var raw in parts) {
+      var s = raw.trim();
+      if (s.isEmpty) continue;
+
+      // já está entre aspas? mantém
+      if (!(s.startsWith('"') && s.endsWith('"'))) {
+        s = '"$s"';
+      }
+
+      if (seen.add(s)) {
+        if (buffer.isNotEmpty) buffer.write(',');
+        buffer.write(s);
+      }
+    }
+
+    return buffer.toString();
   }
 
   ///
@@ -155,22 +176,37 @@ class PostgresConnector extends Connector implements ConnectorInterface {
   /// @return \PDO
   /// Aqui que cria a conexão com o Banco de Dados de fato
   ///
-  Future<PDOInterface> createConnection(Map<String, dynamic> config) async {
-    //print('postgres_connector@createConnection config: $config');
+  Future<PDOInterface> createConnection(Map<String, dynamic> conf) async {
+    // clone – evita side-effects entre requisições
+    final config = Map<String, dynamic>.from(conf);
 
     if (config.containsKey('schema')) {
       config['schema'] = formatSchema(config['schema']);
     }
+
     final pdoConfig = PDOConfig.fromMap(config);
     late PDOInterface pdo;
-    if (config['driver_implementation'] == 'postgres') {
-      pdo = PostgresPDO(pdoConfig);
-    } else if (config['driver_implementation'] == 'postgres_v3') {
-      pdo = PostgresV3PDO(pdoConfig);
-    } else if (config['driver_implementation'] == 'dargres') {
-      pdo = DargresPDO(pdoConfig);
-    } else {
-      pdo = PostgresPDO(pdoConfig);
+    // if (config['driver_implementation'] == 'postgres') {
+    //   pdo = PostgresPDO(pdoConfig);
+    // } else if (config['driver_implementation'] == 'postgres_v3') {
+    //   pdo = PostgresV3PDO(pdoConfig);
+    // } else if (config['driver_implementation'] == 'dargres') {
+    //   pdo = DargresPDO(pdoConfig);
+    // } else {
+    //   pdo = PostgresPDO(pdoConfig);
+    // }
+    switch (conf['driver_implementation']) {
+      case 'postgres':
+        pdo = PostgresV2PDO(pdoConfig);
+        break;
+      case 'postgres_v3':
+        pdo = PostgresV3PDO(pdoConfig);
+        break;
+      case 'dargres':
+        pdo = DargresPDO(pdoConfig);
+        break;
+      default:
+        pdo = PostgresV2PDO(pdoConfig);
     }
     await pdo.connect();
     return pdo;

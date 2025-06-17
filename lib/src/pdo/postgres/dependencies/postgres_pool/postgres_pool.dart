@@ -307,6 +307,7 @@ class PgPoolSettings {
     maxQueryCount = other.maxQueryCount;
     retryOptions = other.retryOptions;
     timeZone = other.timeZone;
+    encoding = other.encoding;
   }
 }
 
@@ -350,23 +351,22 @@ class PgPool implements PostgreSQLExecutionContext {
   }) async {
     retryOptions ??= settings.retryOptions;
     try {
-      return await retryOptions.retry(
-        () async {
-          return await _withConnection(
-            (c) => fn(_PgExecutionContextWrapper(
-              c.connectionId,
-              c.connection,
-              sessionId,
-              traceId,
-              _events,
-            )),
-          );
-        },
-        retryIf: (e) async =>
-            e is! PostgreSQLException &&
+      return await retryOptions.retry(() async {
+        return await _withConnection(
+          (c) => fn(_PgExecutionContextWrapper(
+            c.connectionId,
+            c.connection,
+            sessionId,
+            traceId,
+            _events,
+            () => c.queryCount++,
+          )),
+        );
+      }, retryIf: (e) async {
+        return e is! PostgreSQLException &&
             e is! IOException &&
-            (retryIf == null || await retryIf(e)),
-      );
+            (retryIf == null || await retryIf(e));
+      });
     } catch (e) {
       if (orElse != null) {
         return await orElse();
@@ -396,6 +396,7 @@ class PgPool implements PostgreSQLExecutionContext {
                 sessionId,
                 traceId,
                 _events,
+                () => c.queryCount++,
               )),
             ) as R;
           });
@@ -455,7 +456,7 @@ class PgPool implements PostgreSQLExecutionContext {
       final r = await body(ctx);
       ctx.lastReturned = DateTime.now();
       ctx.elapsed += sw.elapsed;
-      ctx.queryCount++;
+      //ctx.queryCount++;
       ctx.isIdle = true;
       return r;
     } on PostgreSQLException catch (_) {
@@ -471,7 +472,7 @@ class PgPool implements PostgreSQLExecutionContext {
       ctx.lastReturned = DateTime.now();
       ctx.elapsed += sw.elapsed;
       ctx.errorCount++;
-      ctx.queryCount++;
+      // ctx.queryCount++;
       ctx.isIdle = true;
       rethrow;
     }
@@ -487,11 +488,14 @@ class PgPool implements PostgreSQLExecutionContext {
       connectionId: connectionId,
       action: PgPoolAction.connecting,
     ));
+
     try {
       for (var i = 3; i > 0; i--) {
         final sw = Stopwatch()..start();
+        PostgreSQLConnection? c; // ← fora do inner-try
+        _ConnectionCtx? ctx;
         try {
-          final c = PostgreSQLConnection(
+          c = PostgreSQLConnection(
             _url.host,
             _url.port,
             _url.database,
@@ -505,20 +509,18 @@ class PgPool implements PostgreSQLExecutionContext {
             encoding: settings.encoding,
           );
           await c.open();
+
           if (settings.onOpen != null) {
-            await settings.onOpen!(c);
+            await settings.onOpen!(c); // ← se falhar, vamos ao catch
           }
-          final ctx = _ConnectionCtx(connectionId, c);
+
+          ctx = _ConnectionCtx(connectionId, c);
           _connections.add(ctx);
 
-          // Set the application connection name
-          final applicationName = _url.applicationName;
-          if (applicationName != null) {
-            await _setApplicationName(
-              c,
-              applicationName: applicationName,
-              connectionId: connectionId,
-            );
+          final appName = _url.applicationName;
+          if (appName != null) {
+            await _setApplicationName(c,
+                applicationName: appName, connectionId: connectionId);
           }
 
           _events.add(PgPoolEvent(
@@ -526,9 +528,16 @@ class PgPool implements PostgreSQLExecutionContext {
             action: PgPoolAction.connectingCompleted,
             elapsed: sw.elapsed,
           ));
-
-          return ctx;
+          return ctx; // ← sucesso
         } catch (e, st) {
+          // Fecha e remove quaisquer artefatos parciais
+          if (c != null && !c.isClosed) {
+            await c.close();
+          }
+          if (ctx != null) {
+            _connections.remove(ctx);
+          }
+
           if (i == 1) {
             _events.add(PgPoolEvent(
               connectionId: connectionId,
@@ -537,15 +546,15 @@ class PgPool implements PostgreSQLExecutionContext {
               error: e,
               stackTrace: st,
             ));
-            rethrow;
+            rethrow; // estoura depois da última tentativa
           }
+          // Caso contrário, o loop tenta de novo.
         }
       }
-      throw StateError('Should not reach this code.');
+      throw StateError('Unreachable'); // salvaguarda
     } finally {
-      final c = _openCompleter!;
+      _openCompleter!.complete();
       _openCompleter = null;
-      c.complete();
     }
   }
 
@@ -756,6 +765,7 @@ class _PgExecutionContextWrapper implements PostgreSQLExecutionContext {
   final String? sessionId;
   final String? traceId;
   final Sink<PgPoolEvent> _eventSink;
+  final void Function() _afterQuery;
 
   _PgExecutionContextWrapper(
     this.connectionId,
@@ -763,6 +773,7 @@ class _PgExecutionContextWrapper implements PostgreSQLExecutionContext {
     this.sessionId,
     this.traceId,
     this._eventSink,
+    this._afterQuery,
   );
 
   Future<R> _run<R>(
@@ -806,6 +817,7 @@ class _PgExecutionContextWrapper implements PostgreSQLExecutionContext {
       rethrow;
     } finally {
       sw.stop();
+      _afterQuery();
     }
   }
 

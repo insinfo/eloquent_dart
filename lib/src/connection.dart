@@ -669,14 +669,14 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
     if (this.causedByLostConnection(e) &&
         tryReconnectCount < tryReconnectLimit) {
       await Future.delayed(Duration(milliseconds: delay));
-      // print('Eloquent@tryAgainIfCausedByLostConnection try reconnect...');
+
       tryReconnectLimit++;
       await this.reconnect();
       tryReconnectLimit = 0;
       return await this
           .runQueryCallback(query, bindings, callback, timeoutInSeconds);
     }
-    // print('tryAgainIfCausedByLostConnection');
+
     throw e;
   }
 
@@ -686,9 +686,6 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   /// @return void
   ///
   Future<void> disconnect() async {
-    // this.setPdo(null).setReadPdo(null);
-    //throw UnimplementedError();
-    //print('Connection@disconnect');
     try {
       await this.pdo.pdoInstance.close();
     } catch (e, s) {
@@ -932,7 +929,7 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   ///
   String getDriverName() {
     //return this.pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
-    return 'teste';
+    return 'eloquent';
   }
 
   ///

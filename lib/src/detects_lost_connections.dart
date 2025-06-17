@@ -14,7 +14,7 @@ mixin DetectsLostConnections {
       '57P',//for posgresql restart
        "Can't create a connection",
        'Connection is closed',  
-       'connection is not open',
+       'connection is not open',//but connection is not open
     ]);
     
     return isR;

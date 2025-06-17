@@ -7,7 +7,7 @@ import 'package:postgres_fork/postgres.dart';
 
 import 'dependencies/postgres_pool/postgres_pool.dart';
 
-class PostgresPDO extends PDOInterface {
+class PostgresV2PDO extends PDOInterface {
   /// default query Timeout =  30 seconds
   static const defaultTimeoutInSeconds = 30;
 
@@ -21,7 +21,7 @@ class PostgresPDO extends PDOInterface {
   /// var pdo = new PDO(PDOConfig.fromMap(config));
   /// await pdo.connect();
   ///
-  PostgresPDO(this.config) {
+  PostgresV2PDO(this.config) {
     super.pdoInstance = this;
   }
 
@@ -47,7 +47,7 @@ class PostgresPDO extends PDOInterface {
   }
 
   //called from postgres_connector.dart
-  Future<PostgresPDO> connect() async {
+  Future<PostgresV2PDO> connect() async {
     final timeZone = TimeZoneSettings(config.timezone ?? 'UTC');
     timeZone.forceDecodeTimestamptzAsUTC = config.forceDecodeTimestamptzAsUTC;
     timeZone.forceDecodeTimestampAsUTC = config.forceDecodeTimestampAsUTC;
@@ -64,12 +64,13 @@ class PostgresPDO extends PDOInterface {
       final settings = PgPoolSettings();
       settings.encoding = _getEncoding(config.charset ?? 'utf8');
       settings.maxConnectionCount = config.poolSize ?? 1;
+
       settings.onOpen = (conn) async {
         await _onOpen(conn, config);
       };
       settings.timeZone = timeZone;
       connection = PgPool(endpoint, settings: settings);
-      //print('dsnParser.pool ${dsnParser.pool} $connection');
+      
     } else {
       connection = PostgreSQLConnection(
         config.host,
@@ -181,7 +182,7 @@ class PostgresPDO extends PDOInterface {
   Future close() async {
     if (connection is PostgreSQLConnection) {
       await (connection as PostgreSQLConnection).close();
-    } else {
+    } else if (connection is PgPool) {
       await (connection as PgPool).close();
     }
   }

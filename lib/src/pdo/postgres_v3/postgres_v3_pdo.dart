@@ -169,12 +169,10 @@ class PostgresV3PDO extends PDOInterface {
 
   @override
   Future close() async {
-    // print('postgres_v3_pdo@close isOpen ${(connection).isOpen} ');
     if (connection is Connection) {
-      await (connection as Connection).close();
+      await (connection as Connection).close(force: true);
     } else if (connection is Pool) {
-      await (connection as Pool).close();
+      await (connection as Pool).close(force: true);
     }
-    //print('postgres_v3_pdo@close isOpen ${(connection).isOpen} ');
   }
 }

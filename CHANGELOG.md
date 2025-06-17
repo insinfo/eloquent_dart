@@ -129,3 +129,7 @@ final manager = Manager();
     //'sslmode' : 'require',
   });
 ```
+
+## 3.3.1
+
+- fix bug on PgPool for PostgresV2PDO
