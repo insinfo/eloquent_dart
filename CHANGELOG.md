@@ -133,3 +133,18 @@ final manager = Manager();
 ## 3.3.1
 
 - fix bug on PgPool for PostgresV2PDO
+
+## 3.3.2
+
+### Added
+
+- **`onRaw(String sql)` method to `JoinClause`**: Adds support for raw SQL expressions as `JOIN` conditions. This is useful for complex scenarios that the standard `on()` method cannot handle, such as using database-specific functions or operators in the `ON` clause.
+
+  *Usage Example:*
+  ```dart
+  db.table('processes')
+    .join('listings as l', (JoinClause jc) {
+      jc.onRaw("(processes.code || '/' || processes.year) = ANY(l.processes_array)");
+    })
+    .get();
+  ```

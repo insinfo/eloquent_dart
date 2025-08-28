@@ -291,8 +291,16 @@ class QueryGrammar extends BaseGrammar {
 
       // Compila as cláusulas ON para os demais joins
       var clauses = <String>[];
+      // for (var clause in join.clauses) {
+      //   clauses.add(this.compileJoinConstraint(clause));
+      // }
       for (var clause in join.clauses) {
-        clauses.add(this.compileJoinConstraint(clause));
+        // ADICIONA A VERIFICAÇÃO DO TIPO DA CLÁUSULA
+        if (clause['type'] == 'raw') {
+          clauses.add('${clause['boolean']} ${clause['sql']}');
+        } else {
+          clauses.add(this.compileJoinConstraint(clause));
+        }
       }
 
       if (clauses.isNotEmpty) {

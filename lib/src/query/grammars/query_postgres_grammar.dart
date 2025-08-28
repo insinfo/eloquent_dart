@@ -323,9 +323,19 @@ class QueryPostgresGrammar extends QueryGrammar {
 
       // Compila as cláusulas ON para os demais joins
       final clauses = <String>[];
+
+      // for (var clause in join.clauses) {
+      //   clauses.add(this.compileJoinConstraint(clause));
+      // }
       for (var clause in join.clauses) {
-        clauses.add(this.compileJoinConstraint(clause));
+        // ADICIONA A VERIFICAÇÃO DO TIPO DA CLÁUSULA
+        if (clause['type'] == 'raw') {
+          clauses.add('${clause['boolean']} ${clause['sql']}');
+        } else {
+          clauses.add(this.compileJoinConstraint(clause));
+        }
       }
+
       var clausesString = '';
       if (clauses.isNotEmpty) {
         // Remove o booleano inicial (AND/OR) da primeira cláusula

@@ -1156,7 +1156,7 @@ class QueryBuilder {
   ///
   QueryBuilder whereRaw(String sql,
       [List bindings = const [], boolean = 'and']) {
-    var type = 'raw';
+    final type = 'raw';
     this.wheresProp.add({'type': type, 'sql': sql, 'boolean': boolean});
     this.addBinding(bindings, 'where');
     return this;

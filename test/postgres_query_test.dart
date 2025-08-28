@@ -220,6 +220,24 @@ void main() {
       ]);
     });
 
+    test('select join with onRaw', () async {
+      final query = db.table('temp_location');
+      final res = await query
+          .select(['temp_location.id', 'city', 'street', 'people.name']).join(
+              'people', (JoinClause jc) {
+        jc.onRaw('"people"."id" = "temp_location"."id_people"');
+      }).first();
+
+      // Verificação: Checa se o resultado do JOIN está correto
+      expect(res, isNotNull);
+      expect(res, {
+        'id': 1,
+        'city': 'Niteroi',
+        'street': 'Rua B',
+        'name': 'Isaque',
+      });
+    });
+
     test('update simple', () async {
       await db
           .table('temp_location')
@@ -1356,5 +1374,6 @@ void main() {
     expect(filhoV1['ativo'], isTrue);
   });
   // --- Fim do novo teste ---
+
   //end
 }

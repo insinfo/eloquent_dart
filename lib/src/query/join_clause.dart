@@ -278,4 +278,20 @@ class JoinClause {
 
     return this;
   }
+
+  ///
+  /// Add a raw "on" clause to the join.
+  ///
+  /// @param  String  $sql
+  /// @param  String  $boolean
+  /// @return $this
+  ///
+  JoinClause onRaw(String sql, [String boolean = 'and']) {
+    this.clauses.add({
+      'type': 'raw',
+      'sql': sql,
+      'boolean': boolean,
+    });
+    return this;
+  }
 }
