@@ -294,4 +294,17 @@ class JoinClause {
     });
     return this;
   }
+
+  JoinClause clone() {
+    final newJoin = JoinClause(this.type, this.table, null, this.isLateral);
+    newJoin.bindingsLocal = [...this.bindingsLocal];
+    newJoin.clauses = this.clauses.map((clauseMap) {
+      final newMap = Map<String, dynamic>.from(clauseMap);
+      if (newMap.containsKey('join') && newMap['join'] is JoinClause) {
+        newMap['join'] = (newMap['join'] as JoinClause).clone();
+      }
+      return newMap;
+    }).toList();
+    return newJoin;
+  }
 }

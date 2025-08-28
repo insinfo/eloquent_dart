@@ -3085,6 +3085,57 @@ class QueryBuilder {
   }
 
   ///
+  /// Clone the query without the given properties.
+  ///
+  /// @return static
+  ///
+  QueryBuilder clone() {
+    final newQuery = this.newQuery();
+
+    newQuery.columnsProp = columnsProp != null ? [...columnsProp!] : null;
+    newQuery.fromProp = fromProp;
+    newQuery.joinsProp = joinsProp.map((join) => join.clone()).toList();
+
+    newQuery.wheresProp =
+        wheresProp.map((where) => Map<String, dynamic>.from(where)).toList();
+    newQuery.groupsProp = [...groupsProp];
+    newQuery.havingsProp =
+        havingsProp.map((having) => Map<String, dynamic>.from(having)).toList();
+    newQuery.ordersProp =
+        ordersProp.map((order) => Map<String, dynamic>.from(order)).toList();
+    newQuery.limitProp = limitProp;
+    newQuery.offsetProp = offsetProp;
+    newQuery.unionsProp =
+        unionsProp.map((union) => Map<String, dynamic>.from(union)).toList();
+    newQuery.unionLimit = unionLimit;
+    newQuery.unionOffset = unionOffset;
+    newQuery.unionOrdersProp = unionOrdersProp
+        .map((order) => Map<String, dynamic>.from(order))
+        .toList();
+    newQuery.lockProp = lockProp;
+    newQuery.distinctProp = distinctProp;
+
+    newQuery.expressionsProp = expressionsProp
+        .map((expression) => Map<String, dynamic>.from(expression))
+        .toList();
+
+    newQuery.recursionLimitProp = recursionLimitProp;
+
+    newQuery.bindings = {
+      'select': [...bindings['select']!],
+      'from': [...bindings['from']!],
+      'join': [...bindings['join']!],
+      'where': [...bindings['where']!],
+      'having': [...bindings['having']!],
+      'order': [...bindings['order']!],
+      'union': [...bindings['union']!],
+      'expressions': [...bindings['expressions']!],
+    };
+
+    return newQuery;
+  }
+
+  ///
   /// Handle dynamic method calls into the method.
   ///
   /// @param  String  methodName

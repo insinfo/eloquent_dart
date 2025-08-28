@@ -238,6 +238,63 @@ void main() {
       });
     });
 
+    test('clone cria uma cópia profunda e independente da query', () async {
+      // 1. Constrói a query original com um estado complexo.
+      final queryOriginal = db
+          .table('people as p')
+          .select(['p.name', 'tl.city'])
+          .join('temp_location as tl', (JoinClause jc) {
+            jc.on('tl.id_people', '=', 'p.id');
+            jc.where('tl.city', '=', 'Niteroi'); // Binding no join
+          })
+          .where('p.profession', '=', 'Personal Trainer') // Binding no where
+          .orderBy('p.name', 'desc')
+          .limit(10);
+
+      // Salva o estado inicial da query original para comparação posterior.
+      final originalSql = queryOriginal.toSql();
+      final originalBindings = queryOriginal.getBindings();
+
+      // 2. Clona a query.
+      final queryClone = queryOriginal.clone();
+
+      // 3. Verifica se o estado inicial do clone é idêntico ao original.
+      expect(queryClone.toSql(), equals(originalSql),
+          reason: 'O SQL inicial do clone deve ser idêntico ao original.');
+      expect(queryClone.getBindings(), equals(originalBindings),
+          reason:
+              'Os bindings iniciais do clone devem ser idênticos aos do original.');
+
+      // 4. Modifica APENAS o clone, adicionando mais cláusulas.
+      queryClone.where('p.id', '=', 1).orWhereNotNull('p.name').limit(5);
+
+      // 5. O passo mais importante: VERIFICA SE A QUERY ORIGINAL NÃO MUDOU.
+      // Se a clonagem for superficial (shallow), a original seria alterada aqui.
+      expect(queryOriginal.toSql(), equals(originalSql),
+          reason: 'O SQL original NÃO deve mudar após a modificação do clone.');
+      expect(queryOriginal.getBindings(), equals(originalBindings),
+          reason:
+              'Os bindings originais NÃO devem mudar após a modificação do clone.');
+
+      // 6. Verifica se o clone foi modificado corretamente.
+      final cloneSql = queryClone.toSql();
+      final cloneBindings = queryClone.getBindings();
+
+      // Verifica o SQL modificado
+      expect(cloneSql, isNot(equals(originalSql)));
+      
+      // LINHA CORRIGIDA: Verificação feita em minúsculas para ser mais robusta.
+      expect(
+        cloneSql.toLowerCase(),
+        contains('where "p"."profession" = ? and "p"."id" = ? or "p"."name" is not null')
+      );
+      
+      expect(cloneSql, contains('limit 5')); // 'limit' é gerado em minúsculas
+
+      // Verifica os bindings modificados (a ordem é importante)
+      expect(cloneBindings, orderedEquals(['Niteroi', 'Personal Trainer', 1]));
+    });
+
     test('update simple', () async {
       await db
           .table('temp_location')

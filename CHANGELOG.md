@@ -148,3 +148,21 @@ final manager = Manager();
     })
     .get();
   ```
+  
+- **`clone()` method to `QueryBuilder`**: Creates a deep and independent copy of a query builder instance. This allows for the duplication of a query's entire state (including selects, joins, wheres, orders, and bindings) into a new object. Modifying the cloned query will not affect the original, making it ideal for creating variations from a base query.
+
+  *Usage Example:*
+  ```dart
+  // 1. Create a base query for active users
+  final baseQuery = db.table('users').where('status', '=', 'active');
+
+  // 2. Clone it to create variations without affecting the original
+  final usersCountQuery = baseQuery.clone();
+  final firstUserQuery = baseQuery.clone();
+
+  // 3. Use the clones for different purposes
+  final totalActiveUsers = await usersCountQuery.count();
+  final firstUser = await firstUserQuery.orderBy('created_at').first();
+
+  // The original query remains untouched and can be reused
+  final allActiveUsers = await baseQuery.get();
