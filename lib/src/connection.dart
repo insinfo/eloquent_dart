@@ -588,15 +588,13 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
       // result = await this
       //     .tryAgainIfCausedByLostConnection(e, query, bindings, callback, timeoutInSeconds);
 
-      if (this.causedByLostConnection(e) &&
-          tryReconnectCount < tryReconnectLimit) {
-        await Future.delayed(Duration(milliseconds: 1000));
-        // print('Eloquent@tryAgainIfCausedByLostConnection try reconnect...');
-        tryReconnectLimit++;
-        await this.reconnect();
-        tryReconnectLimit = 0;
-        return await this
-            .runQueryCallback(query, bindings, callback, timeoutInSeconds);
+      if (causedByLostConnection(e) && tryReconnectCount < tryReconnectLimit) {
+        await Future.delayed(const Duration(milliseconds: 1000));
+        tryReconnectCount++; // incrementa o contador
+        await reconnect();
+        tryReconnectCount = 0; // zera depois do sucesso
+        return await runQueryCallback(
+            query, bindings, callback, timeoutInSeconds);
       }
       rethrow;
     }
@@ -1016,7 +1014,7 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   /// @return bool
   ///
   bool pretending() {
-    return this.pretending == true;
+    return this.pretendingProp == true;
   }
 
   ///

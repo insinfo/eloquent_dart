@@ -238,6 +238,55 @@ void main() {
       });
     });
 
+    test('select join with onRaw + bindings (placeholders and order)',
+        () async {
+      // tl -> temp_location; p -> people
+      final q = db
+          .table('temp_location as tl')
+          .select(['tl.id', 'tl.city', 'tl.street', 'p.name']).join(
+              'people as p', (JoinClause jc) {
+        // onRaw com DOIS bindings (profession e name)
+        jc.onRaw(
+          '"p"."id" = "tl"."id_people" AND "p"."profession" = ? AND "p"."name" = ?',
+          'and',
+          ['Personal Trainer', 'Isaque'],
+        );
+      }).where('tl.id', '=', 1);
+
+      // SQL deve conter os placeholders vindos do onRaw
+      final sql = q.toSql().toLowerCase();
+      expect(sql, contains('"p"."id" = "tl"."id_people"'));
+      expect(sql, contains('"p"."profession" = ?'));
+      expect(sql, contains('"p"."name" = ?'));
+      expect(sql, contains('where "tl"."id" = ?'));
+
+      // A ordem dos bindings deve ser: [do onRaw..., depois os do where...]
+      expect(q.getBindings(), orderedEquals(['Personal Trainer', 'Isaque', 1]));
+
+      // Execução e verificação do resultado
+      final res = await q.first();
+      expect(res, isNotNull);
+      expect(res, {
+        'id': 1,
+        'city': 'Niteroi',
+        'street': 'Rua B',
+        'name': 'Isaque',
+      });
+    });
+
+    test('mix on() and onRaw() keeps binding order', () async {
+      final q = db
+          .table('temp_location as tl')
+          .select(['tl.id', 'p.name']).join('people as p', (j) {
+        j.on('p.id', '=', 'tl.id_people'); // no bindings
+        j.onRaw('"p"."profession" = ?', 'and', ['Personal Trainer']);
+      }).where('tl.id', '=', 1);
+
+      expect(q.getBindings(), orderedEquals(['Personal Trainer', 1]));
+      final row = await q.first();
+      expect(row?['name'], 'Isaque');
+    });
+
     test('clone cria uma cópia profunda e independente da query', () async {
       // 1. Constrói a query original com um estado complexo.
       final queryOriginal = db
@@ -282,13 +331,13 @@ void main() {
 
       // Verifica o SQL modificado
       expect(cloneSql, isNot(equals(originalSql)));
-      
+
       // LINHA CORRIGIDA: Verificação feita em minúsculas para ser mais robusta.
       expect(
-        cloneSql.toLowerCase(),
-        contains('where "p"."profession" = ? and "p"."id" = ? or "p"."name" is not null')
-      );
-      
+          cloneSql.toLowerCase(),
+          contains(
+              'where "p"."profession" = ? and "p"."id" = ? or "p"."name" is not null'));
+
       expect(cloneSql, contains('limit 5')); // 'limit' é gerado em minúsculas
 
       // Verifica os bindings modificados (a ordem é importante)
@@ -1046,9 +1095,77 @@ void main() {
       await db.statement('DROP TABLE temp_people');
     });
 
+    //joinRaw
+    test('select inner joinRaw com callback e bindings (subquery derivada)',
+        () async {
+      // Subquery crua com filtro por profissão (binding) e alias "p"
+      // Depois fazemos ON p.id = tl.id_people via callback.
+      final query = db
+          .table('temp_location as tl')
+          .select(['tl.id', 'tl.city', 'tl.street', 'p.name']).joinRaw(
+        '(select id, name, profession from people where profession = ?) as p',
+        ['Personal Trainer'], // <-- binding da subquery
+        'inner',
+        (JoinClause j) {
+          j.on('p.id', '=', 'tl.id_people');
+        },
+      ).where('tl.id', '=', 1);
+
+      // SQL e bindings gerados (verificações leves/robustas)
+      final sql = query.toSql().toLowerCase();
+      expect(
+          sql,
+          contains(
+              'join (select id, name, profession from people where profession = ?) as p'));
+      expect(sql, contains('on "p"."id" = "tl"."id_people"'));
+      expect(sql, contains('where "tl"."id" = ?'));
+
+      // A ordem esperada de bindings: [ 'Personal Trainer', 1 ]
+      expect(query.getBindings(), orderedEquals(['Personal Trainer', 1]));
+
+      // Executa e valida o resultado
+      final res = await query.first();
+      expect(res, isNotNull);
+      expect(res, {
+        'id': 1,
+        'city': 'Niteroi',
+        'street': 'Rua B',
+        'name': 'Isaque',
+      });
+    });
+
+    test('select joinRaw usando onTrue() (join sempre verdadeiro)', () async {
+      // Usa joinRaw com a "tabela" people aliás p, e o ON é sempre TRUE + outra condição.
+      // onTrue() injeta "ON TRUE", depois encadeamos outro .on para completar.
+      final q =
+          db.table('temp_location as tl').select(['tl.id', 'p.name']).joinRaw(
+        'people as p', // expressão crua sem wrap/escape
+        const [],
+        'inner',
+        (JoinClause j) {
+          j.onTrue(); // ON TRUE
+          j.on('p.id', '=', 'tl.id_people');
+        },
+      ).where('tl.id', '=', 1);
+
+      final sql = q.toSql().toLowerCase();
+      expect(
+        sql,
+        contains('join people as p on true and "p"."id" = "tl"."id_people"'),
+      );
+
+      expect(q.getBindings(), orderedEquals([1]));
+
+      final rows = await q.get();
+      expect(rows, [
+        {'id': 1, 'name': 'Isaque'}
+      ]);
+    });
+
     //end
   });
 
+  //fim grupo query
   group('Missing tests', () {
     group('Pagination', () {
       test('paginate returns correct metadata and items', () async {

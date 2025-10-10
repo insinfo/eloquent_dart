@@ -3084,6 +3084,41 @@ class QueryBuilder {
     return this;
   }
 
+  /// Adiciona um JOIN com a “tabela/expressão” bruta (sem wrap) e, opcionalmente,
+  /// permite declarar as condições ON via callback.
+  ///
+  /// Exemplos:
+  ///   // JOIN simples, sem ON (útil com ON TRUE ou NATURAL, etc.)
+  ///   qb.joinRaw('(select * from foo) as f');
+  QueryBuilder joinRaw(
+    String tableExpression, [
+    List bindings = const [],
+    String type = 'inner',
+    Function(JoinClause)? on,
+  ]) {
+    // mantém a expressão crua, sem wrap/escape
+    final tableExpr = QueryExpression(tableExpression);
+
+    // cria o JoinClause e empilha na consulta
+    final join = JoinClause(type, tableExpr, this);
+    this.joinsProp.add(join);
+
+    // bindings associados à “tabela”/expressão do join
+    if (bindings.isNotEmpty) {
+      this.addBinding(bindings, 'join');
+    }
+
+    // permite configurar o ON via callback (incluindo onRaw)
+    if (on != null) {
+      on(join);
+      if (join.bindingsLocal.isNotEmpty) {
+        this.addBinding(join.bindingsLocal, 'join');
+      }
+    }
+
+    return this;
+  }
+
   ///
   /// Clone the query without the given properties.
   ///

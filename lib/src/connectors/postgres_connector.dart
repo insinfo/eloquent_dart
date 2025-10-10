@@ -186,15 +186,7 @@ class PostgresConnector extends Connector implements ConnectorInterface {
 
     final pdoConfig = PDOConfig.fromMap(config);
     late PDOInterface pdo;
-    // if (config['driver_implementation'] == 'postgres') {
-    //   pdo = PostgresPDO(pdoConfig);
-    // } else if (config['driver_implementation'] == 'postgres_v3') {
-    //   pdo = PostgresV3PDO(pdoConfig);
-    // } else if (config['driver_implementation'] == 'dargres') {
-    //   pdo = DargresPDO(pdoConfig);
-    // } else {
-    //   pdo = PostgresPDO(pdoConfig);
-    // }
+   
     switch (conf['driver_implementation']) {
       case 'postgres':
         pdo = PostgresV2PDO(pdoConfig);

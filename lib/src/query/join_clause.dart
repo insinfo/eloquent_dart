@@ -47,7 +47,7 @@ class JoinClause {
       [QueryBuilder? parentQuery, this.isLateral = false]) {
     //: super(parentQuery.getConnection(), parentQuery.getGrammar(),  parentQuery.getProcessor())
     //public function __construct(Builder $parentQuery, $type, $table)
-    /// TODO implement extends QueryBuilder
+    ///  implement extends QueryBuilder
     /// $this->parentQuery = $parentQuery;
     //  super(
     //         $parentQuery->getConnection(), $parentQuery->getGrammar(), $parentQuery->getProcessor()
@@ -107,12 +107,24 @@ class JoinClause {
     if (where) {
       this.bindingsLocal.add(second);
     }
-
     if (where &&
         (operator == 'in' || operator == 'not in') &&
         Utils.is_array(second)) {
       second = Utils.count(second);
     }
+
+    // if (where) {
+    //   final isIn = operator == 'in' || operator == 'not in';
+    //   if (isIn && Utils.is_array(second)) {
+    //     // adiciona TODOS os valores como bindings
+    //     this.bindingsLocal = Utils.array_merge(this.bindingsLocal, second);
+    //     // e troca o "second" por count(...) para gerar os "?, ?, ?"
+    //     second = Utils.count(second);
+    //   } else {
+    //     // caso normal (um único binding)
+    //     this.bindingsLocal.add(second);
+    //   }
+    // }
 
     var nested = false;
 
@@ -286,12 +298,30 @@ class JoinClause {
   /// @param  String  $boolean
   /// @return $this
   ///
-  JoinClause onRaw(String sql, [String boolean = 'and']) {
+  JoinClause onRaw(
+    String sql, [
+    String boolean = 'and',
+    List bindings = const [],
+  ]) {
     this.clauses.add({
       'type': 'raw',
       'sql': sql,
       'boolean': boolean,
     });
+
+    /// array1 => ['A', 'B']  and array2 => ['C', 'D'] return ['A', 'B', 'C', 'D']
+    //  List array_merge(List? array1, List? array2) {
+    //   var a1 = array1;
+    //   var a2 = array2;
+    //   if (a1 == null) {
+    //     a1 = [];
+    //   }
+    //   if (a2 == null) {
+    //     a2 = [];
+    //   }
+    //   return [...a1, ...a2];
+    // }
+    this.bindingsLocal = Utils.array_merge(this.bindingsLocal, bindings);
     return this;
   }
 

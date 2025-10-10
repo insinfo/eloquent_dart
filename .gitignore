@@ -39,3 +39,6 @@ csharp/
 java/
 
 merged_eloquent_code.dart.txt
+
+stress_pool.dart
+test_pool.dart

@@ -138,31 +138,70 @@ final manager = Manager();
 
 ### Added
 
-- **`onRaw(String sql)` method to `JoinClause`**: Adds support for raw SQL expressions as `JOIN` conditions. This is useful for complex scenarios that the standard `on()` method cannot handle, such as using database-specific functions or operators in the `ON` clause.
+- **`JoinClause.onRaw(String sql, [String boolean = 'and', List bindings = const []])`** — Allows raw SQL fragments inside `JOIN ... ON` conditions. Use the optional `boolean` to chain with `AND`/`OR` and `bindings` to safely pass parameters that will be appended to the join bindings.
 
-  *Usage Example:*
+  **Examples**
   ```dart
+  // Simple raw predicate (defaults to boolean = 'and' and no bindings)
   db.table('processes')
     .join('listings as l', (JoinClause jc) {
-      jc.onRaw("(processes.code || '/' || processes.year) = ANY(l.processes_array)");
+      jc.on('l.process_id', '=', 'processes.id');
+      jc.onRaw("l.state IN ('open','running')");
+    })
+    .get();
+
+  // Raw predicate with OR and parameter bindings
+  db.table('tickets as t')
+    .join('labels as l', (JoinClause jc) {
+      jc.on('l.ticket_id', '=', 't.id');
+      jc.onRaw('l.tags @> ARRAY[?]::text[]', 'or', ['urgent']); // adds to join bindings
     })
     .get();
   ```
-  
-- **`clone()` method to `QueryBuilder`**: Creates a deep and independent copy of a query builder instance. This allows for the duplication of a query's entire state (including selects, joins, wheres, orders, and bindings) into a new object. Modifying the cloned query will not affect the original, making it ideal for creating variations from a base query.
 
-  *Usage Example:*
+- **`QueryBuilder.clone()`** — Creates a deep, independent copy of a query builder (including selects, joins, wheres, orders, and bindings). Modifying the clone does not affect the original, which is handy for deriving variations from a base query.
+
+  **Example**
   ```dart
-  // 1. Create a base query for active users
+  // 1) Base query for active users
   final baseQuery = db.table('users').where('status', '=', 'active');
 
-  // 2. Clone it to create variations without affecting the original
+  // 2) Independent clones
   final usersCountQuery = baseQuery.clone();
   final firstUserQuery = baseQuery.clone();
 
-  // 3. Use the clones for different purposes
+  // 3) Different uses
   final totalActiveUsers = await usersCountQuery.count();
   final firstUser = await firstUserQuery.orderBy('created_at').first();
 
-  // The original query remains untouched and can be reused
+  // Original remains reusable
   final allActiveUsers = await baseQuery.get();
+  ```
+
+- **`QueryBuilder.joinRaw(String tableExpression, [List bindings = const [], String type = 'inner', Function(JoinClause)? on])`** — Adds a `JOIN` using a **raw table/Expression** (kept unwrapped), optional parameter `bindings` for that expression, an optional join `type` (default `inner`), and an optional `on` callback to configure `ON` conditions (including `onRaw`).
+
+  **Examples**
+  ```dart
+  // 1) Join a subquery with bindings and configure ON via callback
+  final since = DateTime.now().subtract(const Duration(days: 30));
+  db.table('orders')
+    .joinRaw(
+      '(select * from invoices where created_at >= ?) as i',
+      [since],                         // bindings for the tableExpression
+      'left',
+      (JoinClause jc) {                // ON configuration
+        jc.on('i.order_id', '=', 'orders.id');
+        jc.onRaw('i.status IN (?, ?)', 'and', ['paid', 'settled']);
+      },
+    )
+    .get();
+
+  // 2) Join a raw expression without ON (e.g., NATURAL or ON TRUE)
+  db.table('metrics')
+    .joinRaw('generate_series(1, 10) as g')
+    .get();
+  ```
+
+### Tests
+
+- Expanded Postgres pool v2 coverage: concurrency limits (server‑measured), `SET LOCAL` scoping, `lock_timeout` behavior, connection reuse, and PID churn after `purge()`.

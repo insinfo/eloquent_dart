@@ -70,7 +70,22 @@ class PostgresV2PDO extends PDOInterface {
       };
       settings.timeZone = timeZone;
       connection = PgPool(endpoint, settings: settings);
-      
+      // TODO remover logs para produção
+
+      //  logger simples para todos os eventos do pool
+      // connection.events.listen((e) {
+      //   // encurta SQL pra log não virar um livro
+      //   String q(String? s) => s == null
+      //       ? '-'
+      //       : (s.length <= 120 ? s : s.substring(0, 117) + '...');
+      //   print('[PgPool] c${e.connectionId} ${e.action}'
+      //       '${e.sessionId != null ? ' session=' + e.sessionId! : ''}'
+      //       '${e.traceId != null ? ' trace=' + e.traceId! : ''}'
+      //       '${e.elapsed != null ? ' in ${e.elapsed!.inMilliseconds}ms' : ''}'
+      //       '${e.query != null ? ' sql=' + q(e.query) : ''}'
+      //       '${e.error != null ? ' error=' + e.error.toString() : ''}');
+      // });
+
     } else {
       connection = PostgreSQLConnection(
         config.host,
@@ -89,6 +104,20 @@ class PostgresV2PDO extends PDOInterface {
     return this;
   }
 
+  /// ajuda: normaliza valores tipo "3000", "250ms", "3s", "2min" -> string aceita pelo PG
+  String _pgTimeout(String raw) {
+    final s = raw.trim().toLowerCase();
+    // 0 desabilita
+    if (s == '0' || s == '0ms' || s == '0s' || s == '0min') return '0';
+    // já vem com unidade suportada pelo PG?
+    final okUnits = ['ms', 's', 'min'];
+    if (okUnits.any((u) => s.endsWith(u))) return s;
+    // só números -> trata como ms
+    if (RegExp(r'^\d+$').hasMatch(s)) return '${s}ms';
+    throw ArgumentError(
+        'Timeout inválido: "$raw". Use "250ms", "3s", "2min" ou "0".');
+  }
+
   /// inicializa configurações ao conectar com o banco de dados
   Future<void> _onOpen(PostgreSQLExecutionContext conn, PDOConfig conf) async {
     if (conf.charset != null) {
@@ -102,6 +131,20 @@ class PostgresV2PDO extends PDOInterface {
     }
     if (conf.applicationName != null) {
       await conn.execute("SET application_name TO '${conf.applicationName}'");
+    }
+    //
+    if (conf.statementTimeout != null && conf.statementTimeout!.isNotEmpty) {
+      final v = _pgTimeout(conf.statementTimeout!);
+      await conn.execute("SET statement_timeout = '$v'");
+    }
+    if (conf.lockTimeout != null && conf.lockTimeout!.isNotEmpty) {
+      final v = _pgTimeout(conf.lockTimeout!);
+      await conn.execute("SET lock_timeout = '$v'");
+    }
+    if (conf.idleInTransactionSessionTimeout != null &&
+        conf.idleInTransactionSessionTimeout!.isNotEmpty) {
+      final v = _pgTimeout(conf.idleInTransactionSessionTimeout!);
+      await conn.execute("SET idle_in_transaction_session_timeout = '$v'");
     }
   }
 

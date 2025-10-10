@@ -5,6 +5,7 @@ import 'dart:math';
 
 import '../executor/executor.dart';
 import 'package:postgres_fork/postgres.dart';
+
 import '../retry/retry.dart';
 
 /// A session is a continuous use of a single connection (inside or outside of a
@@ -450,13 +451,19 @@ class PgPool implements PostgreSQLExecutionContext {
   }
 
   Future<R> _useOrCreate<R>(Future<R> Function(_ConnectionCtx c) body) async {
-    final ctx = await _tryAcquireAvailable() ?? await _open();
+    final existing = await _tryAcquireAvailable();
+    final ctx = existing ?? await _open();
+    // if (existing != null) {
+    //   print('[PgPool] reuse connection ${ctx.connectionId}');
+    // } else {
+    //   print('[PgPool] opened connection ${ctx.connectionId}');
+    // }
     final sw = Stopwatch()..start();
     try {
       final r = await body(ctx);
       ctx.lastReturned = DateTime.now();
       ctx.elapsed += sw.elapsed;
-      //ctx.queryCount++;
+
       ctx.isIdle = true;
       return r;
     } on PostgreSQLException catch (_) {
@@ -472,7 +479,7 @@ class PgPool implements PostgreSQLExecutionContext {
       ctx.lastReturned = DateTime.now();
       ctx.elapsed += sw.elapsed;
       ctx.errorCount++;
-      // ctx.queryCount++;
+
       ctx.isIdle = true;
       rethrow;
     }
@@ -566,6 +573,8 @@ class PgPool implements PostgreSQLExecutionContext {
         (ctx.errorCount >= settings.maxErrorCount) ||
         (ctx.queryCount >= settings.maxQueryCount);
     if (shouldClose) {
+      // print('[PgPool] will close c${ctx.connectionId} '
+      //     '(age/elapsed/errors/queries limit reached)');
       return false;
     }
     final idleAge = now.difference(ctx.lastReturned).abs();

@@ -1,0 +1,64 @@
+name: Dart
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    strategy:
+      matrix:
+        sdk: [3.6.2]
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: banco_teste
+          POSTGRES_USER: dart
+          POSTGRES_PASSWORD: dart
+        ports: ['5432:5432']
+        # espera o banco ficar pronto
+        options: >-
+          --health-cmd="pg_isready -U dart -d banco_teste"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+
+      # MariaDB 
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: root
+          MARIADB_DATABASE: banco_teste
+          MARIADB_USER: dart
+          MARIADB_PASSWORD: dart
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -uroot -proot"
+          --health-interval=10s --health-timeout=5s --health-retries=10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Wait for Postgres & grant pg_monitor
+        env:
+          PGPASSWORD: dart
+        run: |
+          for i in {1..30}; do
+            pg_isready -h localhost -p 5432 -U dart -d banco_teste && break
+            sleep 2
+          done
+          psql -h localhost -U dart -d banco_teste -c "SELECT 1"
+          # precisamos de superuser p/ conceder pg_monitor ao próprio dart
+          psql -h localhost -U postgres -d postgres -c "GRANT pg_monitor TO dart"
+
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: ${{ matrix.sdk }}
+
+      - name: Install dependencies
+        run: dart pub get
+
+      - name: Run tests (VM)
+        run: dart test --concurrency 1 --chain-stack-traces -p vm -r expanded

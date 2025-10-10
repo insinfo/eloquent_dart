@@ -6,6 +6,7 @@ class PDOConfig {
   final String? username;
   final String? password;
   final bool? isUnixSocket;
+
   /// win1252 | utf8 | utf8mb4_general_ci
   final String? charset;
 
@@ -17,6 +18,7 @@ class PDOConfig {
 
   /// require | disable
   String? sslmode;
+
   /// UTC | America/Sao_Paulo
   String? timezone;
   String? schema;
@@ -32,6 +34,11 @@ class PDOConfig {
   /// If true, decodes the date as UTC.
   /// If false, decodes the date as local datetime.
   bool forceDecodeDateAsUTC = true;
+
+  //
+  String? statementTimeout;
+  String? lockTimeout;
+  String? idleInTransactionSessionTimeout;
 
   PDOConfig({
     required this.driver,
@@ -52,6 +59,10 @@ class PDOConfig {
     this.forceDecodeTimestamptzAsUTC = true,
     this.forceDecodeTimestampAsUTC = true,
     this.forceDecodeDateAsUTC = true,
+    //new
+    this.statementTimeout,
+    this.lockTimeout,
+    this.idleInTransactionSessionTimeout,
   });
 
   Map<String, dynamic> toMap() {
@@ -74,11 +85,15 @@ class PDOConfig {
       'forceDecodeTimestamptzAsUTC': forceDecodeTimestamptzAsUTC,
       'forceDecodeTimestampAsUTC': forceDecodeTimestampAsUTC,
       'forceDecodeDateAsUTC': forceDecodeDateAsUTC,
+//
+      'statementTimeout': statementTimeout,
+      'lockTimeout': lockTimeout,
+      'idleInTransactionSessionTimeout': idleInTransactionSessionTimeout,
     };
   }
 
   factory PDOConfig.fromMap(Map<String, dynamic> map) {
-    final config = PDOConfig(
+    final co = PDOConfig(
       driver: map['driver'],
       host: map['host'],
       port: map['port'] is int ? map['port'] : int.parse(map['port']),
@@ -96,15 +111,27 @@ class PDOConfig {
       schema: map['schema'],
     );
     if (map['forceDecodeTimestamptzAsUTC'] is bool) {
-      config.forceDecodeTimestamptzAsUTC = map['forceDecodeTimestamptzAsUTC'];
+      co.forceDecodeTimestamptzAsUTC = map['forceDecodeTimestamptzAsUTC'];
     }
     if (map['forceDecodeTimestampAsUTC'] is bool) {
-      config.forceDecodeTimestampAsUTC = map['forceDecodeTimestampAsUTC'];
+      co.forceDecodeTimestampAsUTC = map['forceDecodeTimestampAsUTC'];
     }
     if (map['forceDecodeDateAsUTC'] is bool) {
-      config.forceDecodeDateAsUTC = map['forceDecodeDateAsUTC'];
+      co.forceDecodeDateAsUTC = map['forceDecodeDateAsUTC'];
+    }
+//
+    if (map['statementTimeout'] != null) {
+      co.statementTimeout = map['statementTimeout'];
     }
 
-    return config;
+    if (map['lockTimeout'] != null) {
+      co.lockTimeout = map['lockTimeout'];
+    }
+    if (map['idleInTransactionSessionTimeout'] != null) {
+      co.idleInTransactionSessionTimeout =
+          map['idleInTransactionSessionTimeout'];
+    }
+
+    return co;
   }
 }
