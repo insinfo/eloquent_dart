@@ -205,3 +205,8 @@ final manager = Manager();
 ### Tests
 
 - Expanded Postgres pool v2 coverage: concurrency limits (server‑measured), `SET LOCAL` scoping, `lock_timeout` behavior, connection reuse, and PID churn after `purge()`.
+
+
+## 3.4.0
+
+- upgrade mysql_dart to 1.2.0 to fix textual BLOB/TEXT columns are decoded as UTF‑8 strings consistently 
