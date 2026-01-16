@@ -213,4 +213,4 @@ final manager = Manager();
 
 ## 3.4.2
 
-- implemented `insertMany` to execute an optimized 'batch insert', generating a single SQL statement
+- implemented `insertMany` to execute an optimized "batch insert", generating a single SQL statement
