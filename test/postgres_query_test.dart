@@ -126,6 +126,41 @@ void main() {
       expect(res, 2);
     });
 
+    test('insertManyRaw simple', () async {
+      // Limpa a tabela para garantir o estado do teste
+      await db.table('people').delete();
+
+      var values = [
+        {'id': 10, 'name': 'John', 'profession': 'Dev'},
+        {'id': 11, 'name': 'Doe', 'profession': 'Tester'},
+        {'id': 12, 'name': 'Smith', 'profession': 'Manager'}
+      ];
+
+      await db.table('people').insertMany(values);
+
+      var rows = await db.table('people').orderBy('id').get();
+      expect(rows.length, 3);
+      expect(rows[0]['name'], 'John');
+      expect(rows[0]['profession'], 'Dev');
+
+      expect(rows[1]['name'], 'Doe');
+      expect(rows[1]['profession'], 'Tester');
+
+      expect(rows[2]['name'], 'Smith');
+      expect(rows[2]['profession'], 'Manager');
+    });
+
+    test('insertManyRaw with empty list', () async {
+      // Deve retornar sem erro e sem fazer nada
+      await db.table('people').insertMany([]);
+      // Se o código não falhar, sucesso.
+      // Podemos verificar se o conteúdo do banco não mudou, recuperando o que foi inserido no setUp.
+      // setUp insere id: 1
+      var rows = await db.table('people').get();
+      expect(rows.length, 1);
+      expect(rows[0]['name'], 'Isaque');
+    });
+
     test('select first', () async {
       final query = db.table('temp_location');
       final res = await query.select(['id', 'city', 'street']).first();

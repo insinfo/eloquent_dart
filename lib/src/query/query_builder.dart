@@ -32,8 +32,8 @@ class QueryBuilder {
   int? recursionLimitProp;
 
   /// Isaque
-  /// Eu adicionei este metodo para mapear uma String para uma propriedade/atributo da Class QueryBuilder
-  /// isso permite ler a propriedade/atributo da Class QueryBuilder com base no nome da propriedade
+  /// I added this method to map a String to a property/attribute of the QueryBuilder Class
+  /// this allows reading the property/attribute of the QueryBuilder Class based on the property name
   dynamic getProperty(String propertyName) {
     switch (propertyName) {
       case 'columns':
@@ -133,7 +133,7 @@ class QueryBuilder {
 
   ///
   /// The columns that should be returned.
-  /// Propriedade da class QueryBuilder que armazena as colunas da tabela a serem retornadas
+  /// Property of the QueryBuilder class that stores the columns of the table to be returned
   /// @var array
   ///
   List<dynamic>? columnsProp;
@@ -300,24 +300,20 @@ class QueryBuilder {
   ///
   bool useWritePdoProp = false;
 
-  ///
   /// Create a new query builder instance.
   ///
-  /// @param  \Illuminate\Database\ConnectionInterface  $connection
-  /// @param  \Illuminate\Database\Query\Grammars\Grammar  $grammar
-  /// @param  \Illuminate\Database\Query\Processors\Processor  $processor
-  ///
+  /// [connection] The database connection instance.
+  /// [grammar] The database query grammar instance.
+  /// [processor] The database query post processor instance.
   QueryBuilder(this.connection, this.grammar, this.processor);
 
-  /**
-     * Add a common table expression to the query.
-     *
-     * @param string $name
-     * @param \Closure|\Illuminate\Database\Query\Builder|string $query
-     * @param array|null $columns
-     * @param bool $recursive
-     * @return $this
-     */
+  /// Add a common table expression to the query.
+  ///
+  /// [name] The name of the CTE.
+  /// [query] `Function`|`QueryBuilder`|`String` The query to be used.
+  /// [columns] `List`|`null` The columns to be selected.
+  /// [recursive] `bool` Whether the CTE is recursive.
+  /// Returns the QueryBuilder instance.
   QueryBuilder withExpression(String name, dynamic query,
       [dynamic columns, bool recursive = false, bool materialized = false]) {
     // createSub retorna [sql, bindings]
@@ -335,28 +331,24 @@ class QueryBuilder {
     return this;
   }
 
-  /**
-     * Add a recursive common table expression to the query.
-     *
-     * @param string $name
-     * @param \Closure|\Illuminate\Database\Query\Builder|string $query
-     * @param array|null $columns
-     * @return $this
-     */
+  /// Add a recursive common table expression to the query.
+  ///
+  /// [name] The name of the CTE.
+  /// [query] `Function`|`QueryBuilder`|`String` The query to be used.
+  /// [columns] `List`|`null` The columns to be selected.
+  /// Returns the QueryBuilder instance.
   QueryBuilder withRecursiveExpression(String name, query,
       [columns = null, bool materialized = false]) {
     return this.withExpression(name, query, columns, true, materialized);
   }
 
-  /**
-   * Add a **MATERIALIZED** common table expression to the query.
-   * (Implied non-recursive)
-   *
-   * @param string $name
-   * @param \Closure|\Illuminate\Database\Query\Builder|string $query
-   * @param array|null $columns
-   * @return $this
-   */
+  /// Add a **MATERIALIZED** common table expression to the query.
+  /// (Implied non-recursive)
+  ///
+  /// [name] The name of the CTE.
+  /// [query] `Function`|`QueryBuilder`|`String` The query to be used.
+  /// [columns] `List`|`null` The columns to be selected.
+  /// Returns the QueryBuilder instance.
   QueryBuilder withMaterializedExpression(String name, dynamic query,
       [dynamic columns]) {
     final sub = this.createSub(query);
@@ -364,42 +356,38 @@ class QueryBuilder {
     final bindings = sub[1];
     this.expressionsProp.add({
       'name': name,
-      'query': sql, // O SQL da subquery
+      'query': sql, // The SQL of the subquery
       'columns': columns,
-      'recursive': false, // Materialized implica não-recursivo na forma simples
-      'materialized': true, // A NOVA FLAG!
+      'recursive': false, // Materialized implies non-recursive in simple form
+      'materialized': true, // THE NEW FLAG!
     });
     this.addBinding(bindings, 'expressions');
     return this;
   }
 
-  /**
-     * Set the recursion limit of the query.
-     *
-     * @param int $value
-     * @return $this
-     */
+  /// Set the recursion limit of the query.
+  ///
+  /// [value] The recursion limit.
+  /// Returns the QueryBuilder instance.
   QueryBuilder recursionLimit(int value) {
     this.recursionLimitProp = value;
     return this;
   }
 
-  /**
-     * Insert new records into the table using a subquery.
-     *
-     * @param array $columns
-     * @param \Closure|\Illuminate\Database\Query\Builder|string $query
-     * @return bool
-     */
+  /// Insert new records into the table using a subquery.
+  ///
+  /// [columns] The columns to insert into.
+  /// [query] `Function`|`QueryBuilder`|`String` The subquery.
+  /// Returns the result of the insert.
   Future<dynamic> insertUsing(columns, query) async {
     final sub = this.createSub(query);
     final sql = sub[0];
     final subBindings = sub[1];
 
-    // Obtém os bindings das CTEs (expressions), se houver
+    // Gets bindings from CTEs (expressions), if any
     final List<dynamic> exprBindings = bindings['expressions'] ?? <dynamic>[];
 
-    // Mescla: primeiro os bindings de expressions, depois os da subquery
+    // Merges: first expressions bindings, then subquery bindings
     final List<dynamic> mergedBindings = [
       ...exprBindings,
       ...subBindings,
@@ -411,12 +399,10 @@ class QueryBuilder {
     return res;
   }
 
-  ///
   /// Set the columns to be selected.
   ///
-  /// [columnsP]  List | dynamic
-  /// @return $this
-  ///
+  /// [columnsP] `List`|`dynamic` The columns to select. Defaults to `['*']`.
+  /// Returns the QueryBuilder instance.
   QueryBuilder select([dynamic columnsP = const ['*']]) {
     if (columnsP is List) {
       this.columnsProp = columnsP;
@@ -428,13 +414,11 @@ class QueryBuilder {
     return this;
   }
 
-  ///
   /// Add a subselect expression to the query.
   ///
-  /// @param  Funcion|QueryBuilder|string $query
-  /// @param  String  $as
-  /// @return QueryBuilder
-  ///
+  /// [query] `Function`|`QueryBuilder`|`String` The subquery.
+  /// [alias] The alias for the subquery.
+  /// Returns the QueryBuilder instance.
   QueryBuilder selectSub(dynamic query, String alias) {
     // var bindings;
     // if (query is Function) {
@@ -459,13 +443,11 @@ class QueryBuilder {
         '(' + newQuery + ') as ' + this.grammar.wrap(alias), bindings);
   }
 
-  ///
   /// Add a new "raw" select expression to the query.
   ///
-  /// @param  String  $expression
-  /// @param  array   $bindings
-  /// @return \Illuminate\Database\Query\Builder|static
-  ///
+  /// [expression] The raw expression.
+  /// [bindingsP] The bindings for the expression.
+  /// Returns the QueryBuilder instance.
   QueryBuilder selectRaw(String expression, [List? bindingsP = const []]) {
     this.addSelect(QueryExpression(expression));
 
@@ -476,35 +458,32 @@ class QueryBuilder {
     return this;
   }
 
-  ///
   /// Add a raw from clause to the query.
   ///
-  /// @param  string  $expression
-  /// @param  mixed   $bindings
-  /// @return \Illuminate\Database\Query\Builder|static
+  /// [expression] The raw expression.
+  /// [$bindings] The bindings for the expression.
+  /// Returns the QueryBuilder instance.
   ///
   /// Example:
   ///
+  /// ```dart
   ///  var map = await db
   ///     .table('clientes')
   ///     .selectRaw('clientes.*')
   ///     .fromRaw('(SELECT * FROM public.clientes) AS clientes')
   ///     .limit(1)
   ///     .first();
-  ///
-  ///
+  /// ```
   QueryBuilder fromRaw(String expression, [List? $bindings = const []]) {
     this.fromProp = QueryExpression(expression);
     this.addBinding($bindings, 'from');
     return this;
   }
 
-  ///
   /// Creates a subquery and parse it.
   ///
-  /// [query]  Function|QueryBuilder|String
-  /// `Return` List [String query ,List Bindings]
-  ///
+  /// [query] `Function`|`QueryBuilder`|`String` The subquery.
+  /// Returns a List containing `[String query, List Bindings]`.
   List createSub(dynamic query) {
     // If the given query is a Closure, we will execute it while passing in a new
     // query instance to the Closure. This will give the developer a chance to
@@ -520,34 +499,30 @@ class QueryBuilder {
     return result;
   }
 
-  ///
   /// Parse the subquery into SQL and bindings.
   ///
-  /// [query] dynamic
-  /// `Return` List [String query ,List Bindings]
-  ///
+  /// [query] The subquery (`QueryBuilder`|`String`|`QueryExpression`).
+  /// Returns a List containing `[String query, List Bindings]`.
   List parseSub(dynamic query) {
     if (query is QueryBuilder) {
       return [query.toSql(), query.getBindings()];
     } else if (query is String) {
       return [query, []];
     } else if (query is QueryExpression) {
-      // adicionado para lidar com join lateral
-      // Se for uma QueryExpression, obtém o valor (SQL bruto)
-      // e assume que não há bindings associados *a esta expressão* aqui.
-      // Bindings para a expressão bruta devem ser adicionados separadamente se necessário.
+      // added to handle lateral join
+      // If it is a QueryExpression, get the value (raw SQL)
+      // and assume there are no bindings associated *with this expression* here.
+      // Bindings for the raw expression must be added separately if necessary.
       return [query.getValue(), []];
     } else {
       throw InvalidArgumentException();
     }
   }
 
-  ///
   /// Add a new select column to the query.
   ///
-  /// [columnP]  QueryExpression List | dynamic
-  /// @return $this
-  ///
+  /// [columnP] `QueryExpression`|`List`|`dynamic` The column(s) to add.
+  /// Returns the QueryBuilder instance.
   QueryBuilder addSelect(dynamic columnP) {
     //var column = is_array(column) ? column : func_get_args();
     var col = columnP is List ? columnP : [columnP];
@@ -555,39 +530,33 @@ class QueryBuilder {
     return this;
   }
 
-  ///
   /// Force the query to only return distinct results.
   ///
-  /// @return $this
-  ///
+  /// Returns the QueryBuilder instance.
   QueryBuilder distinct() {
     this.distinctProp = true;
 
     return this;
   }
 
-  ///
   /// Set the table which the query is targeting.
   ///
-  /// [tableP] QueryExpression | String
-  /// `Return QueryBuilder`
-  ///
+  /// [tableP] `QueryExpression`|`String` The table to target.
+  /// Returns the QueryBuilder instance.
   QueryBuilder from(dynamic tableP) {
     this.fromProp = tableP;
     return this;
   }
 
-  ///
   /// Add a join clause to the query.
   ///
-  /// [table] String|QueryExpression name of table
-  /// [one]  String | Function(JoinClause)
-  /// [operator] String  Example: '=', 'in', 'not in'
-  /// [two]  string|null
-  /// [type]  String  Example: 'inner', 'left'
-  /// [where]  bool
-  /// `Return` this QueryBuilder
-  ///
+  /// [table] `String`|`QueryExpression` The name of the table to join.
+  /// [one] `String`|`Function(JoinClause)` The first column or a callback.
+  /// [operator] `String` The operator (e.g. '=', 'in').
+  /// [two] `String`|`null` The second column.
+  /// [type] `String` The type of join (e.g. 'inner', 'left').
+  /// [where] `bool` Whether to use a where clause.
+  /// Returns the QueryBuilder instance.
   QueryBuilder join(dynamic table, dynamic one,
       [String? operator,
       dynamic two = null,
@@ -614,33 +583,29 @@ class QueryBuilder {
     return this;
   }
 
-  ///
   /// Add a "join where" clause to the query.
   ///
-  /// @param  String  $table
-  /// @param  String  $one
-  /// @param  String  $operator
-  /// @param  String  $two
-  /// @param  String  $type
-  /// @return \Illuminate\Database\Query\Builder|static
-  ///
+  /// [table] The table to join.
+  /// [one] The first column.
+  /// [operator] The operator.
+  /// [two] The second column.
+  /// [type] The join type.
+  /// Returns the QueryBuilder instance.
   QueryBuilder joinWhere(String table, one, operator, two, [type = 'inner']) {
     return this.join(table, one, operator, two, type, true);
   }
 
-  ///
   /// Add a subquery join clause to the query.
   ///
-  /// [query]  QueryBuilder|String
-  /// [alias]  string
-  /// [first]  string
-  /// [operator]  string|null
-  /// [second] string|null
-  /// [type]  string  inner|left|right|outer
-  /// [where]  bool
-  /// `Return` QueryBuilder|static
+  /// [query] `QueryBuilder`|`String` The subquery.
+  /// [alias] The alias for the subquery.
+  /// [first] The first column.
+  /// [operator] The operator.
+  /// [second] The second column.
+  /// [type] The join type.
+  /// [where] Whether to use a where clause.
+  /// Returns the QueryBuilder instance.
   ///
-  /// @throws \InvalidArgumentException
   /// Example:
   /// ```dart
   ///
@@ -661,7 +626,6 @@ class QueryBuilder {
   ///    .first();
   ///
   /// ```
-  ///
   QueryBuilder joinSub(dynamic query, alias, dynamic first,
       [String? operator, dynamic second, type = 'inner', where = false]) {
     final res = this.createSub(query);
@@ -677,93 +641,89 @@ class QueryBuilder {
         QueryExpression(expression), first, operator, second, type, where);
   }
 
-  ///
   /// Add a left join to the query.
   ///
-  /// @param  String  $table
-  /// @param  String  $first
-  /// @param  String  $operator
-  /// @param  String  $second
-  /// @return \Illuminate\Database\Query\Builder|static
-  ///
+  /// [table] The table to join.
+  /// [first] The first column.
+  /// [operator] The operator.
+  /// [second] The second column.
+  /// Returns the QueryBuilder instance.
   QueryBuilder leftJoin(String table, first,
       [String? operator, dynamic second]) {
     return this.join(table, first, operator, second, 'left');
   }
 
+  /// Add a "left join where" clause to the query.
   ///
-  /// Add a "join where" clause to the query.
-  ///
-  /// @param  String  $table
-  /// @param  String  $one
-  /// @param  String  $operator
-  /// @param  String  $two
-  /// @return \Illuminate\Database\Query\Builder|static
-  ///
+  /// [table] The table to join.
+  /// [one] The first column.
+  /// [operator] The operator.
+  /// [two] The second column.
+  /// Returns the QueryBuilder instance.
   QueryBuilder leftJoinWhere(
       String table, dynamic one, String operator, dynamic two) {
     return this.joinWhere(table, one, operator, two, 'left');
   }
 
-  ///
   /// Add a right join to the query.
   ///
-  /// @param  String  $table
-  /// @param  String  $first
-  /// @param  String  $operator
-  /// @param  String  $second
-  /// @return \Illuminate\Database\Query\Builder|static
-  ///
+  /// [table] The table to join.
+  /// [first] The first column.
+  /// [operator] The operator.
+  /// [second] The second column.
+  /// Returns the QueryBuilder instance.
   QueryBuilder rightJoin(String table, dynamic first, String operator,
       [dynamic second]) {
     return this.join(table, first, operator, second, 'right');
   }
 
-  ///
   /// Add a "right join where" clause to the query.
   ///
-  /// @param  String  $table
-  /// @param  String  $one
-  /// @param  String  $operator
-  /// @param  String  $two
-  /// @return \Illuminate\Database\Query\Builder|static
-  ///
+  /// [table] The table to join.
+  /// [one] The first column.
+  /// [operator] The operator.
+  /// [two] The second column.
+  /// Returns the QueryBuilder instance.
   QueryBuilder rightJoinWhere(
       String table, dynamic one, String operator, dynamic two) {
     return this.joinWhere(table, one, operator, two, 'right');
   }
 
+  /// Add a cross join to the query.
+  ///
+  /// [table] The table to join.
+  /// [first] The first column.
+  /// [operator] The operator.
+  /// [second] The second column.
+  /// Returns the QueryBuilder instance.
   QueryBuilder crossJoin(dynamic table,
       [dynamic first, String? operator, dynamic second]) {
     if (first != null) {
-      // Se for passado um join condicional, delega para o método join com tipo 'cross'
+      // If a conditional join is passed, delegate to the join method with type 'cross'
       return this.join(table, first, operator, second, 'cross');
     }
-    // Caso contrário, adiciona um JoinClause do tipo 'cross' sem cláusula ON
+    // Otherwise, adds a JoinClause of type 'cross' without ON clause
     this.joinsProp.add(JoinClause('cross', table, this));
     return this;
   }
 
   /// Apply the [callback] only if [condition] is true.
-  /// Retorna o próprio QueryBuilder para encadeamento (fluent interface).
+  /// Returns the QueryBuilder itself for chaining (fluent interface).
   QueryBuilder when(dynamic condition, Function(QueryBuilder) callback) {
-    // Se condition for "truthy" (diferente de null/false/0/''), chama o callback
+    // If condition is "truthy" (not null/false/0/''), calls the callback
     if (condition != null && condition != false) {
       callback(this);
     }
     return this;
   }
 
-  ///
   /// Add a basic where clause to the query.
   ///
-  /// [column] String | Map | Function(QueryBuilder)
-  /// [operator]  String Examples: '=', '<', '>', '<>'
-  /// @param  mixed   $value
-  /// @param  String  $boolean
-  /// @return $this
-  ///
-  /// throws \InvalidArgumentException
+  /// [column] `String`|`Map`|`Function(QueryBuilder)` The column, map of conditions, or nested callback.
+  /// [operator] `String` The operator (e.g. '=', '<').
+  /// [value] The value to compare.
+  /// [boolean] The boolean connector ('and' or 'or').
+  /// Returns the QueryBuilder instance.
   ///
   /// Example:
   /// ```dart
@@ -841,113 +801,112 @@ class QueryBuilder {
     return this.where(column, operator, value, 'or');
   }
 
-  /// Adiciona uma cláusula WHERE “flexível” à consulta.
+  /// Adds a flexible "WHERE" clause to the query.
   ///
-  /// Este método tenta emular o comportamento do método `where` do Laravel, onde:
+  /// This method attempts to emulate the behavior of Laravel's `where` method, where:
   ///
-  /// - Se o primeiro parâmetro for um `Map`, ele assume que o mapa contém pares de chave/valor e
-  ///   delega para uma cláusula WHERE aninhada (onde cada chave é comparada com o operador `'='`).
-  /// - Se o primeiro parâmetro for uma função que recebe um `QueryBuilder`, ele invoca essa função
-  ///   para construir uma sub cláusula WHERE aninhada.
-  /// - Se a função for chamada com 2 argumentos (por exemplo: `whereFlex('email', 'test@example.com')`),
-  ///   o método deve interpretar o segundo parâmetro como o valor e assumir implicitamente o operador
-  ///   `'='`.
-  /// - Se for chamada com 3 argumentos (por exemplo: `whereFlex('age', '>', 18)`), o segundo parâmetro
-  ///   é interpretado como o operador e o terceiro como o valor.
-  /// - Se o valor for uma função (Closure) que recebe um `QueryBuilder`, a cláusula será tratada como uma subconsulta.
-  /// - Se o valor for `null`, o método invoca internamente `whereNull`, desde que o operador seja `'='`,
-  ///   `'=='`, `'!='` ou `'<>'`. Caso contrário, se o operador não for compatível com valores nulos,
-  ///   espera-se que lance uma exceção (InvalidArgumentException).
+  /// - If the first parameter is a `Map`, it assumes the map contains key/value pairs and
+  ///   delegates to a nested WHERE clause (where each key is compared using the '=' operator).
+  /// - If the first parameter is a function receiving a `QueryBuilder`, it invokes that function
+  ///   to build a nested WHERE clause.
+  /// - If called with 2 arguments (e.g., `whereFlex('email', 'test@example.com')`),
+  ///   the method interprets the second parameter as the value and implicitly assumes the '=' operator.
+  /// - If called with 3 arguments (e.g., `whereFlex('age', '>', 18)`), the second parameter
+  ///   is interpreted as the operator and the third as the value.
+  /// - If the value is a Function (Closure) receiving a `QueryBuilder`, the clause is treated as a subquery.
+  /// - If the value is `null`, the method internally invokes `whereNull`, provided the operator is
+  ///   '=', '==', '!=' or '<>'. Otherwise, if the operator is not compatible with null values,
+  ///   it is expected to throw an exception (InvalidArgumentException).
   ///
-  /// **Limitações e Cenários Problemáticos**:
+  /// **Limitations and Problematic Scenarios**:
   ///
-  /// 1. **Detecção do número de argumentos**:
-  ///    Diferentemente do PHP (que utiliza `func_num_args()`), no Dart os parâmetros opcionais sempre
-  ///    recebem um valor (mesmo que seja o valor padrão). Assim, não há uma forma nativa de diferenciar
-  ///    uma chamada com 2 argumentos de uma chamada com 3 argumentos de forma exata.
-  ///    O método utiliza uma função auxiliar (_countNonDefaultArguments) como heurística para tentar
-  ///    inferir quantos argumentos foram explicitamente passados, mas essa abordagem pode falhar em casos
-  ///    ambíguos.
+  /// 1. **Argument count detection**:
+  ///    Unlike PHP (which uses `func_num_args()`), in Dart optional parameters always
+  ///    receive a value (even if it's the default value). Thus, there is no native way to differentiate
+  ///    a call with 2 arguments from a call with 3 arguments exactly.
+  ///    The method uses a helper function (_countNonDefaultArguments) as a heuristic to try
+  ///    to infer how many arguments were explicitly passed, but this approach may fail in ambiguous
+  ///    cases.
   ///
-  /// 2. **Caso do uso de valores nulos**:
-  ///    Por exemplo, se o usuário chamar:
+  /// 2. **Null value usage**:
+  ///    For example, if the user calls:
   ///    ```dart
   ///    qbFlex.whereFlex('deleted_at', '=', null);
   ///    ```
-  ///    espera-se que o método interprete isso como uma cláusula "where deleted_at is null".
-  ///    Contudo, devido à heurística utilizada, o método pode interpretar essa chamada como se tivesse
-  ///    sido feita com 2 argumentos – fazendo com que o operador `'='` seja considerado como valor, o que
-  ///    resultará na SQL gerada:
+  ///    it is expected that the method interprets this as a "where deleted_at is null" clause.
+  ///    However, due to the heuristic used, the method might interpret this call as if it had
+  ///    been made with 2 arguments – causing the '=' operator to be considered as the value, which
+  ///    will result in the generated SQL:
   ///    ```sql
   ///    select * from "users" where "deleted_at" = ?
   ///    ```
-  ///    com um binding cujo valor é `'='` em vez de `null`.
+  ///    with a binding whose value is '=' instead of `null`.
   ///
-  /// 3. **Operadores não válidos com null**:
-  ///    Se for usado um operador diferente de `'='`, `'=='`, `'!='` ou `'<>'` ao passar explicitamente um valor null,
-  ///    espera-se que o método lance uma exceção. No entanto, se o método interpretar a chamada como tendo
-  ///    apenas 2 parâmetros, essa validação não ocorrerá e o SQL gerado não corresponderá à intenção do
-  ///    desenvolvedor.
+  /// 3. **Invalid operators with null**:
+  ///    If an operator other than '=', '==', '!=' or '<>' is used when explicitly passing a null value,
+  ///    it is expected that the method throws an exception. However, if the method interprets the call as having
+  ///    only 2 parameters, this validation will not occur and the generated SQL will not match the developer's
+  ///    intention.
   ///
-  /// **Exemplo de uso esperado (sem problemas):**
+  /// **Expected usage example (no issues):**
   ///
   /// ```dart
-  /// // Interpretação de 2 argumentos: operador '=' é inferido
+  /// // 2 arguments interpretation: '=' operator is inferred
   /// qbFlex.whereFlex('email', 'test@example.com');
-  /// // Gera: where "email" = ?
+  /// // Generates: where "email" = ?
   /// // Binding: ['test@example.com']
   ///
-  /// // Chamada com 3 argumentos para operadores válidos:
+  /// // Call with 3 arguments for valid operators:
   /// qbFlex.whereFlex('age', '>', 18);
-  /// // Gera: where "age" > ?
+  /// // Generates: where "age" > ?
   /// // Binding: [18]
   /// ```
   ///
-  /// **Cenário problemático:**
+  /// **Problematic scenario:**
   ///
   /// ```dart
-  /// // A intenção é que este código gere uma cláusula "where deleted_at is null"
-  /// // mas, devido à heurística, pode produzir:
+  /// // The intention is that this code generates a "where deleted_at is null" clause
+  /// // but, due to the heuristic, it might produce:
   /// qbFlex.whereFlex('deleted_at', '=', null);
-  /// // Gera: where "deleted_at" = ?
-  /// // Binding: ['=']   <-- binding incorreto, pois o operador '=' foi interpretado como valor
+  /// // Generates: where "deleted_at" = ?
+  /// // Binding: ['=']   <-- incorrect binding, because the '=' operator was interpreted as value
   /// ```
   ///
-  /// Devido a essas limitações intrínsecas da linguagem Dart (especialmente a dificuldade de detectar
-  /// precisamente o número de argumentos passados), é possível que a funcionalidade de `whereFlex` não
-  /// se comporte como o esperado em todos os cenários, sendo recomendada cautela ao utilizá-la em casos
-  /// onde valores nulos e operadores precisam ser diferenciados com precisão.
+  /// Due to these intrinsic limitations of the Dart language (especially the difficulty of precisely detecting
+  /// the number of passed arguments), it is possible that the `whereFlex` functionality may not
+  /// behave as expected in all scenarios, so caution is recommended when using it in cases
+  /// where null values and operators need to be differentiated precisely.
   ///
-  /// **Retorno:**
-  /// Retorna a instância atual de `QueryBuilder` para permitir encadeamento de métodos.
+  /// **Return:**
+  /// Returns the current `QueryBuilder` instance to allow method chaining.
   QueryBuilder whereFlex(dynamic column,
-      [dynamic operator, // Mantido como dynamic
+      [dynamic operator, // Kept as dynamic
       dynamic value,
       String boolean = 'and']) {
-    // Caso 1: Map
+    // Case 1: Map
     if (column is Map) {
       return this.whereNested((query) {
         column.forEach((k, v) {
           query.where(k, '=', v);
-        }); // Use where normal aqui
+        }); // Use normal where here
       }, boolean);
     }
 
-    // Caso 2: Function no primeiro argumento
+    // Case 2: Function as first argument
     if (column is Function(QueryBuilder)) {
       return this.whereNested(column, boolean);
     }
 
-    // --- Lógica Refinada para Determinar Operador e Valor ---
+    // --- Refined Logic to Determine Operator and Value ---
     String? finalOperator;
     dynamic finalValue;
 
-    // Verifica se o SEGUNDO argumento (operator) FOI fornecido
+    // Checks if the SECOND argument (operator) WAS provided
     if (operator != null) {
-      // Verifica se o TERCEIRO argumento (value) também foi fornecido
+      // Checks if the THIRD argument (value) was also provided
       if (value != null) {
-        // Cenário: where('column', 'op', 'val')
-        // O segundo argumento DEVE ser um operador String válido
+        // Scenario: where('column', 'op', 'val')
+        // The second argument MUST be a valid String operator
         if (operator is String && isValidOperator(operator)) {
           finalOperator = operator;
           finalValue = value;
@@ -956,58 +915,58 @@ class QueryBuilder {
               'When 3 arguments are provided, the second must be a valid string operator. Got type ${operator.runtimeType} ("$operator")');
         }
       } else {
-        // Cenário: where('column', 'something') - 'something' pode ser operador ou valor
-        // Verifica se 'something' (passado como operator) é um operador String VÁLIDO
+        // Scenario: where('column', 'something') - 'something' can be operator or value
+        // Checks if 'something' (passed as operator) is a VALID String operator
         if (operator is String && isValidOperator(operator)) {
-          // É um operador válido! Tratar como where('column', 'op'). O valor é implicitamente null.
+          // It is a valid operator! Treat as where('column', 'op'). The value is implicitly null.
           finalOperator = operator;
           finalValue = null;
-          // A validação posterior (invalidOperatorAndValue) tratará se op + null é válido
+          // The subsequent validation (invalidOperatorAndValue) will handle if op + null is valid
         } else {
-          // NÃO é um operador válido. Tratar como where('column', 'value').
-          finalOperator = '='; // Operador implícito
-          finalValue = operator; // O segundo argumento era o valor
+          // NOT a valid operator. Treat as where('column', 'value').
+          finalOperator = '='; // Implicit operator
+          finalValue = operator; // The second argument was the value
         }
       }
     } else {
-      // Cenário where('column') - Segundo argumento (operator) é null.
-      // Tratar como where('column', '=', null), que será pego pela lógica de null abaixo.
+      // Scenario where('column') - Second argument (operator) is null.
+      // Treat as where('column', '=', null), which will be caught by the null logic below.
       finalOperator = '=';
       finalValue = null;
     }
-    // --- Fim da Lógica Refinada ---
+    // --- End of Refined Logic ---
 
-    // Caso 3: Valor final é Função (whereSub)
+    // Case 3: Final value is Function (whereSub)
     if (finalValue is Function(QueryBuilder)) {
-      // É crucial que 'finalOperator' seja um operador válido aqui.
-      // A lógica acima deve garantir isso ou ter lançado exceção.
-      // Se finalOperator for nulo aqui, algo está errado, usar '=' como fallback seguro.
+      // It is crucial that 'finalOperator' is a valid operator here.
+      // The logic above must ensure this or have thrown an exception.
+      // If finalOperator is null here, something is wrong, use '=' as safe fallback.
       return this.whereSub(column, finalOperator, finalValue, boolean); //?? '='
     }
 
-    // Caso 4: Valor final é null (whereNull / whereNotNull)
+    // Case 4: Final value is null (whereNull / whereNotNull)
     if (finalValue == null) {
       bool not = (finalOperator == '!=' || finalOperator == '<>');
       if (finalOperator == '=' || finalOperator == '==' || not) {
         return this.whereNull(column, boolean, not);
       }
-      // Se não for um operador de (in)igualdade, a validação abaixo DEVE falhar.
+      // If not an (in)equality operator, the validation below MUST fail.
     }
 
-    // Validação final: Verifica combinações ilegais
+    // Final validation: Checks for illegal combinations
     if (this.invalidOperatorAndValue(finalOperator, finalValue)) {
-      // Se esta validação falhar, significa que a lógica acima não tratou
-      // corretamente ou o usuário forneceu uma combinação inválida (ex: '>', null)
+      // If this validation fails, it means the logic above did not handle
+      // correctly or the user provided an invalid combination (e.g., '>', null)
       throw InvalidArgumentException(
           'Illegal operator "$finalOperator" and value combination ($finalValue). Operator must be "=" or "!=" or "<>" if value is null.');
     }
 
-    // Caso 5: Cláusula WHERE básica
+    // Case 5: Basic WHERE Clause
     final type = 'Basic';
     this.wheresProp.add({
       'type': type,
       'column': column,
-      'operator': finalOperator, // Definitivamente não nulo aqui
+      'operator': finalOperator, // Definitely not null here
       'value': finalValue,
       'boolean': boolean
     });
@@ -1048,27 +1007,25 @@ class QueryBuilder {
     return this.where(column, '=', closure, boolean);
   }
 
-  /**
-     * Add a "where" clause comparing two columns to the query.
-     *
-     * @param  string|array  $first
-     * @param  string|null  $operator
-     * @param  string|null  $second
-     * @param  string|null  $boolean
-     * @return \Illuminate\Database\Query\Builder|static
-     */
+  /// Add a "where" clause comparing two columns to the query.
+  ///
+  /// [first] `String`|`List`|`Map` The first column or array of conditions.
+  /// [operator] `String`|`null` The operator.
+  /// [second] `String`|`null` The second column.
+  /// [boolean] `String` The boolean connector.
+  /// Returns the QueryBuilder instance.
   QueryBuilder whereColumn(dynamic first,
       [String? operator, dynamic second, String boolean = 'and']) {
-    // Se "first" for um array (Lista ou Map), assumimos que é um conjunto de condições
-    // e delegamos a adição das condições ao método addArrayOfWheres.
+    // If "first" is an array (List or Map), we assume it is a set of conditions
+    // and delegate the addition of conditions to the addArrayOfWheres method.
     if (first is List || first is Map) {
       return this.addArrayOfWheres(first, boolean, 'whereColumn');
     }
 
-    // Verifica se o operador fornecido é válido.
-    // Se o operador não for encontrado na lista de operadores válidos da classe (_operators)
-    // ou na lista de operadores da gramática (grammar.getOperators()),
-    // assumimos que o desenvolvedor está encurtando o uso do operador '='.
+    // Checks if the provided operator is valid.
+    // If the operator is not found in the list of valid operators of the class (_operators)
+    // or in the grammar's operators list (grammar.getOperators()),
+    // we assume the developer is shortening the usage of the '=' operator.
     if (operator == null ||
         !(Utils.in_array(operator.toLowerCase(), this._operators) ||
             Utils.in_array(
@@ -1077,10 +1034,10 @@ class QueryBuilder {
       operator = '=';
     }
 
-    // Define o tipo da cláusula "where" como "Column"
+    // Sets the 'where' clause type to 'Column'
     var type = 'Column';
 
-    // Adiciona a cláusula na lista de condições (wheresProp)
+    // Adds the clause to the conditions list (wheresProp)
     this.wheresProp.add({
       'type': type,
       'first': first,
@@ -1102,29 +1059,29 @@ class QueryBuilder {
 
   QueryBuilder addArrayOfWheres(dynamic column, String boolean,
       [String method = 'where']) {
-    // Utiliza whereNested para agrupar as condições
+    // Uses whereNested to group conditions
     return this.whereNested((QueryBuilder query) {
-      // Se "column" for um Map (array associativo de condições)
+      // If "column" is a Map (associative array of conditions)
       if (column is Map) {
         column.forEach((key, value) {
-          // Se a chave for numérica e o valor for uma lista,
-          // assumimos que a lista contém os parâmetros para chamar o método where dinamicamente.
+          // If the key is numeric and the value is a list,
+          // we assume the list contains the parameters to call the 'where' method dynamically.
           if (key is int && value is List) {
             if (method == 'where') {
               Function.apply(query.where, value);
             } else if (method == 'orWhere') {
               Function.apply(query.orWhere, value);
             } else {
-              // Se o método não for reconhecido, usa-se o método where por padrão.
+              // If the method is not recognized, defaults to 'where' method.
               Function.apply(query.where, value);
             }
           } else {
-            // Caso contrário, trata a chave como nome da coluna e o valor como o valor a ser comparado.
+            // Otherwise, treats the key as column name and the value as the value to be compared.
             query.where(key, '=', value);
           }
         });
       }
-      // Se "column" for uma lista, itera sobre cada item
+      // If "column" is a list, iterates over each item
       else if (column is List) {
         for (var item in column) {
           if (item is List) {
@@ -1136,7 +1093,7 @@ class QueryBuilder {
               Function.apply(query.where, item);
             }
           } else if (item is Map) {
-            // Se o item for um mapa, itera sobre cada chave e valor
+            // If the item is a map, iterates over each key and value
             item.forEach((key, value) {
               query.where(key, '=', value);
             });
@@ -1146,14 +1103,12 @@ class QueryBuilder {
     }, boolean);
   }
 
-  ///
   /// Add a raw where clause to the query.
   ///
-  /// @param  String  $sql
-  /// @param  array   $bindings
-  /// @param  String  $boolean
-  /// @return $this
-  ///
+  /// [sql] `String` The raw SQL.
+  /// [bindings] `List` The bindings.
+  /// [boolean] `String` The boolean connector.
+  /// Returns the QueryBuilder instance.
   QueryBuilder whereRaw(String sql,
       [List bindings = const [], boolean = 'and']) {
     final type = 'raw';
@@ -1162,26 +1117,22 @@ class QueryBuilder {
     return this;
   }
 
-  ///
   /// Add a raw or where clause to the query.
   ///
-  /// @param  String  $sql
-  /// @param  array   $bindings
-  /// @return \Illuminate\Database\Query\Builder|static
-  ///
+  /// [sql] `String` The raw SQL.
+  /// [bindings] `List` The bindings.
+  /// Returns the QueryBuilder instance.
   QueryBuilder orWhereRaw(String sql, [List bindings = const []]) {
     return this.whereRaw(sql, bindings, 'or');
   }
 
-  ///
   /// Add a where between statement to the query.
   ///
-  /// @param  String  $column
-  /// @param  array   $values
-  /// @param  String  $boolean
-  /// @param  bool  $not
-  /// @return $this
-  ///
+  /// [column] `String` The column.
+  /// [values] `List` The values.
+  /// [boolean] `String` The boolean connector.
+  /// [not] `bool` Whether it is a NOT BETWEEN.
+  /// Returns the QueryBuilder instance.
   QueryBuilder whereBetween(String column,
       [List? values, String boolean = 'and', bool not = false]) {
     final type = 'between';
@@ -1206,36 +1157,30 @@ class QueryBuilder {
     return this.whereBetween(column, values, 'or');
   }
 
-  ///
   /// Add a where not between statement to the query.
   ///
-  /// @param  String  $column
-  /// @param  array   $values
-  /// @param  String  $boolean
-  /// @return \Illuminate\Database\Query\Builder|static
-  ///
+  /// [column] `String` The column.
+  /// [values] `List` The values.
+  /// [boolean] `String` The boolean connector.
+  /// Returns the QueryBuilder instance.
   QueryBuilder whereNotBetween(column, List values, [boolean = 'and']) {
     return this.whereBetween(column, values, boolean, true);
   }
 
-  ///
   /// Add an or where not between statement to the query.
   ///
-  /// @param  String  $column
-  /// @param  array   $values
-  /// @return \Illuminate\Database\Query\Builder|static
-  ///
+  /// [column] `String` The column.
+  /// [values] `List` The values.
+  /// Returns the QueryBuilder instance.
   QueryBuilder orWhereNotBetween(String column, List values) {
     return this.whereNotBetween(column, values, 'or');
   }
 
-  ///
   /// Add a nested where statement to the query.
   ///
-  /// @param  \Closure $callback
-  /// @param  String   $boolean
-  /// @return \Illuminate\Database\Query\Builder|static
-  ///
+  /// [callback] `Function` The callback for the nested query.
+  /// [boolean] `String` The boolean connector.
+  /// Returns the QueryBuilder instance.
   QueryBuilder whereNested(Function callback, [String boolean = 'and']) {
     var query = this.forNestedWhere();
 
@@ -1244,24 +1189,20 @@ class QueryBuilder {
     return this.addNestedWhereQuery(query, boolean);
   }
 
-  ///
   /// Create a new query instance for nested where condition.
   ///
-  /// @return \Illuminate\Database\Query\Builder
-  ///
+  /// Returns the new QueryBuilder instance.
   QueryBuilder forNestedWhere() {
     var query = this.newQuery();
 
     return query.from(this.fromProp);
   }
 
-  ///
   /// Add another query builder as a nested where to the query builder.
   ///
-  /// @param  \Illuminate\Database\Query\Builder|static $query
-  /// @param  String  $boolean
-  /// @return $this
-  ///
+  /// [query] `QueryBuilder` The nested query.
+  /// [boolean] `String` The boolean connector.
+  /// Returns the QueryBuilder instance.
   QueryBuilder addNestedWhereQuery(QueryBuilder query, [boolean = 'and']) {
     if (Utils.count(query.wheresProp) != 0) {
       var type = 'Nested';
@@ -1274,15 +1215,13 @@ class QueryBuilder {
     return this;
   }
 
-  ///
   /// Add a full sub-select to the query.
   ///
-  /// @param  String   $column
-  /// @param  String   $operator
-  /// @param  \Closure $callback
-  /// @param  String   $boolean
-  /// @return $this
-  /// Original
+  /// [column] `String` The column.
+  /// [operator] `String`|`null` The operator.
+  /// [callback] `Function` The callback.
+  /// [boolean] `String` The boolean connector.
+  /// Returns the QueryBuilder instance.
   QueryBuilder whereSub(
       String column, String? operator, Function callback, String boolean) {
     var type = 'Sub';
@@ -1310,16 +1249,16 @@ class QueryBuilder {
   QueryBuilder whereSubFlex(
       String column, String? operator, Function callback, String boolean) {
     final type = 'Sub';
-    final query = this.forSubQuery(); // Use forSubQuery para consistência
+    final query = this.forSubQuery(); // Use forSubQuery for consistency
     callback(query);
 
-    // Garante um operador padrão se for nulo, embora a lógica anterior deva prevenir isso
+    // Ensures a default operator if it is null, although previous logic should prevent this
     operator ??= '=';
 
     this.wheresProp.add({
       'type': type,
       'column': column,
-      'operator': operator, // Operador final determinado
+      'operator': operator, // Final operator determined
       'query': query,
       'boolean': boolean
     });
@@ -1328,14 +1267,12 @@ class QueryBuilder {
     return this;
   }
 
-  ///
   /// Add an exists clause to the query.
   ///
-  /// @param  \Closure $callback
-  /// @param  String   $boolean
-  /// @param  bool     $not
-  /// @return $this
-  ///
+  /// [callback] `Function` The callback.
+  /// [boolean] `String` The boolean connector.
+  /// [not] `bool` Whether it is a NOT EXISTS.
+  /// Returns the QueryBuilder instance.
   QueryBuilder whereExists(Function callback,
       [String boolean = 'and', not = false]) {
     var type = not ? 'NotExists' : 'Exists';
@@ -1355,47 +1292,39 @@ class QueryBuilder {
     return this;
   }
 
-  ///
   /// Add an or exists clause to the query.
   ///
-  /// @param  \Closure $callback
-  /// @param  bool     $not
-  /// @return \Illuminate\Database\Query\Builder|static
-  ///
+  /// [callback] `Function` The callback.
+  /// [not] `bool` Whether it is a NOT EXISTS.
+  /// Returns the QueryBuilder instance.
   QueryBuilder orWhereExists(Function callback, [bool not = false]) {
     return this.whereExists(callback, 'or', not);
   }
 
-  ///
   /// Add a where not exists clause to the query.
   ///
-  /// @param  \Closure $callback
-  /// @param  String   $boolean
-  /// @return \Illuminate\Database\Query\Builder|static
-  ///
+  /// [callback] `Function` The callback.
+  /// [boolean] `String` The boolean connector.
+  /// Returns the QueryBuilder instance.
   QueryBuilder whereNotExists(Function callback, [String boolean = 'and']) {
     return this.whereExists(callback, boolean, true);
   }
 
+  /// Add an or where not exists clause to the query.
   ///
-  /// Add a where not exists clause to the query.
-  ///
-  /// @param  \Closure  $callback
-  /// @return \Illuminate\Database\Query\Builder|static
-  ///
+  /// [callback] `Function` The callback.
+  /// Returns the QueryBuilder instance.
   QueryBuilder orWhereNotExists(Function callback) {
     return this.orWhereExists(callback, true);
   }
 
-  ///
   /// Add a "where in" clause to the query.
   ///
-  /// @param  String  $column
-  /// [values] List<dynamic> | QueryBuilder | Function
-  /// @param  String  $boolean
-  /// @param  bool    $not
-  /// @return $this
-  ///
+  /// [column] `String` The column.
+  /// [values] `List`|`QueryBuilder`|`Function` The values.
+  /// [boolean] `String` The boolean connector.
+  /// [not] `bool` Whether it is a NOT IN.
+  /// Returns the QueryBuilder instance.
   QueryBuilder whereIn(String column, dynamic values,
       [String boolean = 'and', bool not = false]) {
     var type = not ? 'NotIn' : 'In';
@@ -1424,38 +1353,32 @@ class QueryBuilder {
     return this;
   }
 
-  ///
   /// Add an "or where in" clause to the query.
   ///
-  /// @param  String  $column
-  /// @param  mixed   $values
-  /// @return \Illuminate\Database\Query\Builder|static
-  ///
+  /// [column] `String` The column.
+  /// [values] `dynamic` The values.
+  /// Returns the QueryBuilder instance.
   QueryBuilder orWhereIn(String column, dynamic values) {
     return this.whereIn(column, values, 'or');
   }
 
-  ///
   /// Add a "where not in" clause to the query.
   ///
-  /// @param  String  $column
-  /// @param  mixed   $values
-  /// @param  String  $boolean
-  /// @return \Illuminate\Database\Query\Builder|static
-  ///
+  /// [column] `String` The column.
+  /// [values] `dynamic` The values.
+  /// [boolean] `String` The boolean connector.
+  /// Returns the QueryBuilder instance.
   QueryBuilder whereNotIn(String column, values, [boolean = 'and']) {
     return this.whereIn(column, values, boolean, true);
   }
 
-  ///
   /// Add an "or where not in" clause to the query.
   ///
-  /// @param  String  $column
-  /// @param  mixed   $values
-  /// @return \Illuminate\Database\Query\Builder|static
-  ///
-  QueryBuilder orWhereNotIn($column, $values) {
-    return this.whereNotIn($column, $values, 'or');
+  /// [column] `String` The column.
+  /// [values] `dynamic` The values.
+  /// Returns the QueryBuilder instance.
+  QueryBuilder orWhereNotIn(column, values) {
+    return this.whereNotIn(column, values, 'or');
   }
 
   ///
@@ -1569,7 +1492,7 @@ class QueryBuilder {
   }
 
   /// Add an "or where date" statement to the query.
-  /// Básico: `orWhereDate('created_at', '=', someDate)`
+  /// Basic: `orWhereDate('created_at', '=', someDate)`
   QueryBuilder orWhereDate(String column, String operator, DateTime? value) {
     return this.whereDate(column, operator, value, 'or');
   }
@@ -1577,11 +1500,11 @@ class QueryBuilder {
   /// Add a "where time" statement to the query.
   /// [column] Ex: 'created_at'
   /// [operator] Ex: '=', '<', '>'
-  /// [value] Ex: '12:00:00' ou um DateTime cujo horário interessa
-  /// [boolean] Se é 'and' ou 'or'
+  /// [value] Ex: '12:00:00' or a DateTime whose time matters
+  /// [boolean] Whether it is 'and' or 'or'
   QueryBuilder whereTime(String column, String operator, dynamic value,
       [String boolean = 'and']) {
-    // Supondo que addDateBasedWhere('Time', ...) trunque/compare somente a parte de hora
+    // Assuming addDateBasedWhere('Time', ...) truncates/compares only the time part
     return this.addDateBasedWhere('Time', column, operator, value, boolean);
   }
 
@@ -1664,20 +1587,20 @@ class QueryBuilder {
   /// @return $this
   ///
   ///
-  /// Exemplo: `whereFirstNameAndLastName('John', 'Doe')` será traduzido para:
+  /// Example: `whereFirstNameAndLastName('John', 'Doe')` will be translated to:
   /// ```dart
   /// where('first_name', '=', 'John', 'and')
   ///   .where('last_name', '=', 'Doe', 'and')
   /// ```
   ///
-  /// O método espera que o nome comece com "where" e o restante seja composto
-  /// por segmentos separados por "And" ou "Or".
+  /// The method expects the name to start with "where" and the rest to be composed
+  /// of segments separated by "And" or "Or".
   QueryBuilder dynamicWhere(String method, List<dynamic> parameters) {
-    // Remove o prefixo "where"
+    // Removes the "where" prefix
     final finder = method.substring(5);
 
-    // Processa a string, separando os segmentos e conectores.
-    // Usa um regex para capturar "And" ou "Or" quando seguido de letra maiúscula.
+    // Processes the string, separating segments and connectors.
+    // Uses a regex to capture "And" or "Or" when followed by an uppercase letter.
     final RegExp regExp = RegExp(r'(And|Or)(?=[A-Z])');
     final List<String> tokens = [];
     int start = 0;
@@ -1712,10 +1635,10 @@ class QueryBuilder {
   ///
   void addDynamic(
       String segment, String connector, List<dynamic> parameters, int index) {
-    // Converte o segmento de CamelCase para snake_case.
+    // Converts the segment from CamelCase to snake_case.
     final column = Utils.toSnakeCase(segment);
-    // Adiciona a cláusula where usando o operador "=".
-    // Aqui assume-se que o método where já está implementado na classe.
+    // Adds the where clause using the "=" operator.
+    // Here it is assumed that the where method is already implemented in the class.
     where(column, '=', parameters[index], connector);
   }
 
@@ -1778,33 +1701,33 @@ class QueryBuilder {
     return this.having(column, operator, value, 'or');
   }
 
-  /// Adiciona uma cláusula "having" bruta (raw) à consulta.
+  /// Add a raw "having" clause to the query.
   ///
-  /// [sql] é a expressão SQL bruta.
-  /// [bindings] são os valores que devem ser vinculados à consulta (por exemplo, parâmetros).
-  /// [boolean] indica o conector lógico da cláusula (por padrão, "and").
-  /// Retorna a instância atual de QueryBuilder para permitir encadeamento de chamadas.
+  /// [sql] is the raw SQL expression.
+  /// [bindings] are the values to be bound to the query.
+  /// [boolean] indicates the logical connector of the clause (default is "and").
+  /// Returns the current QueryBuilder instance for chaining.
   QueryBuilder havingRaw(String sql,
       [List bindings = const [], String boolean = 'and']) {
     const type = 'raw';
 
-    // Adiciona um registro em havingsProp com as informações necessárias
+    // Adds a record to havingsProp with the necessary info
     this.havingsProp.add({
       'type': type,
       'sql': sql,
       'boolean': boolean,
     });
 
-    // Adiciona os valores de binding à seção 'having'
+    // Adds binding values to 'having' section
     this.addBinding(bindings, 'having');
 
     return this;
   }
 
-  /// Adiciona uma cláusula "having" bruta (raw) com conector "or" à consulta.
+  /// Add a raw "having" clause with "or" connector to the query.
   ///
-  /// [sql] é a expressão SQL bruta.
-  /// [bindings] são os valores que devem ser vinculados à consulta.
+  /// [sql] is the raw SQL expression.
+  /// [bindings] are the values to be bound to the query.
   QueryBuilder orHavingRaw(String sql, [List bindings = const []]) {
     return this.havingRaw(sql, bindings, 'or');
   }
@@ -1853,9 +1776,9 @@ class QueryBuilder {
 
   /// Put the query's results in random order.
   ///
-  /// [seed] pode ser usado em alguns SGDBs para gerar "random com semente".
+  /// [seed] can be used in some DBMSs to generate "seeded random".
   QueryBuilder inRandomOrder([String seed = '']) {
-    // grammar.compileRandom(seed) retornaria algo como "RAND()" ou "RANDOM()"
+    // grammar.compileRandom(seed) would return something like "RAND()" or "RANDOM()"
     final randomExpression = this.grammar.compileRandom(seed);
     return this.orderByRaw(randomExpression);
   }
@@ -2140,17 +2063,17 @@ class QueryBuilder {
     String pageName = 'page',
     int? page,
   }) async {
-    // Se a página não for informada, resolve a página atual.
+    // If the page is not provided, resolves the current page.
     page ??= PaginationUtils.resolveCurrentPage(pageName);
 
-    // Obtém o total de registros para a paginação.
+    // Gets total records for pagination.
     int total = await getCountForPagination(columns);
 
-    // Se houver registros, obtém os resultados da página solicitada; caso contrário, retorna uma lista vazia.
+    // If there are records, gets results for requested page; otherwise returns empty.
     List<Map<String, dynamic>> results =
         total > 0 ? await forPage(page, perPage).get(columns) : [];
 
-    // Retorna o objeto LengthAwarePaginator com os resultados e metadados.
+    // Returns LengthAwarePaginator with results and metadata.
     return DefaultLengthAwarePaginator(results, total, perPage, page, {
       'path': PaginationUtils.resolveCurrentPath(),
       'pageName': pageName,
@@ -2168,30 +2091,30 @@ class QueryBuilder {
   /// @return \Illuminate\Contracts\Pagination\Paginator
   ///
   /// Get a paginator only supporting simple next and previous links.
-  /// Mais eficiente em grandes conjuntos pois não faz count(*).
+  /// More efficient on large datasets as it doesn't do count(*).
   Future<DefaultPaginator> simplePaginate({
     int perPage = 15,
     List<String> columns = const ['*'],
     String pageName = 'page',
     int? page,
   }) async {
-    // 1. Determina a página atual
+    // 1. Determines current page
     page ??= PaginationUtils.resolveCurrentPage(pageName);
 
-    // 2. Carrega (perPage + 1) resultados p/ detectar se há próxima página
+    // 2. Loads (perPage + 1) results to detect if there's a next page
     this.skip((page - 1) * perPage).take(perPage + 1);
     final results = await this.get(columns);
 
-    // 3. Se vieram mais registros que `perPage`, tem mais páginas
+    // 3. If more records than `perPage` came back, there are more pages
     bool hasMorePages = results.length > perPage;
 
-    // Se veio 1 a mais, remove o extra (pois só queremos exibir 'perPage' itens)
+    // If 1 extra came back, remove it (we only want to display 'perPage' items)
     List<Map<String, dynamic>> pageItems = results;
     if (hasMorePages) {
       pageItems = results.sublist(0, perPage);
     }
 
-    // 4. Monta o paginador
+    // 4. Assembles paginator
     return DefaultPaginator(
       pageItems,
       perPage,
@@ -2210,30 +2133,30 @@ class QueryBuilder {
   /// @param  array  $columns
   /// @return int
   ///
-  /// Retorna a contagem total de registros para a paginação.
+  /// Returns total count of records for pagination.
   Future<int> getCountForPagination(
       [List<String> columns = const ['*']]) async {
     backupFieldsForCount();
 
-    // Define a agregação para contagem, removendo eventuais aliases.
+    // Sets aggregation for count, removing aliases.
     aggregateProp = {
       'function': 'count',
       'columns': clearSelectAliases(columns)
     };
 
-    // Executa a consulta (nesse caso, a consulta de contagem).
+    // Executes query (in this case, count query).
     List<Map<String, dynamic>> results = await get();
 
     aggregateProp = null;
 
     restoreFieldsForCount();
 
-    // Se houver agrupamentos, retorna o número de resultados.
+    // If grouped, returns number of results (groups).
     if (groupsProp.isNotEmpty) {
       return results.length;
     }
 
-    // Caso contrário, espera que o resultado possua uma chave 'aggregate'.
+    // Otherwise, expects result to have an 'aggregate' key.
     if (results.isNotEmpty && results.first.containsKey('aggregate')) {
       var agg = results.first['aggregate'];
       if (agg is int) {
@@ -2251,25 +2174,25 @@ class QueryBuilder {
   ///
   /// @return void
   ///
-  /// Faz o backup dos campos utilizados na contagem da paginação.
+  /// Backs up fields used in pagination count.
   void backupFieldsForCount() {
-    // Backup dos campos da consulta.
+    // Backup of query fields.
     backups['orders'] = ordersProp;
     backups['limit'] = limitProp;
     backups['offset'] = offsetProp;
     backups['columns'] = columnsProp;
 
-    // Define os campos de consulta como nulos (ou listas vazias) para a contagem.
+    // Sets query fields to null (or empty lists) for count.
     ordersProp = [];
     limitProp = null;
     offsetProp = null;
     columnsProp = null;
 
-    // Backup dos bindings para 'order' e 'select'.
+    // Backup of bindings for 'order' and 'select'.
     bindingBackups['order'] = bindings['order'];
     bindingBackups['select'] = bindings['select'];
 
-    // Limpa os bindings de 'order' e 'select' para que não interfiram na contagem.
+    // Clears 'order' and 'select' bindings so they don't interfere with count.
     bindings['order'] = [];
     bindings['select'] = [];
   }
@@ -2280,8 +2203,8 @@ class QueryBuilder {
   /// @param  array  $columns
   /// @return array
   ///
-  /// Remove aliases de colunas para evitar problemas na contagem.
-  /// Exemplo: "users.name as user_name" será transformado em "users.name".
+  /// Removes column aliases to prevent issues in count.
+  /// Example: "users.name as user_name" becomes "users.name".
   List<String> clearSelectAliases(List<String> columns) {
     return columns.map((column) {
       final aliasPos = column.toLowerCase().indexOf(' as ');
@@ -2294,7 +2217,7 @@ class QueryBuilder {
   ///
   /// @return void
   ///
-  /// Restaura os campos que foram modificados para a contagem da paginação.
+  /// Restores fields modified for pagination count.
   void restoreFieldsForCount() {
     ordersProp = backups['orders'];
     limitProp = backups['limit'];
@@ -2311,8 +2234,8 @@ class QueryBuilder {
   /// Chunk the results of the query into blocks of [count] items each,
   /// calling [callback] for each block.
   ///
-  /// O callback recebe (lista de resultados, número da página).
-  /// Retorna false se for interrompido antes, ou true se iterou tudo.
+  /// The callback receives (list of results, page number).
+  /// Returns false if interrupted early, or true if iterated completely.
   Future<bool> chunk(
     int count,
     FutureOr<bool> Function(List<Map<String, dynamic>> chunk, int page)
@@ -2321,16 +2244,16 @@ class QueryBuilder {
     int page = 1;
 
     while (true) {
-      // Carrega o próximo bloco
+      // Loads the next block
       final results = await this.forPage(page, count).get();
       final countResults = results.length;
 
       if (countResults == 0) {
-        // Não há mais registros
+        // No more records
         break;
       }
 
-      // Executa o callback; se ele retornar false, paramos o loop
+      // Executes the callback; if it returns false, we stop the loop
       final cbResult = await callback(results, page);
       if (cbResult == false) {
         return false;
@@ -2338,7 +2261,7 @@ class QueryBuilder {
 
       page++;
 
-      // Se veio menos que "count", não há mais nada pra buscar
+      // If less than "count", nothing more to fetch
       if (countResults < count) {
         break;
       }
@@ -2349,12 +2272,12 @@ class QueryBuilder {
 
   /// Chunk the results of a query by comparing numeric IDs.
   ///
-  /// [count]: quantos registros por “bloco”
-  /// [callback]: recebe a lista do bloco e deve retornar bool
-  /// [column]: nome da coluna de ID, por padrão 'id'
-  /// [alias]: se o campo tiver alias diferente, ex: 'users.id as user_id'.
+  /// [count]: how many records per "block"
+  /// [callback]: receives the block list and must return bool
+  /// [column]: name of the ID column, defaults to 'id'
+  /// [alias]: if the field has a different alias, e.g., 'users.id as user_id'.
   ///
-  /// Exemplo de uso:
+  /// Usage example:
   ///   await query.chunkById(100, (chunk) async { ... }, 'id');
   Future<bool> chunkById(
     int count,
@@ -2363,10 +2286,10 @@ class QueryBuilder {
     String? alias,
   }) async {
     alias ??= column;
-    dynamic lastId = 0; // valor inicial
+    dynamic lastId = 0; // initial value
 
     while (true) {
-      // Carrega os próximos [count] registros, onde column > lastId
+      // Loads the next [count] records, where column > lastId
       final results = await this.forPageAfterId(count, lastId, column).get();
       final countResults = results.length;
 
@@ -2374,22 +2297,22 @@ class QueryBuilder {
         break;
       }
 
-      // Chama o callback para este bloco
+      // Calls the callback for this block
       final cbResult = await callback(results);
       if (cbResult == false) {
         return false;
       }
 
-      // Pega o valor do ID do último registro retornado
+      // Gets the ID value of the last returned record
       final lastRow = results.last;
       final dynamic aliasValue = lastRow[alias];
       if (aliasValue == null) {
-        // se não achamos o valor do ID no registro, paramos
+        // if we didn't find the ID value in the record, we stop
         break;
       }
       lastId = aliasValue;
 
-      // Se vieram menos registros que “count”, não há mais nada
+      // If fewer records than "count" came back, nothing more
       if (countResults < count) {
         break;
       }
@@ -2400,26 +2323,26 @@ class QueryBuilder {
 
   /// Execute a callback over each item while chunking.
   ///
-  /// [callback] é chamado para cada item individual. Se retornar false, interrompe.
-  /// [count] é o tamanho do bloco para chunking.
-  /// Retorna true se concluiu tudo, ou false se interrompido antes.
+  /// [callback] is called for each individual item. If it returns false, it stops.
+  /// [count] is the block size for chunking.
+  /// Returns true if completed, or false if interrupted early.
   Future<bool> each(
     FutureOr<bool> Function(Map<String, dynamic> row, int index) callback, [
     int count = 1000,
   ]) async {
-    // (Opcional) no Laravel, exige que haja orderBy definido antes de each()
-    int globalIndex = 0; // Contador geral, across chunks
+    // (Optional) in Laravel, it requires orderBy to be defined before each()
+    int globalIndex = 0; // General counter, across chunks
     return await this.chunk(count, (chunkRows, page) async {
       for (int i = 0; i < chunkRows.length; i++) {
         final row = chunkRows[i];
-        // callback recebe (row, índice global ou local)
+        // callback receives (row, global or local index)
         final cbResult = await callback(row, globalIndex);
         if (cbResult == false) {
-          return false; // Interrompe chunk e devolve false
+          return false; // Interrupted chunk and return false
         }
         globalIndex++;
       }
-      return true; // continuar para o próximo chunk
+      return true; // continue to next chunk
     });
   }
 
@@ -2470,16 +2393,16 @@ class QueryBuilder {
 
   /// Concatenate values of a given column as a string.
   ///
-  /// Em Laravel, `implode($column, $glue)` combina os valores em uma só string.
-  /// Aqui, retorna a string concatenada.
+  /// In Laravel, `implode($column, $glue)` combines values into a single string.
+  /// Here, it returns the concatenated string.
   Future<String> implode(String column, [String glue = '']) async {
-    // 1. Obtém a lista de valores da coluna usando pluck
+    // 1. Gets list of column values using pluck
     final dynamic result = await this.pluck(column);
-    // 2. Se pluck retornar uma lista, converte cada item para string e faz a junção
+    // 2. If pluck returns a list, converts each item to string and joins
     if (result is List) {
       return result.map((item) => item?.toString() ?? '').join(glue);
     }
-    // 3. Caso não seja lista (ou se pluck ainda não estiver completo), retorna vazio
+    // 3. If not a list (or if pluck isn't complete yet), returns empty
     return '';
   }
 
@@ -2514,7 +2437,7 @@ class QueryBuilder {
     //var cols = (columns as List).map((e) => e.toString()).toList();
 
     //__FUNCTION__	The function name, or {closure} for anonymous functions.
-    //a constant __FUNCTION__  retorna o nome da corrent função https://www.php.net/manual/en/language.constants.magic.php
+    //a constant __FUNCTION__  returns the current function name https://www.php.net/manual/en/language.constants.magic.php
     final result = await this.aggregate('count', columns);
     return result is int ? result : 0;
   }
@@ -2613,28 +2536,28 @@ class QueryBuilder {
 
   /// Execute a numeric aggregate function on the database.
   ///
-  /// [function] Pode ser "count", "sum", "avg", "min" ou "max".
-  /// [columns] Lista de colunas (por padrão ['*']).
-  /// Retorna um valor [num] (int ou double).
+  /// [function] Can be "count", "sum", "avg", "min" or "max".
+  /// [columns] List of columns (default ['*']).
+  /// Returns a [num] value (int or double).
   Future<num> numericAggregate(String function,
       [List<String> columns = const ['*']]) async {
-    // Chama o método aggregate para obter o resultado cru
+    // Calls aggregate method to get raw result
     final dynamic result = await this.aggregate(function, columns);
-    // Se não houver resultado, retorna 0
+    // If no result, returns 0
     if (result == null) {
       return 0;
     }
-    // Se já for int ou double, devolve diretamente
+    // If already int or double, returns directly
     if (result is int || result is double) {
       return result;
     }
-    // Converte para string para analisar se possui ponto decimal
+    // Converts to string to check if it has decimal point
     final String resultStr = result.toString();
-    // Se não tiver ponto decimal, parse como int
+    // If no decimal point, parse as int
     if (!resultStr.contains('.')) {
       return int.tryParse(resultStr) ?? 0;
     }
-    // Caso contrário, converte para double
+    // Otherwise, convert to double
     return double.tryParse(resultStr) ?? 0.0;
   }
 
@@ -2715,88 +2638,88 @@ class QueryBuilder {
 
   /// Insert or update a record matching the [attributes], and fill it with [values].
   ///
-  /// Se não existir nenhum registro correspondente a [attributes]:
-  ///   -> executa insert(attributes + values).
-  /// Senão:
-  ///   -> atualiza o primeiro registro correspondente.
+  /// If no record matches [attributes]:
+  ///   -> executes insert(attributes + values).
+  /// Else:
+  ///   -> updates the first matching record.
   ///
-  /// Retorna `true` em caso de sucesso, `false` se falhar (ou não alterar nada).
+  /// Returns `true` on success, `false` if fails (or no changes).
   Future<bool> updateOrInsert(
     Map<String, dynamic> attributes, [
     Map<String, dynamic> values = const {},
   ]) async {
-    // 1. Verifica se existe algum registro com os atributos fornecidos
+    // 1. Checks if any record exists with provided attributes
     final bool recordExists = await this.where(attributes).exists();
 
     if (!recordExists) {
-      // 2. Se não existir, faz insert
+      // 2. If not exists, executes insert
       final inserted = await this.insert({
         ...attributes,
         ...values,
       });
 
-      // O retorno de insert pode variar (bool, int, etc.),
-      // dependendo do seu ConnectionInterface. Ajuste conforme necessário:
+      // Insert return value can vary (bool, int, etc.),
+      // depending on ConnectionInterface implementation. Adjust as needed:
       if (inserted is bool) {
-        return inserted; // true ou false
+        return inserted; // true or false
       } else if (inserted is num) {
-        return inserted > 0; // se for a contagem de rows inseridas
+        return inserted > 0; // if it is row count
       }
-      return inserted != null; // fallback simples
+      return inserted != null; // simple fallback
     } else {
-      // 3. Se existir, atualiza apenas 1 registro
+      // 3. If exists, updates only 1 record
       final int affectedRows =
           await this.where(attributes).limit(1).update(values);
 
-      // 4. Converte o número de linhas afetadas em bool
+      // 4. Converts number of affected rows to bool
       return affectedRows > 0;
     }
   }
 
   /// Increment a column's value by a given amount.
   ///
-  /// [column] Nome da coluna que será incrementada.
-  /// [amount] Valor a ser somado à coluna.
-  /// [extra]  Valores adicionais que podem ser atualizados no mesmo update.
-  /// Retorna a quantidade de linhas afetadas (geralmente int).
+  /// [column] Name of the column to increment.
+  /// [amount] Value to add to the column.
+  /// [extra]  Additional values that can be updated in the same update.
+  /// Returns the number of affected rows (usually int).
   Future<int> increment(String column,
       [num amount = 1, Map<String, dynamic> extra = const {}]) async {
-    // 2. Wrap do nome da coluna para garantir escape (ex: `"table"."column"`)
+    // 2. Wrap column name to ensure escaping (e.g. `"table"."column"`)
     final wrapped = this.grammar.wrap(column);
-    // 3. Monta o Map de colunas, criando uma expressão do tipo "<coluna> + <amount>"
-    //    e faz merge com possíveis colunas extras:
+    // 3. Builds columns map, creating expression "<column> + <amount>"
+    //    and merging with extra columns:
     final Map<String, dynamic> columnsToUpdate = {
       ...extra,
       column: this.raw('$wrapped + $amount'),
     };
-    // 4. Chama o update(...) passando as colunas calculadas
+    // 4. Calls update(...) passing calculated columns
     final int affected = await this.update(columnsToUpdate);
-    // 5. Retorna o número de linhas afetadas (dependerá da implementação do update)
+    // 5. Returns number of affected rows (depends on update implementation)
     return affected;
   }
 
   /// Decrement a column's value by a given amount.
   ///
-  /// [column] Nome da coluna que será decrementada.
-  /// [amount] Valor a ser subtraído da coluna.
-  /// [extra]  Valores adicionais que podem ser atualizados no mesmo update.
-  /// Retorna a quantidade de linhas afetadas (geralmente int).
+  /// [column] Name of the column to decrement.
+  /// [amount] Value to subtract from the column.
+  /// [extra]  Additional values that can be updated in the same update.
+  /// Returns the number of affected rows (usually int).
   Future<int> decrement(String column,
       [num amount = 1, Map<String, dynamic> extra = const {}]) async {
-    // 2. Wrap do nome da coluna para garantir escape (ex: `"table"."column"`)
+    // 2. Wrap column name to ensure escaping (e.g. `"table"."column"`)
     final wrapped = this.grammar.wrap(column);
 
-    // 3. Monta o Map de colunas, criando uma expressão do tipo "<coluna> - <amount>"
-    //    e faz merge com possíveis colunas extras:
+    // 3. Builds columns map, creating expression "<column> - <amount>"
+    //    and merging with extra columns:
     final Map<String, dynamic> columnsToUpdate = {
       ...extra,
       column: this.raw('$wrapped - $amount'),
     };
 
-    // 4. Chama o update(...) passando as colunas calculadas
+    // 4. Calls update(...) passing calculated columns
     final int affected = await this.update(columnsToUpdate);
 
-    // 5. Retorna o número de linhas afetadas (dependerá da implementação do update)
+    // 5. Returns number of affected rows (depends on update implementation)
     return affected;
   }
 
@@ -2865,9 +2788,9 @@ class QueryBuilder {
     //     .bindings['where']
     //     .add(Utils.array_merge(this.bindings['where'], bindingsP));
 
-    // Mescla as cláusulas WHERE
+    // Merges WHERE clauses
     this.wheresProp.addAll(wheresP);
-    // Mescla os bindings do tipo 'where'
+    // Merges bindings of type 'where'
     this.bindings['where'].addAll(bindings);
   }
 
@@ -2899,9 +2822,9 @@ class QueryBuilder {
   /// @return array
   ///
   List getBindings() {
-    var result = <dynamic>[]; // Usar lista tipada
+    var result = <dynamic>[]; // Use typed list
 
-    // 1. Adiciona bindings de CTEs ('expressions') PRIMEIRO
+    // 1. Adds CTE bindings ('expressions') FIRST
     if (bindings['expressions'] is List &&
         bindings['expressions']!.isNotEmpty) {
       result.addAll(bindings['expressions']!);
@@ -2911,7 +2834,7 @@ class QueryBuilder {
       result.addAll(this.bindings['select']);
     }
     if (bindings['from'] is List && bindings['from']!.isNotEmpty) {
-      // Adicionado para 'fromRaw'
+      // Added for 'fromRaw'
       result.addAll(bindings['from']!);
     }
     if (this.bindings['join'] != null) {
@@ -3032,63 +2955,63 @@ class QueryBuilder {
     return this;
   }
 
-  /// Adiciona um INNER JOIN LATERAL à consulta.
+  /// Adds an INNER JOIN LATERAL to the query.
   ///
-  /// [subquery] pode ser um QueryBuilder, uma Closure (Function) ou uma String SQL bruta.
-  /// [alias] é o alias obrigatório para a subconsulta lateral.
-  /// [onCallback] é uma função que recebe um JoinClause para definir as condições ON.
-  /// Frequentemente para JOIN LATERAL, a condição é `ON TRUE`.
+  /// [subquery] can be a QueryBuilder, a Closure (Function) or a raw SQL String.
+  /// [alias] is the mandatory alias for the lateral subquery.
+  /// [onCallback] is a function receiving a JoinClause to define ON conditions.
+  /// Often for LATERAL JOIN, the condition is `ON TRUE`.
   QueryBuilder joinLateral(
       dynamic subquery, String alias, Function(JoinClause) onCallback) {
     return _addLateralJoin('inner', subquery, alias, onCallback);
   }
 
-  /// Adiciona um LEFT JOIN LATERAL à consulta.
+  /// Adds a LEFT JOIN LATERAL to the query.
   ///
-  /// [subquery] pode ser um QueryBuilder, uma Closure (Function) ou uma String SQL bruta.
-  /// [alias] é o alias obrigatório para a subconsulta lateral.
-  /// [onCallback] é uma função que recebe um JoinClause para definir as condições ON.
-  /// Frequentemente para JOIN LATERAL, a condição é `ON TRUE`.
+  /// [subquery] can be a QueryBuilder, a Closure (Function) or a raw SQL String.
+  /// [alias] is the mandatory alias for the lateral subquery.
+  /// [onCallback] is a function receiving a JoinClause to define ON conditions.
+  /// Often for LATERAL JOIN, the condition is `ON TRUE`.
   QueryBuilder leftJoinLateral(
       dynamic subquery, String alias, Function(JoinClause) onCallback) {
     return _addLateralJoin('left', subquery, alias, onCallback);
   }
 
-  /// Método auxiliar para adicionar joins laterais.
+  /// Helper method to add lateral joins.
   QueryBuilder _addLateralJoin(String type, dynamic subquery, String alias,
       Function(JoinClause) onCallback) {
-    // Cria a subconsulta e obtém SQL + bindings
+    // Creates subquery and gets SQL + bindings
     final res = createSub(subquery);
 
     final sql = res[0];
     final bindings = res[1];
 
-    // Cria a expressão para a subconsulta ( "(subconsulta) as alias" )
+    // Creates expression for subquery ( "(subquery) as alias" )
     final expression = QueryExpression('($sql) as ${grammar.wrapTable(alias)}');
 
-    // Adiciona os bindings da subconsulta ao tipo 'join'
+    // Adds subquery bindings to 'join' type
     addBinding(bindings, 'join');
 
-    // Cria o JoinClause, marcando como lateral
+    // Creates JoinClause, marking as lateral
     final join = JoinClause(type, expression, this, true);
 
-    // Aplica as condições ON usando o callback fornecido
+    // Applies ON conditions using provided callback
     onCallback(join);
 
-    // Adiciona o JoinClause configurado à lista de joins da consulta principal
+    // Adds configured JoinClause to main query joins list
     joinsProp.add(join);
 
-    // Adiciona os bindings das cláusulas ON ao tipo 'join'
+    // Adds ON clause bindings to 'join' type
     addBinding(join.bindingsLocal, 'join');
 
     return this;
   }
 
-  /// Adiciona um JOIN com a “tabela/expressão” bruta (sem wrap) e, opcionalmente,
-  /// permite declarar as condições ON via callback.
+  /// Adds a JOIN with raw "table/expression" (no wrap) and optionally
+  /// allows declaring ON conditions via callback.
   ///
-  /// Exemplos:
-  ///   // JOIN simples, sem ON (útil com ON TRUE ou NATURAL, etc.)
+  /// Examples:
+  ///   // Simple JOIN, no ON (useful with ON TRUE or NATURAL, etc.)
   ///   qb.joinRaw('(select * from foo) as f');
   QueryBuilder joinRaw(
     String tableExpression, [
@@ -3096,19 +3019,19 @@ class QueryBuilder {
     String type = 'inner',
     Function(JoinClause)? on,
   ]) {
-    // mantém a expressão crua, sem wrap/escape
+    // Keeps raw expression, no wrap/escape
     final tableExpr = QueryExpression(tableExpression);
 
-    // cria o JoinClause e empilha na consulta
+    // Creates JoinClause and pushes to query
     final join = JoinClause(type, tableExpr, this);
     this.joinsProp.add(join);
 
-    // bindings associados à “tabela”/expressão do join
+    // Bindings associated with join "table"/expression
     if (bindings.isNotEmpty) {
       this.addBinding(bindings, 'join');
     }
 
-    // permite configurar o ON via callback (incluindo onRaw)
+    // Allows configuring ON via callback (including onRaw)
     if (on != null) {
       on(join);
       if (join.bindingsLocal.isNotEmpty) {
@@ -3117,6 +3040,49 @@ class QueryBuilder {
     }
 
     return this;
+  }
+
+  /// Executes an optimized "batch insert", generating a single SQL statement
+  /// with multiple values. Ex: INSERT INTO table (...) VALUES (...), (...), (...)
+  ///
+  /// [values] is a list of maps, where each map represents a row to be inserted.
+  ///
+  /// **Important:** All maps in the list must have exactly the same keys.
+  /// Point of Attention: The Parameter Limit (Bind Limit)
+  /// SQLite: The old default was 999 variables. Modern versions allow more, but there are still limits.
+  /// PostgreSQL: The protocol supports up to ~65,535 parameters (2 bytes unsigned integer).
+  /// SQL Server: Around 2,100 parameters.
+  Future<dynamic> insertMany(List<Map<String, dynamic>> values) async {
+    // 1. If list is empty, nothing to do.
+    if (values.isEmpty) {
+      return;
+    }
+    // 2. Gets table name from QueryBuilder.
+    final table = grammar.wrapTable(fromProp);
+    // 3. Gets column names from first item in list.
+    //    Assumes all maps have same keys.
+    final columns = values.first.keys.toList();
+    final columnsSql = grammar.columnize(columns);
+    // 4. Prepares placeholders string (?, ?, ?) for a single row.
+    final singleRowPlaceholders =
+        '(${List.filled(columns.length, '?').join(', ')})';
+    // 5. Creates placeholders string for all rows, comma separated.
+    //    Ex: (?, ?), (?, ?), (?, ?)
+    final allPlaceholders =
+        List.filled(values.length, singleRowPlaceholders).join(', ');
+    // 6. Builds final SQL statement.
+    final sql = 'INSERT INTO $table ($columnsSql) VALUES $allPlaceholders';
+    // 7. Flattens map list into single values list for bindings,
+    //    ensuring values order corresponds to columns order.
+    final bindings = <dynamic>[];
+    for (final row in values) {
+      for (final column in columns) {
+        bindings.add(row[column]);
+      }
+    }
+    // 8. Executes insertion using QueryBuilder connection.
+    //    Connection `insert` method executes raw query.
+    await connection.insert(sql, bindings);
   }
 
   ///

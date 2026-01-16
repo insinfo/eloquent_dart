@@ -210,3 +210,7 @@ final manager = Manager();
 ## 3.4.0
 
 - upgrade mysql_dart to 1.2.0 for fix textual BLOB/TEXT columns are decoded as UTF‑8 strings consistently 
+
+## 3.4.2
+
+- implemented `insertMany` to execute an optimized 'batch insert', generating a single SQL statement
