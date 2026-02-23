@@ -64,6 +64,37 @@ for now it only works with PostgreSQL and MySQL
 
 ```
 
+## whereExists subquery
+```dart
+  // whereExists receives a QueryBuilder in the callback, so use from(...)
+  var res = await db
+      .table('usuario as usuario')
+      .select(['numcgm'])
+      .whereExists((q) {
+        q.selectRaw('1')
+            .from('administracao.usuario_organograma as uo_filtro')
+            .whereColumn('uo_filtro.numcgm', '=', 'usuario.numcgm')
+            .where('uo_filtro.id_organograma', '=', 10);
+      })
+      .get();
+
+  // Alternative using raw EXISTS when needed
+  var resRaw = await db
+      .table('usuario as usuario')
+      .whereRaw(
+        '''
+        EXISTS (
+          SELECT 1
+          FROM administracao.usuario_organograma uo_filtro
+          WHERE uo_filtro.numcgm = usuario.numcgm
+            AND uo_filtro.id_organograma = ?
+        )
+        ''',
+        [10],
+      )
+      .get();
+```
+
 ## Creating a connection executing insert/update/delete
 ```dart
    

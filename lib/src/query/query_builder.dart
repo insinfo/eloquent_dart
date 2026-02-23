@@ -1273,6 +1273,19 @@ class QueryBuilder {
   /// [boolean] `String` The boolean connector.
   /// [not] `bool` Whether it is a NOT EXISTS.
   /// Returns the QueryBuilder instance.
+  ///
+  /// Example:
+  /// ```dart
+  /// db.table('usuario as usuario')
+  ///   .whereExists((q) {
+  ///     q.selectRaw('1')
+  ///      .from('administracao.usuario_organograma as uo_filtro')
+  ///      .whereColumn('uo_filtro.numcgm', '=', 'usuario.numcgm')
+  ///      .where('uo_filtro.id_organograma', '=', 10);
+  ///   });
+  /// ```
+  /// Note: the callback receives a QueryBuilder, so use `from(...)` instead of
+  /// `table(...)` inside the callback.
   QueryBuilder whereExists(Function callback,
       [String boolean = 'and', not = false]) {
     var type = not ? 'NotExists' : 'Exists';
@@ -1297,6 +1310,9 @@ class QueryBuilder {
   /// [callback] `Function` The callback.
   /// [not] `bool` Whether it is a NOT EXISTS.
   /// Returns the QueryBuilder instance.
+  ///
+  /// Note: the callback receives a QueryBuilder, so use `from(...)` instead of
+  /// `table(...)` inside the callback.
   QueryBuilder orWhereExists(Function callback, [bool not = false]) {
     return this.whereExists(callback, 'or', not);
   }
@@ -1306,6 +1322,9 @@ class QueryBuilder {
   /// [callback] `Function` The callback.
   /// [boolean] `String` The boolean connector.
   /// Returns the QueryBuilder instance.
+  ///
+  /// Note: the callback receives a QueryBuilder, so use `from(...)` instead of
+  /// `table(...)` inside the callback.
   QueryBuilder whereNotExists(Function callback, [String boolean = 'and']) {
     return this.whereExists(callback, boolean, true);
   }
@@ -1314,6 +1333,9 @@ class QueryBuilder {
   ///
   /// [callback] `Function` The callback.
   /// Returns the QueryBuilder instance.
+  ///
+  /// Note: the callback receives a QueryBuilder, so use `from(...)` instead of
+  /// `table(...)` inside the callback.
   QueryBuilder orWhereNotExists(Function callback) {
     return this.orWhereExists(callback, true);
   }

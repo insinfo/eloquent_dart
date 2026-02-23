@@ -511,6 +511,52 @@ void main() {
           resOrRaw.length, greaterThanOrEqualTo(1)); // Ajuste conforme os dados
     });
 
+    test('select whereExists with subquery builder', () async {
+      await db.execute('CREATE SCHEMA IF NOT EXISTS administracao;');
+      await db.execute('DROP TABLE IF EXISTS administracao.usuario_organograma;');
+      await db.execute('DROP TABLE IF EXISTS usuario;');
+
+      await db.execute('''
+        CREATE TABLE "usuario" (
+          "numcgm" int4,
+          "nome" varchar(80)
+        );
+      ''');
+
+      await db.execute('''
+        CREATE TABLE "administracao"."usuario_organograma" (
+          "numcgm" int4,
+          "id_organograma" int4
+        );
+      ''');
+
+      await db.table('usuario').insertMany([
+        {'numcgm': 1, 'nome': 'Ana'},
+        {'numcgm': 2, 'nome': 'Bruno'}
+      ]);
+
+      await db.table('administracao.usuario_organograma').insertMany([
+        {'numcgm': 1, 'id_organograma': 10},
+        {'numcgm': 1, 'id_organograma': 20}
+      ]);
+
+      var res = await db
+          .table('usuario as usuario')
+          .select(['numcgm'])
+          .whereExists((q) {
+            q.selectRaw('1')
+                .from('administracao.usuario_organograma as uo_filtro')
+                .whereColumn('uo_filtro.numcgm', '=', 'usuario.numcgm')
+                .where('uo_filtro.id_organograma', '=', 10);
+          })
+          .orderBy('numcgm', 'asc')
+          .get();
+
+      expect(res, [
+        {'numcgm': 1}
+      ]);
+    });
+
     test('select groupBy multiple columns', () async {
       // Preparar dados com diferentes cidades e ruas
       await db.table('temp_location').insert(
