@@ -1,5 +1,6 @@
 import 'package:eloquent/eloquent.dart';
 import 'package:eloquent/src/pdo/dargres/dargres_pdo.dart';
+import 'package:eloquent/src/pdo/dpgsql/dpgsql_pdo.dart';
 import 'package:eloquent/src/pdo/postgres/postgres_pdo.dart';
 import 'package:eloquent/src/pdo/postgres_v3/postgres_v3_pdo.dart';
 
@@ -186,7 +187,7 @@ class PostgresConnector extends Connector implements ConnectorInterface {
 
     final pdoConfig = PDOConfig.fromMap(config);
     late PDOInterface pdo;
-   
+
     switch (conf['driver_implementation']) {
       case 'postgres':
         pdo = PostgresV2PDO(pdoConfig);
@@ -196,6 +197,9 @@ class PostgresConnector extends Connector implements ConnectorInterface {
         break;
       case 'dargres':
         pdo = DargresPDO(pdoConfig);
+        break;
+      case 'dpgsql':
+        pdo = DpgsqlPDO(pdoConfig);
         break;
       default:
         pdo = PostgresV2PDO(pdoConfig);

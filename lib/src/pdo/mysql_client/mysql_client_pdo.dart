@@ -26,6 +26,34 @@ class MySqlClientPDO extends PDOInterface {
   /// CoreConnection
   late dynamic connection;
 
+  Duration _timeout([int? timeoutInSeconds]) => Duration(
+        seconds: timeoutInSeconds ?? defaultTimeoutInSeconds,
+      );
+
+  Object? _normalizedParams(dynamic params) {
+    // Query builder bindings are normalized by Connection.prepareBindings()
+    // before reaching this adapter. DateTime values should arrive formatted
+    // with the grammar date format, mirroring Laravel/PDO behavior.
+    if (params == null) {
+      return null;
+    }
+    if (params is List && params.isEmpty) {
+      return null;
+    }
+    if (params is Map && params.isEmpty) {
+      return null;
+    }
+    return params;
+  }
+
+  PDOResults _toPDOResults(IResultSet result) {
+    final rows = <Map<String, dynamic>>[];
+    for (final row in result.rows) {
+      rows.add(row.typedAssoc());
+    }
+    return PDOResults(rows, result.affectedRows.toInt());
+  }
+
   //called from postgres_connector.dart
   Future<MySqlClientPDO> connect() async {
     if (config.pool == true) {
@@ -58,18 +86,15 @@ class MySqlClientPDO extends PDOInterface {
   }
 
   Future<T> runInTransaction<T>(
-      Future<T> operation(MySqlClientPDOTransaction ctx),
-      [int? timeoutInSeconds]) async {
-    if (timeoutInSeconds == null) {
-      timeoutInSeconds = defaultTimeoutInSeconds;
-    }
-
+    Future<T> operation(MySqlClientPDOTransaction ctx), [
+    int? timeoutInSeconds,
+  ]) async {
     if (connection is MySQLConnectionPool) {
       final res = await (connection as MySQLConnectionPool)
           .transactional((transaCtx) async {
         final pdoCtx = MySqlClientPDOTransaction(transaCtx, this);
         return operation(pdoCtx);
-      });
+      }).timeout(_timeout(timeoutInSeconds));
       return res;
     }
 
@@ -77,23 +102,22 @@ class MySqlClientPDO extends PDOInterface {
         await (connection as MySQLConnection).transactional((transaCtx) async {
       final pdoCtx = MySqlClientPDOTransaction(transaCtx, this);
       return operation(pdoCtx);
-    });
+    }).timeout(_timeout(timeoutInSeconds));
     return res;
   }
 
   /// Executa uma instrução SQL e retornar o número de linhas afetadas
   Future<int> execute(String statement, [int? timeoutInSeconds]) async {
-    if (timeoutInSeconds == null) {
-      timeoutInSeconds = defaultTimeoutInSeconds;
-    }
-
     if (connection is MySQLConnectionPool) {
-      final result =
-          await (connection as MySQLConnectionPool).execute(statement);
+      final result = await (connection as MySQLConnectionPool)
+          .execute(statement)
+          .timeout(_timeout(timeoutInSeconds));
       return result.affectedRows.toInt();
     }
 
-    final result = await (connection as MySQLConnection).execute(statement);
+    final result = await (connection as MySQLConnection)
+        .execute(statement)
+        .timeout(_timeout(timeoutInSeconds));
     return result.affectedRows.toInt();
   }
 
@@ -101,26 +125,21 @@ class MySqlClientPDO extends PDOInterface {
   /// [params] List<dynamic>
   Future<PDOResults> query(String query,
       [dynamic params, int? timeoutInSeconds]) async {
-    if (timeoutInSeconds == null) {
-      timeoutInSeconds = defaultTimeoutInSeconds;
-    }
+    // Do not reformat DateTime here; this adapter receives prepared bindings.
+    final normalizedParams = _normalizedParams(params);
 
     if (connection is MySQLConnectionPool) {
-      final stmt = await (connection as MySQLConnectionPool).prepare(query);
-      //.timeout(timeoutInSeconds);
-      final result = await stmt.execute(params ?? []);
-      await stmt.deallocate();
-      final rows = result.rows.map((row) => row.typedAssoc()).toList();
-      final pdoResult = PDOResults(rows, result.affectedRows.toInt());
-      return pdoResult;
+      final result = await Future<IResultSet>.value(
+        (connection as MySQLConnectionPool)
+            .withConnection((conn) => conn.execute(query, normalizedParams)),
+      ).timeout(_timeout(timeoutInSeconds));
+      return _toPDOResults(result);
     }
 
-    final stmt = await (connection as MySQLConnection).prepare(query);
-    final result = await stmt.execute(params ?? []);
-    await stmt.deallocate();
-    final rows = result.rows.map((row) => row.typedAssoc()).toList();
-    final pdoResult = PDOResults(rows, result.affectedRows.toInt());
-    return pdoResult;
+    final result = await (connection as MySQLConnection)
+        .execute(query, normalizedParams)
+        .timeout(_timeout(timeoutInSeconds));
+    return _toPDOResults(result);
   }
 
   @override

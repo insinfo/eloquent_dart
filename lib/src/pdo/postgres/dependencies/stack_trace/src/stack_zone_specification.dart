@@ -1,5 +1,3 @@
-
-
 import 'dart:async';
 
 import 'chain.dart';
@@ -146,17 +144,22 @@ class StackZoneSpecification {
     }
 
     var stackChain = chainFor(stackTrace);
-    if (_onError == null) {
+    final onError = _onError;
+    if (onError == null) {
       parent.handleUncaughtError(zone, error, stackChain);
       return;
     }
 
-    
+    final parentZone = self.parent;
+    if (parentZone == null) {
+      parent.handleUncaughtError(zone, error, stackChain);
+      return;
+    }
+
     // allow [runBinary] to throw instead once issue 18134 is fixed.
     try {
-     
       // Zone. Should we check for that here?
-      self.parent!.runBinary(_onError!, error, stackChain);
+      parentZone.runBinary(onError, error, stackChain);
     } on Object catch (newError, newStackTrace) {
       if (identical(newError, error)) {
         parent.handleUncaughtError(zone, error, stackChain);
@@ -192,7 +195,6 @@ class StackZoneSpecification {
   _Node _createNode([int level = 0]) =>
       _Node(_currentTrace(level + 1), _currentNode);
 
- 
   // issue 15105 is fixed.
   /// Runs [f] with [_currentNode] set to [node].
   ///

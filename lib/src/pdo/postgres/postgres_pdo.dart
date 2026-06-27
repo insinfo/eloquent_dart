@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:eloquent/eloquent.dart';
-import 'package:enough_convert/windows.dart';
+import 'package:eloquent/src/utils/codecs/windows.dart';
 import 'postgres_pdo_transaction.dart';
 import 'package:postgres_fork/postgres.dart';
 
@@ -193,6 +193,10 @@ class PostgresV2PDO extends PDOInterface {
   /// Prepares and executes an SQL statement
   Future<PDOResults> query(String query,
       [dynamic params, int? timeoutInSeconds]) async {
+    // Query builder bindings are normalized by Connection.prepareBindings()
+    // before reaching this adapter. In particular, DateTime values are already
+    // formatted as grammar date strings, matching Laravel/PDO behavior and
+    // avoiding driver-specific binary timestamp/UTC conversions.
     if (timeoutInSeconds == null) {
       timeoutInSeconds = defaultTimeoutInSeconds;
     }

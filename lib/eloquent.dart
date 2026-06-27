@@ -2,6 +2,7 @@ library eloquent;
 
 export 'src/query/expression.dart';
 export 'src/query/query_builder.dart';
+export 'src/query/sql_constants.dart';
 
 export 'src/query/join_clause.dart';
 
@@ -32,7 +33,6 @@ export 'src/utils/utils.dart';
 
 export 'src/support/fluent.dart';
 
-export 'src/exceptions/invalid_argument_exception.dart';
 export 'src/exceptions/logic_exception.dart';
 export 'src/exceptions/query_exception.dart';
 

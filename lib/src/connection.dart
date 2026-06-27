@@ -1,6 +1,9 @@
 import 'package:eloquent/eloquent.dart';
+import 'package:eloquent/src/doctrine/connection.dart' as doctrine;
+import 'package:eloquent/src/doctrine/schema/column.dart';
 import 'package:eloquent/src/doctrine/schema/abstract_schema_manager.dart';
-//import 'package:eloquent/src/doctrine/schema/column.dart';
+import 'package:eloquent/src/doctrine/schema/mysql_schema_manager.dart';
+import 'package:eloquent/src/doctrine/schema/postgres_schema_manager.dart';
 import 'package:eloquent/src/schema/schema_builder.dart';
 
 /// posgresql Connection implementation
@@ -105,6 +108,11 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   /// @var array
   ///
   Map<String, dynamic> _config = {};
+
+  String? _cachedDriverName;
+
+  doctrine.DoctrineConnection? doctrineConnection;
+  AbstractSchemaManager? doctrineSchemaManager;
 
   int tryReconnectLimit = 10;
   int tryReconnectCount = 0;
@@ -432,21 +440,43 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   ///
   dynamic prepareBindings(List<dynamic> bindings) {
     var grammar = getQueryGrammar();
+    String? driverName;
 
     for (var i = 0; i < bindings.length; i++) {
       var key = i;
       var value = bindings[key];
+      // Ported from Laravel's Connection::prepareBindings().
+      //
       // We need to transform all instances of DateTimeInterface into the actual
       // date string. Each query grammar maintains its own date string format
       // so we'll just ask the grammar for the format to get from the date.
+      //
+      // Keep this conversion before the PDO adapter layer. PostgreSQL adapters
+      // such as postgres/postgresql-fork and dpgsql must receive the query
+      // builder DateTime binding as an SQL date string, preserving Laravel/PDO
+      // semantics for timestamp without time zone instead of forcing a Dart
+      // DateTime binary/UTC encoding path.
       if (value is DateTime) {
         bindings[key] = Utils.formatDate(value, grammar.getDateFormat());
       } else if (value == false) {
-        bindings[key] = 0;
+        driverName ??= _resolvedDriverName();
+        if (driverName != 'pgsql') {
+          bindings[key] = 0;
+        }
       }
     }
 
     return bindings;
+  }
+
+  String _resolvedDriverName() {
+    return _cachedDriverName ??= getDriverName();
+  }
+
+  /// Clears cached config-derived values when tests or custom integrations
+  /// mutate the connection config map after construction.
+  void clearConfigCache() {
+    _cachedDriverName = null;
   }
 
   ///
@@ -799,20 +829,20 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   /// @param  String  $column
   /// @return \Doctrine\DBAL\Schema\Column
   ///
-  // Future<Column> getDoctrineColumn(table, column) async {
-  //   final schema = this.getDoctrineSchemaManager();
-  //   final res = await schema.listTableDetails(table);
-  //   return res.getColumn(column);
-  // }
+  Future<Column> getDoctrineColumn(String table, String column) async {
+    final schema = getDoctrineSchemaManager();
+    final tableDetails = await schema.listTableDetails(table);
+    return tableDetails.getColumn(column);
+  }
 
   ///
   /// Get the Doctrine DBAL schema manager for the connection.
   ///
   /// @return \Doctrine\DBAL\Schema\AbstractSchemaManager
   ///
-  AbstractSchemaManager? getDoctrineSchemaManager() {
-    //return this.getDoctrineDriver()->getSchemaManager(this.getDoctrineConnection());
-    return null;
+  AbstractSchemaManager getDoctrineSchemaManager() {
+    doctrineSchemaManager ??= _createDoctrineSchemaManager();
+    return doctrineSchemaManager!;
   }
 
   ///
@@ -820,17 +850,34 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   ///
   /// @return \Doctrine\DBAL\Connection
   ///
-  dynamic getDoctrineConnection() {
-    // if (is_null(this.doctrineConnection)) {
-    //     $driver = this.getDoctrineDriver();
+  doctrine.DoctrineConnection getDoctrineConnection() {
+    doctrineConnection ??= doctrine.DoctrineConnection(
+      pdo: pdo,
+      driver: getDriverName(),
+      database: getDatabaseName(),
+      config: getConfigs(),
+    );
+    return doctrineConnection!;
+  }
 
-    //     $data = ['pdo' => this.pdo, 'dbname' => this.getConfig('database')];
+  AbstractSchemaManager _createDoctrineSchemaManager() {
+    final driver = getDriverName();
 
-    //     this.doctrineConnection = new DoctrineConnection($data, $driver);
-    // }
+    switch (driver) {
+      case 'pgsql':
+      case 'postgres':
+      case 'postgresql':
+      case 'postgres_v3':
+      case 'dargres':
+      case 'dpgsql':
+        return PostgreSQLSchemaManager(this);
+      case 'mysql':
+      case 'mariadb':
+        return MySqlSchemaManager(this);
+    }
 
-    // return this.doctrineConnection;
-    return null;
+    throw UnsupportedError(
+        'Doctrine schema manager is not available for driver "$driver".');
   }
 
   ///
@@ -868,6 +915,8 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
     }
 
     this.pdo = pdo;
+    this.doctrineConnection = null;
+    this.doctrineSchemaManager = null;
 
     return this;
   }
@@ -878,8 +927,8 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   /// @param  \PDO|null  $pdo
   /// @return $this
   ///
-  dynamic setReadPdo($pdo) {
-    this.readPdo = $pdo;
+  dynamic setReadPdo(PDOExecutionContext? pdo) {
+    this.readPdo = pdo;
     return this;
   }
 
@@ -926,8 +975,31 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   /// @return string
   ///
   String getDriverName() {
-    //return this.pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
-    return 'eloquent';
+    final configuredDriver = getConfig('driver')?.toString().toLowerCase();
+    if (configuredDriver != null && configuredDriver.isNotEmpty) {
+      return configuredDriver;
+    }
+
+    final pdoDriver = pdo.getConfig().driver.toLowerCase();
+    if (pdoDriver.isNotEmpty) {
+      return pdoDriver;
+    }
+
+    final implementation =
+        getConfig('driver_implementation')?.toString().toLowerCase();
+    if (implementation == null || implementation.isEmpty) {
+      return '';
+    }
+
+    switch (implementation) {
+      case 'postgres':
+      case 'postgres_v3':
+      case 'dargres':
+      case 'dpgsql':
+        return 'pgsql';
+    }
+
+    return implementation;
   }
 
   ///

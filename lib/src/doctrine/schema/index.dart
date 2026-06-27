@@ -35,7 +35,7 @@ class Index extends AbstractAsset {
   })  : // Inicializa as propriedades mutáveis com cópias
         this._columns = List.from(columns),
         this._flags = Set.from(flags.map((f) => f.toLowerCase())),
-        this._options = Map.from(options) {
+        this._options = _normalizeOptions(options) {
     // Usa o método setName da classe base para inicializar _name e _quoted
     setName(name); // <-- Usa setName
     if (this.isPrimary && !this.isUnique) {
@@ -102,12 +102,25 @@ class Index extends AbstractAsset {
     return _flags.contains(flag.toLowerCase());
   }
 
+  Index addFlag(String flag) {
+    _flags.add(flag.toLowerCase());
+    return this;
+  }
+
+  void removeFlag(String flag) {
+    _flags.remove(flag.toLowerCase());
+  }
+
+  bool isClustered() {
+    return hasFlag('clustered');
+  }
+
   bool hasOption(String name) {
-    return _options.containsKey(name);
+    return _options.containsKey(name.toLowerCase());
   }
 
   dynamic getOption(String name) {
-    return _options[name];
+    return _options[name.toLowerCase()];
   }
 
   /// Verifica se este índice cobre (pelo menos) as colunas fornecidas na ordem correta,
@@ -117,8 +130,9 @@ class Index extends AbstractAsset {
       return false;
     }
     final currentColsLower =
-        _columns.map((c) => c.toLowerCase()).toList(); // Usa a lista interna
-    final targetColsLower = columnNames.map((c) => c.toLowerCase()).toList();
+        _columns.map((c) => trimQuotes(c).toLowerCase()).toList();
+    final targetColsLower =
+        columnNames.map((c) => trimQuotes(c).toLowerCase()).toList();
 
     for (int i = 0; i < targetColsLower.length; i++) {
       if (currentColsLower[i] != targetColsLower[i]) {
@@ -128,21 +142,116 @@ class Index extends AbstractAsset {
     return true;
   }
 
+  bool hasColumnAtPosition(String columnName, int position) {
+    if (position < 0 || position >= _columns.length) {
+      return false;
+    }
+
+    return trimQuotes(_columns[position]).toLowerCase() ==
+        trimQuotes(columnName).toLowerCase();
+  }
+
   /// Verifica se este índice é funcionalmente equivalente a outro índice.
   bool isFulfilledBy(Index other) {
-    if (isPrimary != other.isPrimary || isUnique != other.isUnique) {
+    if (other._columns.length != _columns.length) {
       return false;
     }
-    // Compara as colunas internas diretamente (já que spansColumns usa lowercase)
-    if (_columns.length != other._columns.length ||
-        !spansColumns(other._columns)) {
-      return false;
-    }
-    // Compara flags e options
-    if (!const SetEquality().equals(_flags, other._flags)) return false;
-    if (!const MapEquality().equals(_options, other._options)) return false;
 
-    return true;
+    if (!spansColumns(other._columns)) {
+      return false;
+    }
+
+    if (!_samePartialIndex(other)) {
+      return false;
+    }
+
+    if (!_hasSameColumnLengths(other)) {
+      return false;
+    }
+
+    if (!const SetEquality().equals(_flags, other._flags)) {
+      return false;
+    }
+
+    if (!_hasSameNonStructuralOptions(other)) {
+      return false;
+    }
+
+    if (!isUnique && !isPrimary) {
+      return true;
+    }
+
+    if (other.isPrimary != isPrimary) {
+      return false;
+    }
+
+    return other.isUnique == isUnique;
+  }
+
+  bool overrules(Index other) {
+    if (other.isPrimary) {
+      return false;
+    }
+
+    if (!isUnique && !isPrimary && other.isUnique) {
+      return false;
+    }
+
+    return spansColumns(other._columns) &&
+        (isPrimary || isUnique) &&
+        _samePartialIndex(other);
+  }
+
+  bool _samePartialIndex(Index other) {
+    if (hasOption('where') &&
+        other.hasOption('where') &&
+        getOption('where') == other.getOption('where')) {
+      return true;
+    }
+
+    return !hasOption('where') && !other.hasOption('where');
+  }
+
+  bool _hasSameColumnLengths(Index other) {
+    return const MapEquality()
+        .equals(_normalizedLengths(), other._normalizedLengths());
+  }
+
+  bool _hasSameNonStructuralOptions(Index other) {
+    final thisOptions = Map<String, dynamic>.from(_options)
+      ..remove('where')
+      ..remove('lengths');
+    final otherOptions = Map<String, dynamic>.from(other._options)
+      ..remove('where')
+      ..remove('lengths');
+
+    return const MapEquality().equals(thisOptions, otherOptions);
+  }
+
+  Map<int, dynamic> _normalizedLengths() {
+    final lengths = getOption('lengths');
+    final normalized = <int, dynamic>{};
+
+    if (lengths is List) {
+      for (var i = 0; i < lengths.length; i++) {
+        if (lengths[i] != null) {
+          normalized[i] = lengths[i];
+        }
+      }
+    } else if (lengths is Map) {
+      lengths.forEach((key, value) {
+        if (value == null) {
+          return;
+        }
+
+        final index = key is int ? key : int.tryParse(key.toString());
+        if (index != null) {
+          normalized[index] = value;
+        }
+      });
+    }
+
+    return normalized;
   }
 
   /// Cria uma cópia profunda deste índice.
@@ -160,12 +269,20 @@ class Index extends AbstractAsset {
   /// Define o nome do índice, atualizando o estado interno.
   /// Necessário para Table.renameIndex.
   void setName(String newName) {
-    setName(newName); // Reutiliza a lógica da classe base
+    super.setName(newName);
   }
 
   /// Obtém o nome original como foi fornecido (pode incluir aspas).
   /// Usa a propriedade _name da classe base.
   String getOriginalName() {
     return name;
+  }
+
+  static Map<String, dynamic> _normalizeOptions(Map<String, dynamic> options) {
+    return Map.fromEntries(
+      options.entries.map(
+        (entry) => MapEntry(entry.key.toString().toLowerCase(), entry.value),
+      ),
+    );
   }
 }

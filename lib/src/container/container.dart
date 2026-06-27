@@ -286,7 +286,7 @@ class Container {
   /// @param  \Closure  $closure
   /// @return void
   ///
-  /// @throws \InvalidArgumentException
+  /// @throws \ArgumentError
   ///
   void extend(dynamic abstractP, Function closure) {
     var abstract = this.normalize(abstractP);
@@ -542,7 +542,7 @@ class Container {
   /// @param  string|null  $defaultMethod
   /// @return mixed
   ///
-  /// @throws \InvalidArgumentException
+  /// @throws \ArgumentError
   ///
   dynamic callClass($target, [$parameters = const [], String? defaultMethod]) {
     var segments = Utils.explode('@', $target);
@@ -553,7 +553,7 @@ class Container {
     var method = Utils.count(segments) == 2 ? segments[1] : defaultMethod;
 
     if (Utils.is_null(method)) {
-      throw InvalidArgumentException('Method not provided.');
+      throw ArgumentError.notNull('method');
     }
 
     return this.call([this.make(segments[0]), method], $parameters);

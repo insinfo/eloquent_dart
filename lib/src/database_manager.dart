@@ -222,7 +222,7 @@ class DatabaseManager implements ConnectionResolverInterface {
   /// @param  string  $name
   /// @return array
   ///
-  /// @throws \InvalidArgumentException
+  /// @throws \ArgumentError
   ///
   Map<String, dynamic> getConfig(String? name) {
     name = name ?? this.getDefaultConnection();
@@ -235,7 +235,7 @@ class DatabaseManager implements ConnectionResolverInterface {
     var config = Utils.array_get(connections, name);
 
     if (Utils.is_null(config)) {
-      throw InvalidArgumentException("Database [$name] not configured.");
+      throw ArgumentError.value(name, 'name', 'Database not configured.');
     }
 
     return config;

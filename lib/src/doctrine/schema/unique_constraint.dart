@@ -171,7 +171,7 @@ class UniqueConstraint extends AbstractAsset {
   /// Define o nome da constraint, atualizando o estado interno.
   /// Necessário para consistência se Table.rename... for implementado.
   void setName(String newName) {
-    setName(newName); // Reutiliza a lógica da classe base
+    super.setName(newName);
   }
 
   /// Obtém o nome original como foi fornecido (pode incluir aspas).

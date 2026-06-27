@@ -1,6 +1,10 @@
 //schema_mysql_grammar.dart
 import 'package:eloquent/eloquent.dart';
-import 'package:meta/meta.dart'; 
+import 'package:eloquent/src/doctrine/schema/foreign_key_constraint.dart';
+import 'package:eloquent/src/doctrine/schema/index.dart';
+import 'package:eloquent/src/doctrine/schema/table_diff.dart';
+import 'package:eloquent/src/doctrine/schema/unique_constraint.dart';
+import 'package:meta/meta.dart';
 
 /// Schema Grammar specific to MySQL.
 /// Translates Blueprint commands into MySQL DDL SQL.
@@ -252,16 +256,183 @@ class SchemaMySqlGrammar extends SchemaGrammar {
   @override
   List<String> compileRenameColumn(
       Blueprint blueprint, Fluent command, Connection connection) {
-    print(
-        "Warning: compileRenameColumn in MySQL requires the full current column definition. This implementation is simplified.");
     final table = wrapTable(blueprint);
     final from = wrap(command['from'] as String);
     final to = wrap(command['to'] as String);
-    // Placeholder: You MUST fetch the current column definition from the database
-    // using a SchemaManager or similar for this to be reliable.
-    final String currentDefinition =
-        'VARCHAR(255)'; // FIXME: Replace with actual definition lookup
-    return ['alter table $table change column $from $to $currentDefinition'];
+    return ['alter table $table rename column $from to $to'];
+  }
+
+  @override
+  List<String> compileTableDiff(TableDiff diff, Blueprint blueprint) {
+    if (diff.isEmpty()) {
+      return [];
+    }
+
+    final table = wrap(getTableDiffName(diff));
+    final queryParts = <String>[];
+
+    for (final entry in diff.renamedColumns.entries) {
+      final oldColumn = diff.oldTable?.getColumn(entry.key);
+      if (oldColumn == null) {
+        queryParts
+            .add('rename column ${wrap(entry.key)} to ${wrap(entry.value)}');
+        continue;
+      }
+
+      final newColumn = oldColumn.clone()..setName(entry.value);
+      queryParts.add(
+          'change ${wrap(entry.key)} ${getColumnDeclarationSql(newColumn, blueprint)}');
+    }
+
+    for (final column in diff.addedColumns.values) {
+      queryParts.add('add ${getColumnDeclarationSql(column, blueprint)}');
+    }
+
+    for (final column in diff.droppedColumns.values) {
+      queryParts.add('drop ${wrap(column.getName())}');
+    }
+
+    for (final columnDiff in diff.changedColumns.values) {
+      queryParts.add(
+          'change ${wrap(columnDiff.oldColumn.getName())} ${getColumnDeclarationSql(columnDiff.newColumn, blueprint)}');
+    }
+
+    for (final foreignKey in diff.droppedForeignKeys.values) {
+      queryParts.add('drop foreign key ${wrap(foreignKey.getName())}');
+    }
+
+    for (final constraint in diff.droppedUniqueConstraints.values) {
+      queryParts.add('drop index ${wrap(constraint.getName())}');
+    }
+
+    for (final constraint in diff.changedUniqueConstraints.values) {
+      queryParts.add('drop index ${wrap(constraint.getName())}');
+    }
+
+    for (final index in diff.droppedIndexes.values) {
+      if (index.isPrimary) {
+        queryParts.add('drop primary key');
+      } else {
+        queryParts.add('drop index ${wrap(index.getName())}');
+      }
+    }
+
+    for (final entry in diff.changedIndexes.entries) {
+      final index = entry.value;
+      if (index.isPrimary) {
+        queryParts.add('drop primary key');
+      } else {
+        queryParts.add('drop index ${wrap(entry.key)}');
+      }
+    }
+
+    for (final entry in diff.renamedIndexes.entries) {
+      queryParts.add('rename index ${wrap(entry.key)} to ${wrap(entry.value)}');
+    }
+
+    for (final constraint in diff.addedUniqueConstraints.values) {
+      queryParts.add(_getAddUniqueConstraintPart(constraint));
+    }
+
+    for (final constraint in diff.changedUniqueConstraints.values) {
+      queryParts.add(_getAddUniqueConstraintPart(constraint));
+    }
+
+    for (final index in diff.addedIndexes.values) {
+      queryParts.add(_getAddIndexPart(index));
+    }
+
+    for (final index in diff.changedIndexes.values) {
+      queryParts.add(_getAddIndexPart(index));
+    }
+
+    for (final foreignKey in diff.addedForeignKeys.values) {
+      queryParts.add(_getAddForeignKeyPart(foreignKey));
+    }
+
+    if (queryParts.isEmpty) {
+      return [];
+    }
+
+    return ['alter table $table ${queryParts.join(', ')}'];
+  }
+
+  String _getAddIndexPart(Index index) {
+    final columns = getIndexColumnsSql(index);
+
+    if (index.isPrimary) {
+      return 'add primary key ($columns)';
+    }
+
+    final type = index.isUnique ? 'unique index' : 'index';
+    return 'add $type ${wrap(index.getName())} ($columns)';
+  }
+
+  @override
+  String getIndexColumnsSql(Index index) {
+    final lengths = _getIndexLengths(index);
+
+    return index.getColumns().asMap().entries.map((entry) {
+      final length = lengths[entry.key];
+      final column = wrap(entry.value);
+
+      return length == null ? column : '$column($length)';
+    }).join(', ');
+  }
+
+  Map<int, dynamic> _getIndexLengths(Index index) {
+    if (!index.hasOption('lengths')) {
+      return {};
+    }
+
+    final lengths = index.getOption('lengths');
+    final normalized = <int, dynamic>{};
+
+    if (lengths is List) {
+      for (var i = 0; i < lengths.length; i++) {
+        if (lengths[i] != null) {
+          normalized[i] = lengths[i];
+        }
+      }
+    } else if (lengths is Map) {
+      lengths.forEach((key, value) {
+        if (value == null) {
+          return;
+        }
+
+        final index = key is int ? key : int.tryParse(key.toString());
+        if (index != null) {
+          normalized[index] = value;
+        }
+      });
+    }
+
+    return normalized;
+  }
+
+  String _getAddUniqueConstraintPart(UniqueConstraint constraint) {
+    final columns = constraint.getQuotedColumns(this).join(', ');
+    return 'add unique ${wrap(constraint.getName())} ($columns)';
+  }
+
+  String _getAddForeignKeyPart(ForeignKeyConstraint foreignKey) {
+    final localColumns = foreignKey.getQuotedLocalColumns(this).join(', ');
+    final foreignTable = foreignKey.getQuotedForeignTableName(this);
+    final foreignColumns = foreignKey.getQuotedForeignColumns(this).join(', ');
+    var sql =
+        'add constraint ${wrap(foreignKey.getName())} foreign key ($localColumns) references $foreignTable ($foreignColumns)';
+
+    final onDelete = foreignKey.getOnDelete();
+    if (onDelete != null) {
+      sql += ' on delete $onDelete';
+    }
+
+    final onUpdate = foreignKey.getOnUpdate();
+    if (onUpdate != null) {
+      sql += ' on update $onUpdate';
+    }
+
+    return sql;
   }
 
   /// Compile a change column command (MySQL: ALTER TABLE ... MODIFY COLUMN ...).

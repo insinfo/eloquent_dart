@@ -3,6 +3,7 @@ import 'column.dart';
 import 'index.dart';
 import 'foreign_key_constraint.dart';
 import 'column_diff.dart';
+import 'unique_constraint.dart';
 
 /// Representa as diferenças entre duas definições de tabela.
 /// Inspirado em Doctrine\DBAL\Schema\TableDiff.
@@ -49,6 +50,10 @@ class TableDiff {
   /// Chaves estrangeiras removidas (nome canônico -> DartForeignKeyConstraint).
   final Map<String, ForeignKeyConstraint> droppedForeignKeys;
 
+  final Map<String, UniqueConstraint> addedUniqueConstraints;
+  final Map<String, UniqueConstraint> changedUniqueConstraints;
+  final Map<String, UniqueConstraint> droppedUniqueConstraints;
+
   /// Indica se a tabela foi renomeada.
   bool get isRenamed => oldTableName != null && oldTableName != name;
 
@@ -67,6 +72,9 @@ class TableDiff {
     this.addedForeignKeys = const {},
     this.changedForeignKeys = const {},
     this.droppedForeignKeys = const {},
+    this.addedUniqueConstraints = const {},
+    this.changedUniqueConstraints = const {},
+    this.droppedUniqueConstraints = const {},
   });
 
   /// Verifica se existem diferenças registradas.
@@ -82,6 +90,9 @@ class TableDiff {
         addedForeignKeys.isEmpty &&
         changedForeignKeys.isEmpty &&
         droppedForeignKeys.isEmpty &&
+        addedUniqueConstraints.isEmpty &&
+        changedUniqueConstraints.isEmpty &&
+        droppedUniqueConstraints.isEmpty &&
         !isRenamed; // Considera renomeação de tabela como uma diferença
   }
 }

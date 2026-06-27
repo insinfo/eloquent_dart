@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:eloquent/src/pdo/core/pdo_config.dart';
 import 'package:eloquent/src/pdo/core/pdo_interface.dart';
 import 'package:eloquent/src/pdo/core/pdo_result.dart';
-import 'package:enough_convert/windows.dart';
+import 'package:eloquent/src/utils/codecs/windows.dart';
 import 'package:postgres/postgres.dart';
 import 'postgres_v3_pdo_transaction.dart';
 

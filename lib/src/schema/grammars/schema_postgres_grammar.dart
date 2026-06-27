@@ -1,6 +1,7 @@
 //lib\src\schema\grammars\schema_postgres_grammar.dart
 
 import 'package:eloquent/eloquent.dart';
+import 'package:eloquent/src/doctrine/schema/table_diff.dart';
 import 'package:meta/meta.dart'; // Import for @protected
 
 /// Gramática específica do PostgreSQL para operações de Schema.
@@ -163,6 +164,130 @@ class SchemaPostgresGrammar extends SchemaGrammar {
     final from = wrap(command['from'] as String);
     final to = wrap(command['to'] as String);
     return ['alter table $table rename column $from to $to'];
+  }
+
+  @override
+  List<String> compileTableDiff(TableDiff diff, Blueprint blueprint) {
+    if (diff.isEmpty()) {
+      return [];
+    }
+
+    final table = wrap(getTableDiffName(diff));
+    final statements = <String>[];
+
+    for (final entry in diff.renamedColumns.entries) {
+      statements.add(
+          'alter table $table rename column ${wrap(entry.key)} to ${wrap(entry.value)}');
+    }
+
+    for (final column in diff.addedColumns.values) {
+      statements.add(
+          'alter table $table add column ${getColumnDeclarationSql(column, blueprint)}');
+    }
+
+    for (final column in diff.droppedColumns.values) {
+      statements
+          .add('alter table $table drop column ${wrap(column.getName())}');
+    }
+
+    for (final columnDiff in diff.changedColumns.values) {
+      final oldColumn = columnDiff.oldColumn;
+      final newColumn = columnDiff.newColumn;
+      var columnName = wrap(oldColumn.getName());
+
+      if (columnDiff.hasNameChanged()) {
+        final newColumnName = wrap(newColumn.getName());
+        statements.add(
+            'alter table $table rename column $columnName to $newColumnName');
+        columnName = newColumnName;
+      }
+
+      if (columnDiff.hasTypeChanged() ||
+          columnDiff.hasLengthChanged() ||
+          columnDiff.hasPrecisionChanged() ||
+          columnDiff.hasScaleChanged()) {
+        statements.add(
+            'alter table $table alter column $columnName type ${getColumnTypeDeclarationSql(newColumn)}');
+      }
+
+      if (columnDiff.hasDefaultChanged()) {
+        if (newColumn.defaultValue == null) {
+          statements
+              .add('alter table $table alter column $columnName drop default');
+        } else {
+          statements.add(
+              'alter table $table alter column $columnName set default ${getDefaultValue(newColumn.defaultValue)}');
+        }
+      }
+
+      if (columnDiff.hasNotNullChanged()) {
+        final action = newColumn.notnull ? 'set not null' : 'drop not null';
+        statements.add('alter table $table alter column $columnName $action');
+      }
+    }
+
+    for (final foreignKey in diff.droppedForeignKeys.values) {
+      statements.add(
+          'alter table $table drop constraint ${wrap(foreignKey.getName())}');
+    }
+
+    for (final constraint in diff.droppedUniqueConstraints.values) {
+      statements.add(getDropUniqueConstraintSql(constraint, table));
+    }
+
+    for (final constraint in diff.changedUniqueConstraints.values) {
+      statements.add(getDropUniqueConstraintSql(constraint, table));
+    }
+
+    for (final index in diff.droppedIndexes.values) {
+      if (index.isPrimary) {
+        statements
+            .add('alter table $table drop constraint ${wrap(index.getName())}');
+      } else {
+        statements.add(getDropIndexSql(index, table));
+      }
+    }
+
+    for (final entry in diff.changedIndexes.entries) {
+      final index = entry.value;
+      if (index.isPrimary) {
+        statements.add('alter table $table drop constraint ${wrap(entry.key)}');
+      } else {
+        statements.add('drop index ${wrap(entry.key)}');
+      }
+    }
+
+    for (final constraint in diff.addedUniqueConstraints.values) {
+      statements.add(getCreateUniqueConstraintSql(constraint, table));
+    }
+
+    for (final constraint in diff.changedUniqueConstraints.values) {
+      statements.add(getCreateUniqueConstraintSql(constraint, table));
+    }
+
+    for (final index in diff.addedIndexes.values) {
+      statements.add(getCreateIndexSql(index, table));
+    }
+
+    for (final index in diff.changedIndexes.values) {
+      statements.add(getCreateIndexSql(index, table));
+    }
+
+    for (final entry in diff.renamedIndexes.entries) {
+      statements
+          .add('alter index ${wrap(entry.key)} rename to ${wrap(entry.value)}');
+    }
+
+    for (final foreignKey in diff.addedForeignKeys.values) {
+      statements.add(getCreateForeignKeySql(foreignKey, table));
+    }
+
+    return statements;
+  }
+
+  @override
+  bool supportsPartialIndexes() {
+    return true;
   }
 
   /// Compila um comando para modificar uma coluna.

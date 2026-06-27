@@ -1,11 +1,11 @@
 name: eloquent
-version: 3.4.3
+version: 4.0.0
 description: eloquent query builder port from PHP Laravel
 homepage: https://github.com/insinfo/eloquent_dart
-#publish_to: none
+publish_to: none
 
 environment:
-  sdk: '>=3.0.0 <4.0.0'
+  sdk: ^3.6.0
 
 dependencies:  
   intl: '>=0.17.0 <3.0.0'
@@ -13,16 +13,19 @@ dependencies:
   dargres: ^3.1.2
   #dargres: 
     #path: ../dargres
-  enough_convert: '>=1.6.0 <2.0.0'   
+  
   #postgres:
     #path: ../postgresql-dart 
+  dpgsql: ^1.0.1
+    #path: ../dpgsql
   # postgres v2
   postgres_fork: ^2.8.5
   #postgres_fork: 
     #path: ../postgresql-fork 
 
   #mysql_client: ^0.0.27    
-  mysql_dart: ^1.2.1
+  mysql_dart: ^3.0.0
+    #path: ../mysql.dart
   # postgres v3 
   postgres: ^3.5.4
   collection: ^1.19.1

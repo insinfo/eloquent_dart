@@ -227,7 +227,7 @@ void main() {
       final qbFlex = createBuilder();
 
       expect(() => qbFlex.whereFlex('name', 'not_an_operator', 'some_value'),
-          throwsA(isA<InvalidArgumentException>()),
+          throwsA(isA<ArgumentError>()),
           reason:
               'Should throw if 2nd arg is not operator when 3rd is present');
     });
@@ -424,10 +424,10 @@ void main() {
                 'where "age" = ?')); // Comportamento atual esperado devido à heurística
         expect(qbFlex.getBindings(), equals(['>'])); // Binding incorreto
       } catch (e) {
-        // Espera-se uma InvalidArgumentException aqui se a validação for robusta
+        // Espera-se uma ArgumentError aqui se a validação for robusta
         // Ou o teste pode passar com o SQL/binding incorreto se a validação falhar
 
-        expect(e, isA<InvalidArgumentException>(),
+        expect(e, isA<ArgumentError>(),
             reason:
                 'Using only a non-= operator should ideally throw or be invalid');
       }
@@ -438,9 +438,9 @@ void main() {
         qbFlex2.whereFlex('score', '<=');
         expect(qbFlex2.toSql(), contains('where "score" = ?'));
         expect(qbFlex2.getBindings(), equals(['<=']));
-        fail('Expected InvalidArgumentException but none was thrown.');
+        fail('Expected ArgumentError but none was thrown.');
       } catch (e) {
-        expect(e, isA<InvalidArgumentException>());
+        expect(e, isA<ArgumentError>());
       }
     });
 
@@ -535,7 +535,7 @@ void main() {
       expect(
           () =>
               qbFlex.whereFlex('role', 'admin', 123), // 'admin' não é operador
-          throwsA(isA<InvalidArgumentException>()),
+          throwsA(isA<ArgumentError>()),
           reason:
               'Should throw if the second arg is not a valid operator when the third arg is present.');
     });
@@ -575,12 +575,12 @@ void main() {
       expect(
           () => qbFlex.whereFlex(
               'start_date', '>', null), // '>' com null é inválido
-          throwsA(isA<InvalidArgumentException>()),
+          throwsA(isA<ArgumentError>()),
           reason: 'Operator > is invalid with null value');
       expect(
           () => qbFlex.whereFlex(
               'end_date', 'LIKE', null), // 'LIKE' com null é inválido
-          throwsA(isA<InvalidArgumentException>()),
+          throwsA(isA<ArgumentError>()),
           reason: 'Operator LIKE is invalid with null value');
     });
   }); // end

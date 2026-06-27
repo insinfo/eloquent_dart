@@ -177,6 +177,11 @@ class Table extends AbstractAsset {
     return column;
   }
 
+  Table changeColumn(String columnName, Map<String, dynamic> changes) {
+    modifyColumn(columnName, changes);
+    return this;
+  }
+
   Column renameColumn(String oldColumnName, String newColumnName) {
     final oldNameCanonical = normalizeIdentifier(oldColumnName);
     final newNameCanonical = normalizeIdentifier(newColumnName);

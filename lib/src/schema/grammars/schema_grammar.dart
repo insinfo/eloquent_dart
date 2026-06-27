@@ -1,5 +1,13 @@
 //lib\src\schema\grammars\schema_grammar.dart
 import 'package:eloquent/eloquent.dart';
+import 'package:eloquent/src/doctrine/schema/abstract_schema_manager.dart';
+import 'package:eloquent/src/doctrine/schema/column.dart';
+import 'package:eloquent/src/doctrine/schema/comparator.dart';
+import 'package:eloquent/src/doctrine/schema/foreign_key_constraint.dart';
+import 'package:eloquent/src/doctrine/schema/index.dart';
+import 'package:eloquent/src/doctrine/schema/table.dart';
+import 'package:eloquent/src/doctrine/schema/table_diff.dart';
+import 'package:eloquent/src/doctrine/schema/unique_constraint.dart';
 
 import 'package:meta/meta.dart'; // Import for @protected if needed by subclasses
 
@@ -111,8 +119,7 @@ abstract class SchemaGrammar extends BaseGrammar {
 
   /// Inicializa o mapa de compiladores de modificador.
   @protected
-  Map<String, Function(Blueprint, Fluent)>
-      initializeModifierCompilers() {
+  Map<String, Function(Blueprint, Fluent)> initializeModifierCompilers() {
     // (Implementação como antes)
     return {
       'Nullable': (b, c) => modifyNullable(b, c),
@@ -277,17 +284,42 @@ abstract class SchemaGrammar extends BaseGrammar {
 
   @protected
   List<String> getColumns(Blueprint blueprint) {
-    return [];
+    return blueprint.getAddedColumns().map((column) {
+      final sql = '${wrap(column)} ${getType(column)}';
+      return addModifiers(sql, blueprint, column);
+    }).toList();
   }
 
   @protected
   String addModifiers(String sql, Blueprint blueprint, Fluent column) {
+    for (final modifier in modifiers) {
+      final compiler = modifierCompilers[modifier];
+      if (compiler == null) {
+        continue;
+      }
+
+      final value = compiler(blueprint, column);
+      if (value != null && value.toString().isNotEmpty) {
+        sql += value.toString();
+      }
+    }
+
     return sql;
   }
 
   @protected
   String? getType(Fluent column) {
-    return null;
+    final type = column['type']?.toString().toLowerCase();
+    if (type == null) {
+      return null;
+    }
+
+    final compiler = typeCompilers[type];
+    if (compiler == null) {
+      throw UnsupportedError('Column type "$type" is not supported.');
+    }
+
+    return compiler(column).toString();
   }
 
   String typeChar(Fluent column) => 'char(${column['length']})';
@@ -371,12 +403,20 @@ abstract class SchemaGrammar extends BaseGrammar {
       throw UnsupportedError('TimestampsTz type handled by Blueprint.');
   @protected
   String? modifyNullable(Blueprint blueprint, Fluent column) {
-    /* ... */ return '...';
+    if (!column.attributes.containsKey('nullable')) {
+      return null;
+    }
+
+    return column['nullable'] == true ? ' null' : ' not null';
   }
 
   @protected
   String? modifyDefault(Blueprint blueprint, Fluent column) {
-    /* ... */ return '...';
+    if (!column.attributes.containsKey('default')) {
+      return null;
+    }
+
+    return ' default ${getDefaultValue(column['default'])}';
   }
 
   @protected
@@ -421,7 +461,11 @@ abstract class SchemaGrammar extends BaseGrammar {
 
   @protected
   String? modifyCollate(Blueprint blueprint, Fluent column) {
-    /* ... */ return '...';
+    if (column['collation'] == null) {
+      return null;
+    }
+
+    return ' collate ${wrapValue(column['collation'].toString())}';
   }
 
   @protected
@@ -431,27 +475,47 @@ abstract class SchemaGrammar extends BaseGrammar {
 
   @protected
   List<String> prefixArray(String prefix, List values) {
-    /* ... */ return [];
+    return values.map((value) => '$prefix $value').toList();
   }
 
   @override
   String wrapTable(dynamic table) {
-    /* ... */ return '';
+    if (table is Blueprint) {
+      return super.wrapTable(table.getTable());
+    }
+
+    return super.wrapTable(table);
   }
 
   @override
   String wrap(dynamic value, [bool prefixAlias = false]) {
-    /* ... */ return '';
+    if (value is Fluent) {
+      return super.wrap(value['name'], prefixAlias);
+    }
+
+    return super.wrap(value, prefixAlias);
   }
 
   @override
   String wrapValue(String value) {
-    /* ... */ return '';
+    return super.wrapValue(value);
   }
 
   @protected
   String getDefaultValue(dynamic value) {
-    /* ... */ return '';
+    if (value is QueryExpression) {
+      return value.getValue().toString();
+    }
+
+    if (value is bool) {
+      return "'${value ? 1 : 0}'";
+    }
+
+    if (value == null) {
+      return 'NULL';
+    }
+
+    return "'${value.toString().replaceAll("'", "''")}'";
   }
 
   String compileTableExists() {
@@ -462,28 +526,335 @@ abstract class SchemaGrammar extends BaseGrammar {
     /* ... */ return '';
   }
 
-  dynamic getDoctrineTableDiff(Blueprint blueprint, dynamic schema) =>
-      throw UnimplementedError('Doctrine DBAL features are not available.');
-  dynamic getRenamedDiff(Blueprint blueprint, Fluent command, dynamic column,
-          dynamic schema) =>
-      throw UnimplementedError('Doctrine DBAL features are not available.');
-  dynamic setRenamedColumns(
-          dynamic tableDiff, Fluent command, dynamic column) =>
-      throw UnimplementedError('Doctrine DBAL features are not available.');
-  dynamic getChangedDiff(Blueprint blueprint, dynamic schema) =>
-      throw UnimplementedError('Doctrine DBAL features are not available.');
-  dynamic getTableWithColumnChanges(Blueprint blueprint, dynamic table) =>
-      throw UnimplementedError('Doctrine DBAL features are not available.');
-  dynamic getDoctrineColumnForChange(dynamic table, Fluent fluent) =>
-      throw UnimplementedError('Doctrine DBAL features are not available.');
-  dynamic getDoctrineColumnChangeOptions(Fluent fluent) =>
-      throw UnimplementedError('Doctrine DBAL features are not available.');
-  dynamic getDoctrineColumnType(String type) =>
-      throw UnimplementedError('Doctrine DBAL features are not available.');
-  dynamic calculateDoctrineTextLength(String type) =>
-      throw UnimplementedError('Doctrine DBAL features are not available.');
-  dynamic mapFluentOptionToDoctrine(String attribute) =>
-      throw UnimplementedError('Doctrine DBAL features are not available.');
-  dynamic mapFluentValueToDoctrine(String option, dynamic value) =>
-      throw UnimplementedError('Doctrine DBAL features are not available.');
+  dynamic getDoctrineTableDiff(Blueprint blueprint, dynamic schema) {
+    final tableName = '${getTablePrefix()}${blueprint.getTable()}';
+
+    if (schema is Table) {
+      return TableDiff(name: tableName, oldTable: schema);
+    }
+
+    if (schema is AbstractSchemaManager) {
+      return schema.listTableDetails(tableName).then(
+            (table) => TableDiff(name: tableName, oldTable: table),
+          );
+    }
+
+    throw ArgumentError.value(
+        schema, 'schema', 'Expected Table or AbstractSchemaManager.');
+  }
+
+  dynamic getRenamedDiff(
+      Blueprint blueprint, Fluent command, dynamic column, dynamic schema) {
+    if (column is! Column) {
+      throw ArgumentError.value(column, 'column', 'Expected Doctrine Column.');
+    }
+
+    final tableDiff = getDoctrineTableDiff(blueprint, schema);
+    if (tableDiff is Future) {
+      return tableDiff.then((diff) => setRenamedColumns(diff, command, column));
+    }
+
+    return setRenamedColumns(tableDiff, command, column);
+  }
+
+  dynamic setRenamedColumns(dynamic tableDiff, Fluent command, dynamic column) {
+    if (tableDiff is! TableDiff) {
+      throw ArgumentError.value(tableDiff, 'tableDiff', 'Expected TableDiff.');
+    }
+    if (column is! Column) {
+      throw ArgumentError.value(column, 'column', 'Expected Doctrine Column.');
+    }
+
+    final from = command['from'] as String;
+    final to = command['to'] as String;
+    final renamedColumns = Map<String, String>.from(tableDiff.renamedColumns)
+      ..[from.toLowerCase()] = to;
+
+    return TableDiff(
+      name: tableDiff.name,
+      oldTableName: tableDiff.oldTableName,
+      oldTable: tableDiff.oldTable,
+      addedColumns: tableDiff.addedColumns,
+      changedColumns: tableDiff.changedColumns,
+      droppedColumns: tableDiff.droppedColumns,
+      renamedColumns: renamedColumns,
+      addedIndexes: tableDiff.addedIndexes,
+      changedIndexes: tableDiff.changedIndexes,
+      droppedIndexes: tableDiff.droppedIndexes,
+      renamedIndexes: tableDiff.renamedIndexes,
+      addedForeignKeys: tableDiff.addedForeignKeys,
+      changedForeignKeys: tableDiff.changedForeignKeys,
+      droppedForeignKeys: tableDiff.droppedForeignKeys,
+      addedUniqueConstraints: tableDiff.addedUniqueConstraints,
+      changedUniqueConstraints: tableDiff.changedUniqueConstraints,
+      droppedUniqueConstraints: tableDiff.droppedUniqueConstraints,
+    );
+  }
+
+  dynamic getChangedDiff(Blueprint blueprint, dynamic schema) {
+    if (schema is Table) {
+      return Comparator().diffTable(
+        schema,
+        getTableWithColumnChanges(blueprint, schema),
+      );
+    }
+
+    if (schema is AbstractSchemaManager) {
+      final tableName = '${getTablePrefix()}${blueprint.getTable()}';
+      return schema.listTableDetails(tableName).then(
+            (table) => Comparator().diffTable(
+              table,
+              getTableWithColumnChanges(blueprint, table),
+            ),
+          );
+    }
+
+    throw ArgumentError.value(
+        schema, 'schema', 'Expected Table or AbstractSchemaManager.');
+  }
+
+  List<String> compileTableDiff(TableDiff diff, Blueprint blueprint) {
+    if (diff.isEmpty()) {
+      return [];
+    }
+
+    throw UnsupportedError(
+        'TableDiff SQL compilation requires a database-specific grammar.');
+  }
+
+  @protected
+  String getTableDiffName(TableDiff diff) {
+    return diff.oldTable?.getName() ?? diff.name;
+  }
+
+  @protected
+  String getColumnDeclarationSql(Column column, Blueprint blueprint) {
+    final fluent = getFluentForDoctrineColumn(column);
+    final type = getType(fluent);
+    if (type == null) {
+      throw UnsupportedError('Column "${column.getName()}" has no SQL type.');
+    }
+
+    return addModifiers('${wrap(column.getName())} $type', blueprint, fluent);
+  }
+
+  @protected
+  String getColumnTypeDeclarationSql(Column column) {
+    final fluent = getFluentForDoctrineColumn(column);
+    final type = getType(fluent);
+    if (type == null) {
+      throw UnsupportedError('Column "${column.getName()}" has no SQL type.');
+    }
+
+    return type;
+  }
+
+  @protected
+  String getCreateIndexSql(Index index, String table) {
+    final columns = getIndexColumnsSql(index);
+
+    if (index.isPrimary) {
+      return 'alter table $table add primary key ($columns)';
+    }
+
+    final unique = index.isUnique ? 'unique ' : '';
+    return 'create ${unique}index ${wrap(index.getName())} on $table ($columns)${getPartialIndexSql(index)}';
+  }
+
+  @protected
+  String getIndexColumnsSql(Index index) {
+    return index.getQuotedColumns(this).join(', ');
+  }
+
+  @protected
+  String getPartialIndexSql(Index index) {
+    if (supportsPartialIndexes() && index.hasOption('where')) {
+      return ' where ${index.getOption('where')}';
+    }
+
+    return '';
+  }
+
+  @protected
+  bool supportsPartialIndexes() {
+    return false;
+  }
+
+  @protected
+  String getDropIndexSql(Index index, String table) {
+    if (index.isPrimary) {
+      return 'alter table $table drop primary key';
+    }
+
+    return 'drop index ${wrap(index.getName())}';
+  }
+
+  @protected
+  String getCreateUniqueConstraintSql(
+      UniqueConstraint constraint, String table) {
+    final columns = constraint.getQuotedColumns(this).join(', ');
+    return 'alter table $table add constraint ${wrap(constraint.getName())} unique ($columns)';
+  }
+
+  @protected
+  String getDropUniqueConstraintSql(UniqueConstraint constraint, String table) {
+    return 'alter table $table drop constraint ${wrap(constraint.getName())}';
+  }
+
+  @protected
+  String getCreateForeignKeySql(ForeignKeyConstraint foreignKey, String table) {
+    final localColumns = foreignKey.getQuotedLocalColumns(this).join(', ');
+    final foreignTable = foreignKey.getQuotedForeignTableName(this);
+    final foreignColumns = foreignKey.getQuotedForeignColumns(this).join(', ');
+    var sql =
+        'alter table $table add constraint ${wrap(foreignKey.getName())} foreign key ($localColumns) references $foreignTable ($foreignColumns)';
+
+    final onDelete = foreignKey.getOnDelete();
+    if (onDelete != null) {
+      sql += ' on delete $onDelete';
+    }
+
+    final onUpdate = foreignKey.getOnUpdate();
+    if (onUpdate != null) {
+      sql += ' on update $onUpdate';
+    }
+
+    return sql;
+  }
+
+  @protected
+  String getDropForeignKeySql(ForeignKeyConstraint foreignKey, String table) {
+    return 'alter table $table drop foreign key ${wrap(foreignKey.getName())}';
+  }
+
+  @protected
+  Fluent getFluentForDoctrineColumn(Column column) {
+    final attributes = Map<String, dynamic>.from(column.toArray());
+    attributes['name'] = column.getName();
+    attributes['type'] = getBlueprintColumnType(column.type);
+    attributes['nullable'] = !column.notnull;
+    attributes['autoIncrement'] = column.autoIncrement;
+    attributes['length'] = column.length;
+    attributes['total'] = column.precision;
+    attributes['places'] = column.scale;
+    attributes['default'] = column.defaultValue;
+    attributes.removeWhere((_, value) => value == null);
+    return Fluent(attributes);
+  }
+
+  @protected
+  String getBlueprintColumnType(String doctrineType) {
+    switch (doctrineType.toLowerCase()) {
+      case 'bigint':
+        return 'bigInteger';
+      case 'smallint':
+        return 'smallInteger';
+      case 'blob':
+        return 'binary';
+      case 'varchar':
+        return 'string';
+      default:
+        return doctrineType;
+    }
+  }
+
+  dynamic getTableWithColumnChanges(Blueprint blueprint, dynamic table) {
+    if (table is! Table) {
+      throw ArgumentError.value(table, 'table', 'Expected Doctrine Table.');
+    }
+
+    final changedTable = table.clone();
+
+    for (final fluent in blueprint.getChangedColumns()) {
+      final column = getDoctrineColumnForChange(changedTable, fluent);
+
+      for (final entry in fluent.getAttributes().entries) {
+        final option = mapFluentOptionToDoctrine(entry.key.toString());
+        if (option != null) {
+          column.processOptions({
+            option.toString(): mapFluentValueToDoctrine(
+              option.toString(),
+              entry.value,
+            ),
+          });
+        }
+      }
+    }
+
+    return changedTable;
+  }
+
+  dynamic getDoctrineColumnForChange(dynamic table, Fluent fluent) {
+    if (table is! Table) {
+      throw ArgumentError.value(table, 'table', 'Expected Doctrine Table.');
+    }
+
+    final name = fluent['name'] as String;
+    return table
+        .changeColumn(name, getDoctrineColumnChangeOptions(fluent))
+        .getColumn(name);
+  }
+
+  dynamic getDoctrineColumnChangeOptions(Fluent fluent) {
+    final type = fluent['type'] as String;
+    final options = <String, dynamic>{
+      'type': getDoctrineColumnType(type),
+    };
+
+    if (['text', 'mediumText', 'longText'].contains(type)) {
+      options['length'] = calculateDoctrineTextLength(type);
+    } else if (fluent.offsetExists('length')) {
+      options['length'] = fluent['length'];
+    }
+
+    return options;
+  }
+
+  dynamic getDoctrineColumnType(String type) {
+    switch (type.toLowerCase()) {
+      case 'biginteger':
+        return 'bigint';
+      case 'smallinteger':
+        return 'smallint';
+      case 'mediumtext':
+      case 'longtext':
+        return 'text';
+      case 'binary':
+        return 'blob';
+      default:
+        return type.toLowerCase();
+    }
+  }
+
+  dynamic calculateDoctrineTextLength(String type) {
+    switch (type) {
+      case 'mediumText':
+        return 65535 + 1;
+      case 'longText':
+        return 16777215 + 1;
+      default:
+        return 255 + 1;
+    }
+  }
+
+  dynamic mapFluentOptionToDoctrine(String attribute) {
+    switch (attribute) {
+      case 'type':
+      case 'name':
+      case 'change':
+        return null;
+      case 'nullable':
+        return 'notnull';
+      case 'total':
+        return 'precision';
+      case 'places':
+        return 'scale';
+      default:
+        return attribute;
+    }
+  }
+
+  dynamic mapFluentValueToDoctrine(String option, dynamic value) {
+    return option == 'notnull' ? value != true : value;
+  }
 }

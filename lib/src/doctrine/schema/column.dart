@@ -6,7 +6,7 @@ import 'abstract_asset.dart';
 /// Inspirado em Doctrine\DBAL\Schema\Column.
 class Column extends AbstractAsset {
   /// Tipo da coluna (nome genérico, ex: 'integer', 'string', 'enum').
-  final String typeName;
+  String typeName;
 
   /// Comprimento (para varchar, char, etc.).
   int? length;
@@ -54,7 +54,7 @@ class Column extends AbstractAsset {
   Column(String name, this.typeName,
       {Map<String, dynamic> options = const {}}) {
     // Usa setName da classe base para inicializar _name e _quoted
-    setName(name); // <-- CORRIGIDO: Usar setName aqui
+    super.setName(name);
     processOptions(options);
 
     if (autoIncrement) {
@@ -74,6 +74,9 @@ class Column extends AbstractAsset {
   /// Processa o mapa de opções para definir as propriedades da coluna.
   /// (Manter a implementação anterior deste método)
   void processOptions(Map<String, dynamic> options) {
+    if (options.containsKey('type') && options['type'] != null) {
+      typeName = options['type'].toString();
+    }
     length = options['length'] as int? ?? length;
     precision =
         options['total'] as int? ?? options['precision'] as int? ?? precision;
@@ -135,7 +138,7 @@ class Column extends AbstractAsset {
   /// Define o nome da coluna, atualizando o estado interno.
   /// Necessário para a funcionalidade de renomear coluna na classe Table.
   void setName(String newName) {
-    setName(newName); // Reutiliza a lógica de _setName da classe base
+    super.setName(newName);
   }
 
   // --- Métodos de Verificação e Conveniência (manter os existentes) ---

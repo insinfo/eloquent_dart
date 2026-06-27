@@ -156,11 +156,11 @@ class ConnectionFactory {
   ///  @param  array  $config
   ///  @return \Illuminate\Database\Connectors\ConnectorInterface
   ///
-  ///  @throws \InvalidArgumentException
+  ///  @throws \ArgumentError
   ///
   ConnectorInterface createConnector(Map<String, dynamic> config) {
     if (config['driver'] == null) {
-      throw InvalidArgumentException('A driver must be specified.');
+      throw ArgumentError.notNull('driver');
     }
 
     // if ($this->container->bound($key = "db.connector.{$config['driver']}")) {
@@ -181,7 +181,8 @@ class ConnectionFactory {
       //     return new SqlServerConnector;
     }
 
-    throw InvalidArgumentException("Unsupported driver [${config['driver']}]");
+    throw ArgumentError.value(
+        config['driver'], 'driver', 'Unsupported driver.');
   }
 
   ///
@@ -194,7 +195,7 @@ class ConnectionFactory {
   ///  @param  array    $config
   ///  @return \Illuminate\Database\Connection
   ///
-  ///  @throws \InvalidArgumentException
+  ///  @throws \ArgumentError
   ///
   Connection createConnection(String driver, PDOInterface pdoP, String database,
       [String prefix = '', Map<String, dynamic> config = const {}]) {
@@ -216,6 +217,6 @@ class ConnectionFactory {
       //     return new SqlServerConnection($connection, $database, $prefix, $config);
     }
 
-    throw InvalidArgumentException("Unsupported driver [$driver]");
+    throw ArgumentError.value(driver, 'driver', 'Unsupported driver.');
   }
 }

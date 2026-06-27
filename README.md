@@ -2,6 +2,11 @@
 [![CI](https://github.com/insinfo/eloquent_dart/actions/workflows/dart.yml/badge.svg)](https://github.com/insinfo/eloquent_dart/actions/workflows/dart.yml)
 [![Pub Package](https://img.shields.io/pub/v/eloquent.svg)](https://pub.dev/packages/eloquent)  
 
+#### Support My Work
+[!["Buy Me A Coffee"](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://www.buymeacoffee.com/isaqueneves)
+
+I’m on @buymeacoffee. If you like my work, you can buy me a ☕ and share your thoughts 🎉 [Buy me a coffee](https://www.buymeacoffee.com/isaqueneves)
+
 
 eloquent 5.2 query builder port from PHP Laravel to dart
 
@@ -207,6 +212,28 @@ for now it only works with PostgreSQL and MySQL
        
 
 ```
+
+## PostgreSQL DateTime bindings
+
+Eloquent normalizes query bindings before the PDO driver receives them. For `DateTime` values, `Connection.prepareBindings()` formats the value with the PostgreSQL grammar date format (`yyyy-MM-dd HH:mm:ss`). This matches the Laravel/PDO style used by the existing PostgreSQL adapters.
+
+`lib/src/pdo/postgres/postgres_pdo.dart` does not perform this conversion itself. It receives the already prepared bindings and passes them to `postgresql-fork` as substitution values.
+
+This distinction matters for `timestamp without time zone`: application code usually expects a civil/local timestamp to round-trip as the same wall-clock time. For example, `2026-06-27 00:43:00` should not become `2026-06-27 03:43:00` just because the driver encoded a Dart `DateTime` through UTC binary timestamp semantics.
+
+When using:
+
+```dart
+manager.addConnection({
+  'driver': 'pgsql',
+  'driver_implementation': 'dpgsql',
+  'timezone': 'America/Sao_Paulo',
+});
+```
+
+the `dpgsql` adapter preserves the same compatibility rule: untyped `DateTime` query builder bindings are sent as PostgreSQL-inferred text/unknown values, so the target column decides whether the value is `timestamp`, `timestamptz`, or `date`. This avoids timezone shifts in systems that store local timestamps in `timestamp without time zone` columns.
+
+The `timezone` setting still configures the PostgreSQL session timezone. Decode flags such as `forceDecodeTimestampAsUTC`, `forceDecodeTimestamptzAsUTC`, and `forceDecodeDateAsUTC` control how returned values are materialized in Dart; they are separate from the query-builder binding normalization described above.
 
 ## mysql example
 

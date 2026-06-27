@@ -33,7 +33,7 @@ class JoinClause {
   bool isLateral; // <-- Adicionado
 
   /// Adiciona uma cláusula ON TRUE.
-  JoinClause onTrue([String boolean = 'and']) {
+  JoinClause onTrue([String boolean = SqlBool.and]) {
     return this.on(QueryExpression('TRUE'), null, null, boolean, false);
   }
 
@@ -93,12 +93,12 @@ class JoinClause {
   /// @param  bool  $where
   /// @return $this
   ///
-  /// @throws \InvalidArgumentException
+  /// @throws \ArgumentError
   ///
   JoinClause on(dynamic first,
       [String? operator,
       dynamic second,
-      String boolean = 'and',
+      String boolean = SqlBool.and,
       bool where = false]) {
     if (first is Function) {
       return this.nest(first, boolean);
@@ -108,7 +108,7 @@ class JoinClause {
       this.bindingsLocal.add(second);
     }
     if (where &&
-        (operator == 'in' || operator == 'not in') &&
+        (operator == SqlOperator.inList || operator == SqlOperator.notInList) &&
         Utils.is_array(second)) {
       second = Utils.count(second);
     }
@@ -149,7 +149,7 @@ class JoinClause {
   /// @return \Illuminate\Database\Query\JoinClause
   ///
   JoinClause orOn(dynamic first, [String? operator, dynamic second]) {
-    return this.on(first, operator, second, 'or');
+    return this.on(first, operator, second, SqlBool.or);
   }
 
   ///
@@ -162,7 +162,7 @@ class JoinClause {
   /// @return \Illuminate\Database\Query\JoinClause
   ///
   JoinClause where(dynamic first,
-      [String? operator, dynamic second, String boolean = 'and']) {
+      [String? operator, dynamic second, String boolean = SqlBool.and]) {
     return this.on(first, operator, second, boolean, true);
   }
 
@@ -175,7 +175,7 @@ class JoinClause {
   /// @return \Illuminate\Database\Query\JoinClause
   ///
   JoinClause orWhere(dynamic first, [String? operator, dynamic second]) {
-    return this.on(first, operator, second, 'or', true);
+    return this.on(first, operator, second, SqlBool.or, true);
   }
 
   ///
@@ -185,8 +185,9 @@ class JoinClause {
   /// @param  String  $boolean
   /// @return \Illuminate\Database\Query\JoinClause
   ///
-  JoinClause whereNull(String column, [String boolean = 'and']) {
-    return this.on(column, 'is', QueryExpression('null'), boolean, false);
+  JoinClause whereNull(String column, [String boolean = SqlBool.and]) {
+    return this.on(column, SqlOperator.isOperator, QueryExpression('null'),
+        boolean, false);
   }
 
   ///
@@ -196,7 +197,7 @@ class JoinClause {
   /// @return \Illuminate\Database\Query\JoinClause
   ///
   JoinClause orWhereNull(String column) {
-    return this.whereNull(column, 'or');
+    return this.whereNull(column, SqlBool.or);
   }
 
   ///
@@ -206,8 +207,9 @@ class JoinClause {
   /// @param  String  $boolean
   /// @return \Illuminate\Database\Query\JoinClause
   ///
-  JoinClause whereNotNull(String column, [String boolean = 'and']) {
-    return this.on(column, 'is', QueryExpression('not null'), boolean, false);
+  JoinClause whereNotNull(String column, [String boolean = SqlBool.and]) {
+    return this.on(column, SqlOperator.isOperator, QueryExpression('not null'),
+        boolean, false);
   }
 
   ///
@@ -217,7 +219,7 @@ class JoinClause {
   /// @return \Illuminate\Database\Query\JoinClause
   ///
   JoinClause orWhereNotNull(String column) {
-    return this.whereNotNull(column, 'or');
+    return this.whereNotNull(column, SqlBool.or);
   }
 
   ///
@@ -228,7 +230,7 @@ class JoinClause {
   /// @return \Illuminate\Database\Query\JoinClause
   ///
   JoinClause whereIn(String column, List values) {
-    return this.on(column, 'in', values, 'and', true);
+    return this.on(column, SqlOperator.inList, values, SqlBool.and, true);
   }
 
   ///
@@ -239,7 +241,7 @@ class JoinClause {
   /// @return \Illuminate\Database\Query\JoinClause
   ///
   JoinClause whereNotIn(String column, List values) {
-    return this.on(column, 'not in', values, 'and', true);
+    return this.on(column, SqlOperator.notInList, values, SqlBool.and, true);
   }
 
   ///
@@ -250,7 +252,7 @@ class JoinClause {
   /// @return \Illuminate\Database\Query\JoinClause
   ///
   JoinClause orWhereIn(String column, List values) {
-    return this.on(column, 'in', values, 'or', true);
+    return this.on(column, SqlOperator.inList, values, SqlBool.or, true);
   }
 
   ///
@@ -261,7 +263,7 @@ class JoinClause {
   /// @return \Illuminate\Database\Query\JoinClause
   ///
   JoinClause orWhereNotIn(String column, List values) {
-    return this.on(column, 'not in', values, 'or', true);
+    return this.on(column, SqlOperator.notInList, values, SqlBool.or, true);
   }
 
   ///
@@ -271,7 +273,7 @@ class JoinClause {
   /// @param  String   $boolean
   /// @return \Illuminate\Database\Query\JoinClause
   ///
-  JoinClause nest(Function callback, [String boolean = 'and']) {
+  JoinClause nest(Function callback, [String boolean = SqlBool.and]) {
     final join = JoinClause(this.type, this.table);
 
     callback(join);
@@ -300,7 +302,7 @@ class JoinClause {
   ///
   JoinClause onRaw(
     String sql, [
-    String boolean = 'and',
+    String boolean = SqlBool.and,
     List bindings = const [],
   ]) {
     this.clauses.add({

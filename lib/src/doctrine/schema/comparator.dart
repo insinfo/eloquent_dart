@@ -11,6 +11,7 @@ import 'index.dart';
 import 'foreign_key_constraint.dart';
 import 'unique_constraint.dart';
 import 'column_diff.dart';
+import 'table_diff.dart';
 import 'schema_config.dart'; // Assumindo que existe
 import 'identifier.dart'; // Assumindo que existe
 
@@ -177,6 +178,11 @@ class Comparator {
     );
   }
 
+  dynamic diffTable(Table oldTable, Table newTable) {
+    final diff = compareTables(oldTable, newTable);
+    return diff.isEmpty() ? false : diff;
+  }
+
   /// Compara duas colunas (implementação BÁSICA).
   bool _columnsEqual(Column col1, Column col2) {
     // Usa Column
@@ -201,74 +207,5 @@ class Comparator {
   bool uniqueConstraintsEqual(UniqueConstraint uq1, UniqueConstraint uq2) {
     // Usa UniqueConstraint
     return uq1.isEquivalentTo(uq2);
-  }
-}
-
-// Adicionar as propriedades de Unique Constraint ao TableDiff (se ainda não feito)
-// Ajustar o construtor e isEmpty em TableDiff para usar os nomes sem prefixo Dart
-
-class TableDiff {
-  final String name;
-  final String? oldTableName;
-  final Table? oldTable; // Usa Table
-  final Map<String, Column> addedColumns; // Usa Column
-  final Map<String, ColumnDiff> changedColumns; // Usa ColumnDiff
-  final Map<String, Column> droppedColumns; // Usa Column
-  final Map<String, String> renamedColumns;
-  final Map<String, Index> addedIndexes; // Usa Index
-  final Map<String, Index> changedIndexes; // Usa Index
-  final Map<String, Index> droppedIndexes; // Usa Index
-  final Map<String, String> renamedIndexes;
-  final Map<String, ForeignKeyConstraint>
-      addedForeignKeys; // Usa ForeignKeyConstraint
-  final Map<String, ForeignKeyConstraint>
-      changedForeignKeys; // Usa ForeignKeyConstraint
-  final Map<String, ForeignKeyConstraint>
-      droppedForeignKeys; // Usa ForeignKeyConstraint
-  final Map<String, UniqueConstraint>
-      addedUniqueConstraints; // Usa UniqueConstraint
-  final Map<String, UniqueConstraint>
-      changedUniqueConstraints; // Usa UniqueConstraint
-  final Map<String, UniqueConstraint>
-      droppedUniqueConstraints; // Usa UniqueConstraint
-
-  bool get isRenamed => oldTableName != null && oldTableName != name;
-
-  TableDiff({
-    required this.name,
-    this.oldTableName,
-    this.oldTable, // Usa Table
-    this.addedColumns = const {},
-    this.changedColumns = const {},
-    this.droppedColumns = const {},
-    this.renamedColumns = const {},
-    this.addedIndexes = const {},
-    this.changedIndexes = const {},
-    this.droppedIndexes = const {},
-    this.renamedIndexes = const {},
-    this.addedForeignKeys = const {},
-    this.changedForeignKeys = const {},
-    this.droppedForeignKeys = const {},
-    this.addedUniqueConstraints = const {},
-    this.changedUniqueConstraints = const {},
-    this.droppedUniqueConstraints = const {},
-  });
-
-  bool isEmpty() {
-    return addedColumns.isEmpty &&
-        changedColumns.isEmpty &&
-        droppedColumns.isEmpty &&
-        renamedColumns.isEmpty &&
-        addedIndexes.isEmpty &&
-        changedIndexes.isEmpty &&
-        droppedIndexes.isEmpty &&
-        renamedIndexes.isEmpty &&
-        addedForeignKeys.isEmpty &&
-        changedForeignKeys.isEmpty &&
-        droppedForeignKeys.isEmpty &&
-        addedUniqueConstraints.isEmpty &&
-        changedUniqueConstraints.isEmpty &&
-        droppedUniqueConstraints.isEmpty &&
-        !isRenamed;
   }
 }

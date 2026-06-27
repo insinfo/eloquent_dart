@@ -41,22 +41,24 @@ abstract class AbstractAsset {
       throw ArgumentError('Asset name cannot be empty.');
     }
     quoted = isIdentifierQuoted(name);
-    name = name; // Armazena o nome *original*
+    this.name = name; // Armazena o nome *original*
   }
 
   /// Verifica se um identificador está entre aspas (", `, []).
   bool isIdentifierQuoted(String identifier) {
-    if (identifier.length < 2) return false; // Precisa de pelo menos 2 caracteres para as aspas
+    if (identifier.length < 2)
+      return false; // Precisa de pelo menos 2 caracteres para as aspas
     final firstChar = identifier[0];
     final lastChar = identifier[identifier.length - 1];
     return (firstChar == '"' && lastChar == '"') ||
-           (firstChar == '`' && lastChar == '`') ||
-           (firstChar == '[' && lastChar == ']');
+        (firstChar == '`' && lastChar == '`') ||
+        (firstChar == '[' && lastChar == ']');
   }
 
   /// Remove as aspas delimitadoras (", `, []) de um identificador.
   /// Se não estiver cotado, retorna o identificador original.
-  String trimQuotes(String identifier) { // <-- MÉTODO ADICIONADO/CORRIGIDO
+  String trimQuotes(String identifier) {
+    // <-- MÉTODO ADICIONADO/CORRIGIDO
     if (isIdentifierQuoted(identifier)) {
       // Remove o primeiro e o último caractere
       return identifier.substring(1, identifier.length - 1);
@@ -70,13 +72,13 @@ abstract class AbstractAsset {
     return trimQuotes(name); // Usa trimQuotes agora
   }
 
-   /// Retorna o nome canônico (lowercase, sem aspas) para uso interno (chaves de mapa).
-   String getCanonicalName() {
-     return getName().toLowerCase();
-   }
+  /// Retorna o nome canônico (lowercase, sem aspas) para uso interno (chaves de mapa).
+  String getCanonicalName() {
+    return getName().toLowerCase();
+  }
 
-   /// Obtém o nome original como foi fornecido (pode incluir aspas).
-   String getOriginalName() {
-       return name;
-   }
+  /// Obtém o nome original como foi fornecido (pode incluir aspas).
+  String getOriginalName() {
+    return name;
+  }
 }
