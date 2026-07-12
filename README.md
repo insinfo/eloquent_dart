@@ -113,6 +113,43 @@ for now it only works with PostgreSQL and MySQL
         .where('id', '=', 1).delete();
 
 ```
+
+## UPSERT / ON CONFLICT / RETURNING (PostgreSQL & MySQL)
+
+```dart
+// Atomic upsert (Laravel-style)
+await db.table('users').upsert(
+  [{'email': 'a@x.com', 'name': 'A'}],
+  ['email'],            // conflict target columns
+  {'name': 'A2'},       // DO UPDATE SET (optional; defaults to all non-unique cols)
+);
+
+// Insert or ignore
+await db.table('users').insertOrIgnore({'email': 'a@x.com', 'name': 'A'});
+
+// Low-level ON CONFLICT ... DO UPDATE ... RETURNING (lock-free sequence).
+// Equivalent to PL/pgSQL's "RETURNING last_id INTO v_seq": the returned
+// column is read directly in Dart, so no explicit locks are needed.
+final rows = await db.table('processos_sequences')
+  .onConflict(['ano'])
+  .doUpdate({'last_id': db.raw('processos_sequences.last_id + 1')})
+  .returning(['last_id'])
+  .insert({'ano': 2026, 'last_id': 1});
+
+final seq = rows.first['last_id'];
+```
+
+Generated SQL (PostgreSQL):
+
+```sql
+INSERT INTO processos_sequences (ano, last_id) VALUES (?, ?)
+ON CONFLICT (ano) DO UPDATE SET last_id = processos_sequences.last_id + 1
+RETURNING last_id;
+```
+
+> Note: `RETURNING ... INTO` is PL/pgSQL syntax (inside functions/DO blocks).
+> The client-side idiom is `RETURNING <col>` whose value is read in Dart — which
+> is exactly what `.returning([...]).insert(...)` returns (a `List<Map>`).
 ## using connection pool (works for mysql and postgresql)
 
 ```dart

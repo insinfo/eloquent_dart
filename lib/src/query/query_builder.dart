@@ -10,6 +10,7 @@ import 'package:eloquent/src/contracts/pagination/pagination_utils.dart';
 import 'package:eloquent/src/query/expression.dart';
 import 'package:eloquent/src/query/grammars/query_grammar.dart';
 import 'package:eloquent/src/query/join_clause.dart';
+import 'package:eloquent/src/query/on_conflict_clause.dart';
 import 'package:eloquent/src/query/processors/processor.dart';
 import 'package:eloquent/src/query/sql_constants.dart';
 import 'package:eloquent/src/support/arr.dart';
@@ -168,6 +169,17 @@ class QueryBuilder {
 
   /// Whether use write pdo for select.
   bool useWritePdoProp = false;
+
+  /// Pending `ON CONFLICT` clause applied to the next low-level [insert].
+  ///
+  /// Set via [onConflict]/[doUpdate]/[doNothing]. Consumed by [insert].
+  OnConflictClause? onConflictProp;
+
+  /// Columns for a `RETURNING` clause on insert/update/delete/upsert.
+  ///
+  /// Set via [returning]. When non-null the write returns the affected rows
+  /// instead of an affected-row count.
+  List<dynamic>? returningProp;
 
   /// Create a new query builder instance.
   ///
@@ -2278,12 +2290,153 @@ class QueryBuilder {
     // Since every insert gets treated like a batch insert, we will make sure the
     // bindings are structured in a way that is convenient for building these
     // inserts statements by verifying the elements are actually an array.
-    final bindings = this.cleanBindings(values.values.toList(growable: false));
-    final sql = this.grammar.compileInsert(this, values);
-    // Once we have compiled the insert statement's SQL we can execute it on the
-    // connection and return a result as a boolean success indicator as that
-    // is the same type of result returned by the raw connection instance.
-    return this.connection.insert(sql, bindings);
+    final conflict = this.onConflictProp;
+    final returning = this.returningProp;
+
+    if (conflict == null && returning == null) {
+      final bindings =
+          this.cleanBindings(values.values.toList(growable: false));
+      final sql = this.grammar.compileInsert(this, values);
+      // Once we have compiled the insert statement's SQL we can execute it on
+      // the connection and return a result as a boolean success indicator as
+      // that is the same type of result returned by the raw connection.
+      return this.connection.insert(sql, bindings);
+    }
+
+    // Low-level path: honor a pending ON CONFLICT and/or RETURNING clause.
+    final bindings = <dynamic>[...values.values];
+    if (conflict?.updateValues != null) {
+      // DO UPDATE SET values are appended after the INSERT values because the
+      // conflict clause is emitted after VALUES in the generated SQL.
+      bindings.addAll(conflict!.updateValues!.values);
+    }
+    final sql = this.grammar.compileInsertWithClauses(
+          this,
+          values,
+          conflict,
+          returning,
+        );
+    return this.connection.insert(sql, this.cleanBindings(bindings));
+  }
+
+  /// Set an `ON CONFLICT` target for the next low-level [insert].
+  ///
+  /// Provide the conflict columns (`onConflict(['ano'])`) or a named
+  /// constraint (`onConflict.constraint`). Chain [doUpdate] or [doNothing]
+  /// to define the action. Example (eliminates the need for explicit locks):
+  ///
+  /// ```dart
+  /// final rows = await db.table('processos_sequences')
+  ///   .onConflict(['ano'])
+  ///   .doUpdate({'last_id': db.raw('processos_sequences.last_id + 1')})
+  ///   .returning(['last_id'])
+  ///   .insert({'ano': 2026, 'last_id': 1});
+  /// final seq = rows.first['last_id'];
+  /// ```
+  QueryBuilder onConflict([List<String> columns = const [], String? constraint]) {
+    this.onConflictProp = OnConflictClause(
+      columns: columns,
+      constraint: constraint,
+    );
+    return this;
+  }
+
+  /// Turn a pending [onConflict] into `DO UPDATE SET ...`.
+  ///
+  /// [values] may contain [QueryExpression]s via `db.raw(...)` so expressions
+  /// such as `last_id = table.last_id + 1` are supported. [whereRaw] appends a
+  /// raw `WHERE` predicate to the conflict update.
+  QueryBuilder doUpdate(Map<String, dynamic> values, [String? whereRaw]) {
+    final current = this.onConflictProp ?? const OnConflictClause();
+    this.onConflictProp = current.copyWith(
+      doNothing: false,
+      updateValues: values,
+      updateWhereRaw: whereRaw,
+    );
+    return this;
+  }
+
+  /// Turn a pending [onConflict] into `DO NOTHING`.
+  QueryBuilder doNothing() {
+    final current = this.onConflictProp ?? const OnConflictClause();
+    this.onConflictProp = current.copyWith(doNothing: true);
+    return this;
+  }
+
+  /// Request a `RETURNING` clause on the next write (insert/update/delete/upsert).
+  ///
+  /// When set, the write returns the affected rows (a `List<Map>`), mirroring
+  /// PL/pgSQL's `RETURNING ... INTO` — the returned column can be read in Dart.
+  QueryBuilder returning([List<dynamic> columns = const ['*']]) {
+    this.returningProp = columns.isEmpty ? ['*'] : columns;
+    return this;
+  }
+
+  /// Insert records, ignoring rows that violate a unique/primary constraint.
+  ///
+  /// PostgreSQL/SQLite: `INSERT ... ON CONFLICT DO NOTHING`.
+  /// MySQL: `INSERT IGNORE`.
+  /// Returns the number of rows actually inserted.
+  Future<int> insertOrIgnore(dynamic values) async {
+    final rows = _normalizeMultiInsert(values);
+    if (rows.isEmpty) return 0;
+    final bindings = <dynamic>[];
+    for (final row in rows) {
+      bindings.addAll(row.values);
+    }
+    final sql = this.grammar.compileInsertOrIgnore(this, rows);
+    return await this.connection.affectingStatement(
+          sql,
+          this.cleanBindings(bindings),
+        );
+  }
+
+  /// Insert or update records atomically (`UPSERT`).
+  ///
+  /// [values] is a single map or a list of maps (all must share the same keys).
+  /// [uniqueBy] are the conflict-target columns.
+  /// [update] are the columns to update on conflict; when omitted, every
+  /// non-[uniqueBy] column is updated with the value that would have been
+  /// inserted. Values in [update] may be [QueryExpression]s.
+  ///
+  /// PostgreSQL: `INSERT ... ON CONFLICT (uniqueBy) DO UPDATE SET ...`.
+  /// MySQL: `INSERT ... ON DUPLICATE KEY UPDATE ...`.
+  Future<int> upsert(
+    dynamic values,
+    List<String> uniqueBy, [
+    Map<String, dynamic>? update,
+  ]) async {
+    final rows = _normalizeMultiInsert(values);
+    if (rows.isEmpty) return 0;
+
+    final sql = this.grammar.compileUpsert(this, rows, uniqueBy, update);
+
+    final bindings = <dynamic>[];
+    for (final row in rows) {
+      bindings.addAll(row.values);
+    }
+    if (update != null) {
+      bindings.addAll(update.values);
+    }
+    return await this.connection.affectingStatement(
+          sql,
+          this.cleanBindings(bindings),
+        );
+  }
+
+  /// Normalize a single map or list of maps into a list of row maps.
+  List<Map<String, dynamic>> _normalizeMultiInsert(dynamic values) {
+    if (values is Map<String, dynamic>) {
+      return values.isEmpty ? const [] : [values];
+    }
+    if (values is List) {
+      return values.cast<Map<String, dynamic>>();
+    }
+    throw ArgumentError.value(
+      values,
+      'values',
+      'Expected Map<String, dynamic> or List<Map<String, dynamic>>.',
+    );
   }
 
   ///

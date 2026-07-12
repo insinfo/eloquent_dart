@@ -128,6 +128,59 @@ class QueryMySqlGrammar extends QueryGrammar {
     return this.compileInsert(query, values);
   }
 
+  /// MySQL uses `INSERT IGNORE` rather than `ON CONFLICT DO NOTHING`.
+  @override
+  String compileInsertOrIgnore(
+    QueryBuilder query,
+    List<Map<String, dynamic>> rows,
+  ) {
+    final base = this.compileInsertRows(query, rows);
+    // Turn "insert into" into "insert ignore into".
+    return base.replaceFirst('insert into', 'insert ignore into');
+  }
+
+  /// MySQL UPSERT via `ON DUPLICATE KEY UPDATE`. The conflict target columns
+  /// are implicit (any unique/primary key), so [uniqueBy] is ignored except to
+  /// decide which columns default to being updated.
+  @override
+  String compileUpsert(
+    QueryBuilder query,
+    List<Map<String, dynamic>> rows,
+    List<String> uniqueBy,
+    Map<String, dynamic>? update,
+  ) {
+    final insertSql = this.compileInsertRows(query, rows);
+
+    final setParts = <String>[];
+    if (update == null) {
+      final columns = rows.first.keys.where((c) => !uniqueBy.contains(c));
+      for (final column in columns) {
+        final w = this.wrap(column);
+        setParts.add('$w = values($w)');
+      }
+    } else {
+      for (final entry in update.entries) {
+        setParts
+            .add('${this.wrap(entry.key)} = ${this.parameter(entry.value)}');
+      }
+    }
+    if (setParts.isEmpty) {
+      // No columns to update -> emulate ignore.
+      return insertSql.replaceFirst('insert into', 'insert ignore into');
+    }
+    return '$insertSql on duplicate key update ${setParts.join(', ')}';
+  }
+
+  /// MySQL does not support `RETURNING` on INSERT (MariaDB does, but this
+  /// grammar targets MySQL). Reject it clearly instead of emitting bad SQL.
+  @override
+  String compileReturning(List<dynamic> returning) {
+    if (returning.isEmpty) return '';
+    throw UnsupportedError(
+      'RETURNING is not supported by MySQL; use insertGetId() instead.',
+    );
+  }
+
   ///
   /// Compile an update statement into SQL.
   ///

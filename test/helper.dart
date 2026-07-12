@@ -111,11 +111,18 @@ class FakeConnection implements ConnectionInterface {
     return PDOResults([], 0);
   }
 
+  // --- Captura para affectingStatement (upsert / insertOrIgnore) ---
+  String? lastAffectingSql;
+  List<dynamic>? lastAffectingBindings;
+  int affectingCallCount = 0;
+
   @override
   Future<int> affectingStatement(String query,
       [List bindings = const [], int? timeoutInSeconds]) async {
-    // Poderia adicionar captura aqui se necessário
-    return 0;
+    lastAffectingSql = query;
+    lastAffectingBindings = List.from(bindings);
+    affectingCallCount++;
+    return 1;
   }
 
   @override

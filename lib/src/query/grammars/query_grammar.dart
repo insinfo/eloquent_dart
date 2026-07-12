@@ -849,6 +849,124 @@ class QueryGrammar extends BaseGrammar {
     return "insert into $table ($columns) values ($parameters)";
   }
 
+  /// Compile a single-row insert plus an optional `ON CONFLICT` and/or
+  /// `RETURNING` clause (used by the low-level fluent insert path).
+  String compileInsertWithClauses(
+    QueryBuilder query,
+    Map<String, dynamic> values,
+    OnConflictClause? conflict,
+    List<dynamic>? returning,
+  ) {
+    final buffer = StringBuffer(this.compileInsert(query, values));
+    if (conflict != null) {
+      buffer.write(' ');
+      buffer.write(this.compileOnConflict(conflict));
+    }
+    if (returning != null) {
+      buffer.write(this.compileReturning(returning));
+    }
+    return buffer.toString();
+  }
+
+  /// Compile a multi-row insert (`values (...), (...)`).
+  String compileInsertRows(
+    QueryBuilder query,
+    List<Map<String, dynamic>> rows,
+  ) {
+    final table = this.wrapTable(query.fromProp);
+    final columns = rows.first.keys.toList();
+    final columnsSql = this.columnize(columns);
+    final singleRow =
+        '(${List.filled(columns.length, '?').join(', ')})';
+    final allRows = List.filled(rows.length, singleRow).join(', ');
+    return 'insert into $table ($columnsSql) values $allRows';
+  }
+
+  /// Compile an "insert or ignore" statement.
+  ///
+  /// Default (PostgreSQL/SQLite): `INSERT ... ON CONFLICT DO NOTHING`.
+  String compileInsertOrIgnore(
+    QueryBuilder query,
+    List<Map<String, dynamic>> rows,
+  ) {
+    return '${this.compileInsertRows(query, rows)} on conflict do nothing';
+  }
+
+  /// Compile an atomic UPSERT.
+  ///
+  /// Default (PostgreSQL/SQLite): `INSERT ... ON CONFLICT (uniqueBy) DO UPDATE
+  /// SET ...`. When [update] is null, every non-[uniqueBy] column is updated
+  /// from the excluded (would-be-inserted) row.
+  String compileUpsert(
+    QueryBuilder query,
+    List<Map<String, dynamic>> rows,
+    List<String> uniqueBy,
+    Map<String, dynamic>? update,
+  ) {
+    final insertSql = this.compileInsertRows(query, rows);
+    final target = uniqueBy.map((c) => this.wrap(c)).join(', ');
+
+    final setParts = <String>[];
+    if (update == null) {
+      final columns = rows.first.keys.where((c) => !uniqueBy.contains(c));
+      for (final column in columns) {
+        setParts.add('${this.wrap(column)} = ${_excludedColumn(column)}');
+      }
+    } else {
+      for (final entry in update.entries) {
+        setParts.add(
+            '${this.wrap(entry.key)} = ${this.parameter(entry.value)}');
+      }
+    }
+
+    if (setParts.isEmpty) {
+      // Nothing to update -> behave like insert-or-ignore.
+      return '$insertSql on conflict ($target) do nothing';
+    }
+    return '$insertSql on conflict ($target) do update set '
+        '${setParts.join(', ')}';
+  }
+
+  /// Reference to the pseudo-row of would-be-inserted values in a conflict
+  /// update. PostgreSQL/SQLite use `excluded.<col>`.
+  String _excludedColumn(String column) => 'excluded.${this.wrap(column)}';
+
+  /// Compile a standalone `ON CONFLICT` clause from an [OnConflictClause].
+  String compileOnConflict(OnConflictClause conflict) {
+    final buffer = StringBuffer('on conflict');
+
+    if (conflict.constraint != null) {
+      buffer.write(' on constraint ${this.wrap(conflict.constraint)}');
+    } else if (conflict.columns.isNotEmpty) {
+      buffer.write(' (${conflict.columns.map(this.wrap).join(', ')})');
+    }
+
+    if (conflict.doNothing || conflict.updateValues == null) {
+      buffer.write(' do nothing');
+      return buffer.toString();
+    }
+
+    final setParts = <String>[];
+    for (final entry in conflict.updateValues!.entries) {
+      setParts
+          .add('${this.wrap(entry.key)} = ${this.parameter(entry.value)}');
+    }
+    buffer.write(' do update set ${setParts.join(', ')}');
+    if (conflict.updateWhereRaw != null) {
+      buffer.write(' where ${conflict.updateWhereRaw}');
+    }
+    return buffer.toString();
+  }
+
+  /// Compile a `RETURNING` clause. Default is PostgreSQL syntax.
+  String compileReturning(List<dynamic> returning) {
+    if (returning.isEmpty) return '';
+    final cols = returning.length == 1 && returning.first == '*'
+        ? '*'
+        : this.columnize(returning);
+    return ' returning $cols';
+  }
+
   ///
   ///  Compile an insert and get ID statement into SQL.
   ///
