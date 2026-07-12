@@ -38,5 +38,8 @@ dependencies:
   #     ref: master
   #     url: https://github.com/insinfo/postgresql-dart.git
     
+executables:
+  eloquent:
+
 dev_dependencies:
   test: ^1.17.12   

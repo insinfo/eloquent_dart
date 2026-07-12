@@ -10,6 +10,11 @@
 - **Seeders** — `Seeder` base class + `SeederRunner`, with the
   `DatabaseManager` injected so seeders reach the query builder via
   `db!.connection(...).table(...)`. Supports nested `call(otherSeeder)`.
+- **Scaffolding CLI** (`bin/eloquent.dart`, `executables: eloquent`):
+  `make:migration <name> [--create=<t> | --table=<t>] [--path=]` and
+  `make:seeder <ClassName> [--path=]`. File generation only (no code
+  generation); running migrations/seeding is driven from the app's explicit
+  registry. Fixed the migration stubs to `await` the async `schema` getter.
 - **Working schema DDL for PostgreSQL** — implemented the previously-stubbed
   `compileCreate` (CREATE TABLE, with `bigserial primary key` for
   `increments`), `compileAdd` (ALTER TABLE ADD COLUMN), `compileDrop` and

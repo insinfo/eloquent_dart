@@ -48,7 +48,8 @@ class CreateClassName extends Migration {
   /// Run the migrations.
   @override
   Future<void> up() async {
-    await schema.create('DummyTable', (Blueprint table) {
+    final s = await schema;
+    await s.create('DummyTable', (Blueprint table) {
         table.id(); // Creates an auto-incrementing BigInt primary key 'id'
         // Add other columns here...
         table.timestamps(); // Adds created_at and updated_at columns
@@ -58,7 +59,8 @@ class CreateClassName extends Migration {
   /// Reverse the migrations.
   @override
   Future<void> down() async {
-    await schema.dropIfExists('DummyTable');
+    final s = await schema;
+    await s.dropIfExists('DummyTable');
   }
 }
 ''';
@@ -72,7 +74,8 @@ class CreateClassName extends Migration {
   /// Run the migrations.
   @override
   Future<void> up() async {
-    await schema.table('DummyTable', (Blueprint table) {
+    final s = await schema;
+    await s.table('DummyTable', (Blueprint table) {
         // Add column modifications or new columns here
         // Example: table.string('new_column').nullable();
         // Example: table.renameColumn('old_name', 'new_name');
@@ -82,7 +85,8 @@ class CreateClassName extends Migration {
   /// Reverse the migrations.
   @override
   Future<void> down() async {
-    await schema.table('DummyTable', (Blueprint table) {
+    final s = await schema;
+    await s.table('DummyTable', (Blueprint table) {
         // Reverse the changes made in the 'up' method
         // Example: table.dropColumn('new_column');
         // Example: table.renameColumn('new_name', 'old_name');
