@@ -1,5 +1,20 @@
 ## Unreleased (branch `performace`)
 
+### Performance
+
+- **Query compilation hot path** (~17% faster `toSql()` on a medium query in an
+  AOT micro-benchmark, SQL output byte-identical):
+  - `compileComponents` and `compileWheres` now dispatch via a direct `switch`
+    instead of constructing a `'compile' + ucfirst(...)` / `"where" + type`
+    method name and looking it up in a `Map<String,Function>` on every
+    component/clause (the string-keyed `_methodMap` is kept for compatibility
+    and the `default` fallback).
+  - `wrap()` skips the per-call `strtolower` full-string copy (case-insensitive
+    `" as "` scan) and adds a fast path for non-dotted identifiers, avoiding
+    `explode`/`implode` list allocations.
+  - `wrapValue()` only runs the quote-doubling replace when a `"` is present.
+  - Added `benchmark/query_compile_benchmark.dart`.
+
 ### Added
 
 - **End-to-end migrations** — the migration engine now runs against a live

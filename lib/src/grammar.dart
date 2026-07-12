@@ -46,12 +46,15 @@ abstract class BaseGrammar {
     }
 
     // pra ter o mesmo comportamento do PHP para converter para string
-    final value = valueP; // valueP is String ? : valueP.toString();
+    final String value = valueP; // valueP is String ? : valueP.toString();
 
     // If the value being wrapped has a column alias we will need to separate out
     // the pieces so we can wrap each of the segments of the expression on it
     // own, and then joins them both back together with the "as" connector.
-    if (Utils.strpos(Utils.strtolower(value), ' as ') != false) {
+    //
+    // Fast case-insensitive " as " probe avoids allocating a lowercased copy of
+    // the whole string (the previous strtolower) on every wrap().
+    if (_containsAsKeyword(value)) {
       var segments = Utils.explode(' ', value);
       if (prefixAlias) {
         segments[2] = tablePrefix + segments[2];
@@ -59,7 +62,14 @@ abstract class BaseGrammar {
       return wrap(segments[0]) + ' as ' + wrapValue(segments[2]);
     }
 
-    var wrapped = [];
+    // Fast path: no dotted segments -> wrap the single value directly, avoiding
+    // the explode/loop/implode allocations for the common case (e.g. "id").
+    final dot = value.indexOf('.');
+    if (dot == -1) {
+      return wrapValue(value);
+    }
+
+    var wrapped = <String>[];
     var segments = Utils.explode('.', value);
 
     // If the value is not an aliased table expression, we'll just wrap it like
@@ -77,6 +87,21 @@ abstract class BaseGrammar {
     return Utils.implode('.', wrapped);
   }
 
+  /// Case-insensitive scan for a `" as "` alias keyword (space, a/A, s/S, space)
+  /// without allocating a lowercased copy of the input.
+  static bool _containsAsKeyword(String s) {
+    final n = s.length;
+    for (var i = 0; i + 4 <= n; i++) {
+      if (s.codeUnitAt(i) == 0x20 && // ' '
+          (s.codeUnitAt(i + 1) | 0x20) == 0x61 && // 'a'/'A'
+          (s.codeUnitAt(i + 2) | 0x20) == 0x73 && // 's'/'S'
+          s.codeUnitAt(i + 3) == 0x20) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   ///
   /// Wrap a single string in keyword identifiers.
   ///
@@ -88,7 +113,12 @@ abstract class BaseGrammar {
       return value;
     }
 
-    return '"' + Utils.str_replace('"', '""', value) + '"';
+    // Only run the quote-doubling replace when a double-quote is actually
+    // present (rare); otherwise wrap directly.
+    if (value.contains('"')) {
+      return '"' + Utils.str_replace('"', '""', value) + '"';
+    }
+    return '"$value"';
   }
 
   ///
