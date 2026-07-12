@@ -227,8 +227,10 @@ class SchemaBuilder {
     // Tenta obter 'schema' ou 'database' da configuração da conexão (se for a classe concreta Connection)
 
     final connImpl = connection;
-    // Assumindo que getConfig existe e pode retornar null
-    schema = connImpl.getConfig('schema') ?? connImpl.getConfig('database');
+    // The 'schema' config may be a String, a comma-separated String, or a List
+    // (search path). Normalize to the first schema name for introspection.
+    schema = _normalizeSchemaConfig(connImpl.getConfig('schema')) ??
+        _normalizeSchemaConfig(connImpl.getConfig('database'));
 
     // Se não encontrou na config, tenta buscar o nome do banco de dados da conexão
     // Assumindo que getDatabaseName existe na ConnectionInterface ou Connection
@@ -242,5 +244,18 @@ class SchemaBuilder {
       return 'public';
     }
     return schema;
+  }
+
+  /// Normalize a schema config value (String | List | comma-separated String)
+  /// to a single schema name (the first one), or null when empty.
+  String? _normalizeSchemaConfig(dynamic value) {
+    if (value == null) return null;
+    if (value is List) {
+      return value.isEmpty ? null : value.first.toString();
+    }
+    final s = value.toString();
+    if (s.isEmpty) return null;
+    final comma = s.indexOf(',');
+    return comma == -1 ? s : s.substring(0, comma).trim();
   }
 }

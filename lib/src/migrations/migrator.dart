@@ -29,15 +29,32 @@ class Migrator {
 
   /// Registry mapping migration names (e.g., '2023_..._create_users_table')
   /// to factory functions that create Migration instances.
-  /// THIS NEEDS TO BE POPULATED BY THE USER OR A CODE GENERATOR.
+  ///
+  /// This is populated explicitly by the application (no code generation):
+  /// `{'2026_..._create_users_table': () => CreateUsersTable()}`.
   final Map<String, Migration Function()> migrationRegistry;
+
+  /// The database manager, injected into each [Migration] so its `schema`
+  /// getter works. When null, it is derived from [resolver] if that resolver is
+  /// itself a [DatabaseManager].
+  final DatabaseManager? databaseManager;
 
   /// Create a new migrator instance.
   ///
   /// [repository] Stores migration history.
   /// [resolver] Resolves database connections.
   /// [migrationRegistry] Maps migration names to factories.
-  Migrator(this.repository, this.resolver, this.migrationRegistry);
+  /// [databaseManager] Injected into migrations for schema access. If omitted
+  /// and [resolver] is a [DatabaseManager], that resolver is used.
+  Migrator(this.repository, this.resolver, this.migrationRegistry,
+      {this.databaseManager});
+
+  /// Resolve the [DatabaseManager] to inject into migrations.
+  DatabaseManager? get _db {
+    if (databaseManager != null) return databaseManager;
+    final r = resolver;
+    return r is DatabaseManager ? r : null;
+  }
 
 
   /// Runs the outstanding migrations found in the specified paths.
@@ -96,9 +113,8 @@ class Migrator {
 
     // Set connection name for the migration instance if needed
     migration.connectionName = connection;
-    // Inject DatabaseManager if needed by the Migration's schema getter
-    // This depends on how DB access is managed. Example:
-    // migration.db = resolver as DatabaseManager; // If resolver is the DB manager
+    // Inject the DatabaseManager so the migration's `schema` getter works.
+    migration.db = _db;
 
     if (pretend) {
        await _pretendToRun(migration, 'up');
@@ -191,9 +207,9 @@ class Migrator {
 
     final Migration instance = _resolve(file);
 
-    // Set connection name and potentially db manager
+    // Set connection name and inject the DatabaseManager for schema access.
     instance.connectionName = connection;
-    // instance.db = resolver as DatabaseManager; // If needed
+    instance.db = _db;
 
     if (pretend) {
        await _pretendToRun(instance, 'down');

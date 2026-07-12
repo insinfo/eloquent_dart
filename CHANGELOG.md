@@ -2,6 +2,32 @@
 
 ### Added
 
+- **End-to-end migrations** — the migration engine now runs against a live
+  database (no code generation; migrations are registered explicitly in a
+  `Map<String, Migration Function()>`). `Migrator` injects the
+  `DatabaseManager` into each migration so `migration.schema` works;
+  migration/seeder classes are exported from the package barrel.
+- **Seeders** — `Seeder` base class + `SeederRunner`, with the
+  `DatabaseManager` injected so seeders reach the query builder via
+  `db!.connection(...).table(...)`. Supports nested `call(otherSeeder)`.
+- **Working schema DDL for PostgreSQL** — implemented the previously-stubbed
+  `compileCreate` (CREATE TABLE, with `bigserial primary key` for
+  `increments`), `compileAdd` (ALTER TABLE ADD COLUMN), `compileDrop` and
+  `compileDropIfExists`.
+
+### Fixed
+
+- `SchemaBuilder` failed when the connection `schema` config was a `List`
+  (search path) — `_getSchemaName` now normalizes String/List/CSV to the first
+  schema name (previously threw `type 'List<String>' is not a subtype of String?`).
+- `DatabaseMigrationRepository.getMigrations(steps)` now selects by *batch*
+  (Laravel semantics: one rollback step reverts the whole last batch) instead
+  of by row count.
+- `DatabaseMigrationRepository._getConnection` no longer dereferences a null
+  connection name (falls back to the resolver's default connection).
+
+### Added
+
 - **Direct driver access (`db.driver()` / `queryBuilder.driver()`)** — a typed
   `DriverAccess?` escape hatch beside the query builder for capabilities the SQL
   abstraction cannot express. Returns `null` when unsupported. `dpgsql`
