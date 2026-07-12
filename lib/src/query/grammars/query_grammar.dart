@@ -477,6 +477,12 @@ class QueryGrammar extends BaseGrammar {
         return whereRaw(query, where);
       case 'Column':
         return whereColumn(query, where);
+      case 'JsonContains':
+        return whereJsonContains(query, where);
+      case 'JsonLength':
+        return whereJsonLength(query, where);
+      case 'Fulltext':
+        return whereFullText(query, where);
       default:
         return callMethod('where${where['type']}', [query, where]).toString();
     }
@@ -735,6 +741,22 @@ class QueryGrammar extends BaseGrammar {
     final operator = where['operator'];
 
     return '$firstWrapped $operator $secondWrapped';
+  }
+
+  /// JSON containment predicate. Dialect-specific — overridden where supported.
+  String whereJsonContains(QueryBuilder query, Map<String, dynamic> where) {
+    throw UnsupportedError(
+        'whereJsonContains is not supported by this grammar.');
+  }
+
+  /// JSON array length predicate. Dialect-specific — overridden where supported.
+  String whereJsonLength(QueryBuilder query, Map<String, dynamic> where) {
+    throw UnsupportedError('whereJsonLength is not supported by this grammar.');
+  }
+
+  /// Full-text search predicate. Dialect-specific — overridden where supported.
+  String whereFullText(QueryBuilder query, Map<String, dynamic> where) {
+    throw UnsupportedError('whereFullText is not supported by this grammar.');
   }
 
   ///

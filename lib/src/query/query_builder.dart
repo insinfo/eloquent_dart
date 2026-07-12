@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:eloquent/src/connection.dart';
 import 'package:eloquent/src/connection_interface.dart';
@@ -119,6 +120,9 @@ class QueryBuilder {
 
   /// Indicates if the query returns distinct results.
   bool distinctProp = false;
+
+  /// Columns for a PostgreSQL `SELECT DISTINCT ON (...)` clause.
+  List<String>? distinctOnProp;
 
   /// The table which the query is targeting.
   dynamic fromProp;
@@ -404,6 +408,17 @@ class QueryBuilder {
   QueryBuilder distinct() {
     this.distinctProp = true;
 
+    return this;
+  }
+
+  /// PostgreSQL `SELECT DISTINCT ON (columns) ...`.
+  ///
+  /// Keeps only the first row of each set of rows where the given [columns]
+  /// are equal. Pair with `orderBy` on the same leading columns to make the
+  /// choice deterministic.
+  QueryBuilder distinctOn(List<String> columns) {
+    this.distinctOnProp = columns;
+    this.distinctProp = true;
     return this;
   }
 
@@ -1327,6 +1342,81 @@ class QueryBuilder {
   QueryBuilder orWhereNull(String column) {
     return this.whereNull(column, SqlBool.or);
   }
+
+  // --- PostgreSQL JSON / array / full-text helpers -------------------------
+
+  /// Add a JSON containment clause: `("column")::jsonb @> ?`.
+  ///
+  /// [value] is JSON-encoded and bound. Use for jsonb columns and arrays, e.g.
+  /// `whereJsonContains('tags', ['urgent'])` or
+  /// `whereJsonContains('meta->roles', 'admin')`.
+  QueryBuilder whereJsonContains(String column, dynamic value,
+      [String boolean = SqlBool.and, bool not = false]) {
+    this.wheresProp.add({
+      'type': 'JsonContains',
+      'column': column,
+      'value': value,
+      'boolean': boolean,
+      'not': not,
+    });
+    if (value is! QueryExpression) {
+      this.addBinding(json.encode(value), 'where');
+    }
+    return this;
+  }
+
+  QueryBuilder orWhereJsonContains(String column, dynamic value) =>
+      this.whereJsonContains(column, value, SqlBool.or);
+
+  QueryBuilder whereJsonDoesntContain(String column, dynamic value,
+          [String boolean = SqlBool.and]) =>
+      this.whereJsonContains(column, value, boolean, true);
+
+  QueryBuilder orWhereJsonDoesntContain(String column, dynamic value) =>
+      this.whereJsonContains(column, value, SqlBool.or, true);
+
+  /// Add a JSON array length comparison: `jsonb_array_length(("column")::jsonb) <op> ?`.
+  QueryBuilder whereJsonLength(String column, String operator, dynamic value,
+      [String boolean = SqlBool.and]) {
+    this.wheresProp.add({
+      'type': 'JsonLength',
+      'column': column,
+      'operator': operator,
+      'value': value,
+      'boolean': boolean,
+    });
+    if (value is! QueryExpression) {
+      this.addBinding(value, 'where');
+    }
+    return this;
+  }
+
+  QueryBuilder orWhereJsonLength(String column, String operator, dynamic value) =>
+      this.whereJsonLength(column, operator, value, SqlBool.or);
+
+  /// Add a PostgreSQL full-text search clause across one or more [columns].
+  ///
+  /// [options] may include `'language'` (default `'english'`) and `'mode'`
+  /// (`'plain'` | `'phrase'` | `'websearch'`).
+  QueryBuilder whereFullText(dynamic columns, String value,
+      [Map<String, dynamic> options = const {}, String boolean = SqlBool.and]) {
+    final cols = columns is List
+        ? columns.map((c) => c.toString()).toList()
+        : <String>[columns.toString()];
+    this.wheresProp.add({
+      'type': 'Fulltext',
+      'columns': cols,
+      'value': value,
+      'options': options,
+      'boolean': boolean,
+    });
+    this.addBinding(value, 'where');
+    return this;
+  }
+
+  QueryBuilder orWhereFullText(dynamic columns, String value,
+          [Map<String, dynamic> options = const {}]) =>
+      this.whereFullText(columns, value, options, SqlBool.or);
 
   ///
   /// Add a "where not null" clause to the query.
@@ -2971,6 +3061,8 @@ class QueryBuilder {
         .toList();
     newQuery.lockProp = lockProp;
     newQuery.distinctProp = distinctProp;
+    newQuery.distinctOnProp =
+        distinctOnProp != null ? [...distinctOnProp!] : null;
 
     newQuery.expressionsProp = expressionsProp
         .map((expression) => Map<String, dynamic>.from(expression))
