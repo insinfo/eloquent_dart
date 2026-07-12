@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:dpgsql/dpgsql.dart';
 import 'package:eloquent/eloquent.dart';
 
+import 'dpgsql_driver_access.dart';
 import 'dpgsql_pdo_transaction.dart';
 
 class DpgsqlPDO extends PDOInterface {
@@ -143,6 +144,27 @@ class DpgsqlPDO extends PDOInterface {
         lower.startsWith('with') ||
         lower.startsWith('show') ||
         _containsReturningKeyword(lower);
+  }
+
+  @override
+  DriverAccess driverAccess() => DpgsqlDriverAccess.forPdo(this);
+
+  /// Run [action] with a driver connection (pooled or single), releasing it
+  /// afterwards. Exposed for [DpgsqlDriverAccess].
+  Future<T> useConnection<T>(
+          Future<T> Function(DpgsqlConnection connection) action) =>
+      _withConnection(action);
+
+  /// Open a brand-new dedicated connection independent of the pool/single
+  /// connection. The caller owns its lifecycle (used for LISTEN). Only valid in
+  /// non-pool configuration when [_connection] exists, but always builds a
+  /// fresh connection from the current settings.
+  Future<DpgsqlConnection> openDedicatedConnection() async {
+    final connection = DpgsqlConnection.fromConnectionStringBuilder(
+      _connectionSettingsFromConfig(config),
+    );
+    await connection.open();
+    return connection;
   }
 
   Future<T> _withConnection<T>(

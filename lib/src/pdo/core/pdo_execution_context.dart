@@ -1,3 +1,4 @@
+import '../../driver/driver_access.dart';
 import 'pdo_config.dart';
 import 'pdo_interface.dart';
 import 'pdo_result.dart';
@@ -22,6 +23,10 @@ abstract class PDOExecutionContext {
       'Streaming (cursor) is not supported by this driver adapter.',
     );
   }
+
+  /// Direct, driver-specific access (COPY, pipelining, LISTEN/NOTIFY, raw
+  /// connection). Returns `null` when the adapter has no such capabilities.
+  DriverAccess? driverAccess() => null;
 
   PDOConfig getConfig();
 }

@@ -2,6 +2,18 @@
 
 ### Added
 
+- **Direct driver access (`db.driver()` / `queryBuilder.driver()`)** — a typed
+  `DriverAccess?` escape hatch beside the query builder for capabilities the SQL
+  abstraction cannot express. Returns `null` when unsupported. `dpgsql`
+  implementation (`DpgsqlDriverAccess`) provides:
+  - `copyInRows(table, columns, rows)` / `copyInRaw(sql, byteStream)` — bulk
+    `COPY ... FROM STDIN` (text/raw); far faster than row-by-row inserts.
+  - `copyOutText(sql)` — `COPY ... TO STDOUT`.
+  - `notify(channel, [payload])` / `listen(channel)` — `LISTEN`/`NOTIFY`.
+  - `withRawConnection(action)` — run against the native `DpgsqlConnection`
+    (pipelining, batch, large objects, …).
+  - `DriverAccess.formatCopyTextRow(...)` — COPY text-format escaping helper.
+  Plumbed through `PDOExecutionContext.driverAccess()` and `Connection.driver()`.
 - **Server-side streaming / cursor** — `QueryBuilder.cursor([fetchSize])`
   (and its alias `lazy()`) returns a `Stream<Map<String, dynamic>>` backed by
   an incremental reader, keeping memory roughly constant for very large result

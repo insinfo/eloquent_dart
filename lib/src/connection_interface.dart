@@ -55,6 +55,12 @@ abstract class ConnectionInterface {
       [List bindings = listVoid, bool useReadPdo = true, int? fetchSize]);
 
   ///
+  /// Direct, driver-specific access (COPY, pipelining, LISTEN/NOTIFY, raw
+  /// connection). Returns `null` when unsupported by the active driver.
+  ///
+  DriverAccess? driver();
+
+  ///
   /// Run an insert statement against the database.
   ///
   /// [query]  String
