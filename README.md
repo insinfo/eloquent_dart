@@ -170,6 +170,34 @@ final stream = db.table('big_table').lazy();
 Contrast with `chunk`/`each`, which page with `LIMIT/OFFSET` and load a full
 page into memory per round-trip.
 
+## PostgreSQL JSON / full-text / distinct-on
+
+```dart
+// JSONB containment (value is JSON-encoded and bound)
+await db.table('docs').whereJsonContains('tags', ['urgent']).get();
+await db.table('docs').whereJsonContains('meta', {'name': 'ada'}).get();
+
+// JSON array length
+await db.table('docs').whereJsonLength('tags', '>', 1).get();
+
+// JSON column access via the -> selector  ("meta"->>'name')
+await db.table('docs').where('meta->name', '=', 'ada').get();
+
+// Full-text search (mode: plain | phrase | websearch; language default english)
+await db.table('docs').whereFullText('body', 'quick fox').get();
+await db.table('docs')
+    .whereFullText(['title', 'body'], 'cats OR dogs',
+        {'language': 'simple', 'mode': 'websearch'})
+    .get();
+
+// SELECT DISTINCT ON (one row per user, newest first)
+await db.table('events')
+    .distinctOn(['user_id'])
+    .orderBy('user_id')
+    .orderBy('created_at', 'desc')
+    .get();
+```
+
 ## Direct driver access (COPY, LISTEN/NOTIFY, raw connection)
 
 `db.driver()` (or `queryBuilder.driver()`) returns a `DriverAccess?` — a typed

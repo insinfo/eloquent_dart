@@ -1,5 +1,24 @@
 ## Unreleased (branch `performace`)
 
+### Added — PostgreSQL query-builder features (Phase 9)
+
+- **JSON / JSONB:**
+  - `whereJsonContains(column, value)` / `orWhereJsonContains` /
+    `whereJsonDoesntContain` / `orWhereJsonDoesntContain` →
+    `("column")::jsonb @> ?` (value is JSON-encoded and bound).
+  - `whereJsonLength(column, operator, value)` / `orWhereJsonLength` →
+    `jsonb_array_length(("column")::jsonb) <op> ?`.
+  - JSON column access via the `->` selector already worked in `wrap()`
+    (`where('meta->name', '=', ...)` → `"meta"->>'name'`); now covered by tests.
+- **Full-text search:** `whereFullText(columns, value, {language, mode})` /
+  `orWhereFullText` → `to_tsvector(lang, col) [|| ...] @@ <tsquery>(lang, ?)`,
+  where `mode` is `plain` (default), `phrase`, or `websearch`.
+- **`distinctOn(columns)`** → `SELECT DISTINCT ON (columns) ...`.
+
+  These are implemented in `QueryPostgresGrammar`; the base grammar throws
+  `UnsupportedError` for the JSON/full-text predicates on dialects without
+  support. Validated with unit tests and live PostgreSQL integration tests.
+
 ### Tests / CI
 
 - Added `test/regression_bugs_test.dart` — unit regression guards for the bugs

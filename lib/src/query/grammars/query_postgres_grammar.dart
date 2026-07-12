@@ -90,6 +90,41 @@ class QueryPostgresGrammar extends QueryGrammar {
     return '(' + newCol + ')::jsonb @> ' + value;
   }
 
+  /// `("column")::jsonb @> ?` (optionally negated), used by `whereJsonContains`.
+  @override
+  String whereJsonContains(QueryBuilder query, Map<String, dynamic> where) {
+    final not = where['not'] == true ? 'not ' : '';
+    return not + compileJsonContains(where['column'], parameter(where['value']));
+  }
+
+  /// `jsonb_array_length(("column")::jsonb) <operator> ?`.
+  @override
+  String whereJsonLength(QueryBuilder query, Map<String, dynamic> where) {
+    final col = this.wrap(where['column']).replaceAll('->>', '->');
+    final operator = where['operator'];
+    return 'jsonb_array_length(($col)::jsonb) $operator ${parameter(where['value'])}';
+  }
+
+  /// `(to_tsvector(lang, col) || ...) @@ <tsquery>(lang, ?)`.
+  @override
+  String whereFullText(QueryBuilder query, Map<String, dynamic> where) {
+    final options = (where['options'] as Map?) ?? const {};
+    final language = (options['language'] ?? 'english').toString();
+    final mode = (options['mode'] ?? 'plain').toString();
+
+    final columns = (where['columns'] as List)
+        .map((c) => "to_tsvector('$language', ${this.wrap(c)})")
+        .join(' || ');
+
+    final tsquery = mode == 'phrase'
+        ? 'phraseto_tsquery'
+        : mode == 'websearch'
+            ? 'websearch_to_tsquery'
+            : 'plainto_tsquery';
+
+    return "($columns) @@ $tsquery('$language', ${parameter(where['value'])})";
+  }
+
   ///
   /// Compile the lock into SQL.
   ///
@@ -270,6 +305,26 @@ class QueryPostgresGrammar extends QueryGrammar {
       return wrapJsonSelector(value);
     }
     return '"' + value.replaceAll('"', '""') + '"';
+  }
+
+  /// Compile the select columns, honoring `distinct on (...)`.
+  @override
+  String? compileColumns(QueryBuilder query, dynamic columns) {
+    if (query.aggregateProp != null) {
+      return null;
+    }
+
+    String select;
+    final distinctOn = query.distinctOnProp;
+    if (distinctOn != null && distinctOn.isNotEmpty) {
+      select = 'select distinct on (${distinctOn.map(this.wrap).join(', ')}) ';
+    } else if (query.distinctProp) {
+      select = 'select distinct ';
+    } else {
+      select = 'select ';
+    }
+
+    return select + this.columnize(columns);
   }
 
   String wrapJsonSelector(String value) {
