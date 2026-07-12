@@ -124,7 +124,7 @@ class PostgreSQLSchemaManager extends AbstractSchemaManager {
             a.attnotnull AS isnotnull,
             (SELECT pg_get_expr(ad.adbin, ad.adrelid)
              FROM pg_attrdef ad
-             WHERE ad.adrelid = a.attrelid AND ad.adnum = a.attnum AND ad.adinhcount = 0
+             WHERE ad.adrelid = a.attrelid AND ad.adnum = a.attnum
             ) AS default,
             (SELECT col_description(a.attrelid, a.attnum)) AS comment,
             a.attidentity, -- 'd' for DEFAULT (serial), 'a' for ALWAYS
@@ -165,7 +165,7 @@ class PostgreSQLSchemaManager extends AbstractSchemaManager {
                 ic.relname AS indexname,
                 i.indisprimary AS primary,
                 i.indisunique AS unique,
-                i.indkey AS columns_ordinals,
+                i.indkey::text AS columns_ordinals,
                 i.indrelid AS table_oid,
                 pg_get_indexdef(i.indexrelid) AS indexdef, -- Definição completa
                  pg_get_expr(i.indpred, i.indrelid) AS "where" -- Condição WHERE para índice parcial
@@ -183,17 +183,18 @@ class PostgreSQLSchemaManager extends AbstractSchemaManager {
       return {};
     }
 
-    // Mapear OID da tabela para buscar nomes de coluna eficientemente
-    final tableOid = indexResults
-        .first['table_oid']; // Assume mesmo OID para todos os índices da tabela
-
-    // Query para buscar todos os nomes de coluna da tabela de uma vez
+    // Buscar nomes de coluna por relname/nspname (parâmetros textuais) em vez de
+    // por OID: o tipo `oid` (OID 26) pode não ser decodificado pelo driver e,
+    // rebindado como parâmetro, gera "operator does not exist: oid = bytea".
     const columnSql = '''
-          SELECT attnum, attname
-          FROM pg_attribute
-          WHERE attrelid = ? AND attnum > 0 AND NOT attisdropped;
+          SELECT a.attnum, a.attname
+          FROM pg_attribute a
+          JOIN pg_class c ON c.oid = a.attrelid
+          JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE c.relname = ? AND n.nspname = ? AND a.attnum > 0 AND NOT a.attisdropped;
       ''';
-    final columnResults = await connection.select(columnSql, [tableOid]);
+    final columnResults =
+        await connection.select(columnSql, [cleanTableName, currentSchema]);
     // Criar mapa de ordinal para nome de coluna
     final columnOrdinalMap = {
       for (var row in columnResults)

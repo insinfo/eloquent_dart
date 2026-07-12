@@ -1,5 +1,31 @@
 ## Unreleased (branch `performace`)
 
+### Schema diff → ALTER (Phase 7 — Doctrine loop)
+
+- **Live introspection now works.** Fixed three bugs in
+  `PostgreSQLSchemaManager` that made `listTableDetails` throw against a real
+  database:
+  - `listTableColumns` referenced the non-existent `pg_attrdef.adinhcount`
+    (`42703`); removed the bogus predicate.
+  - `listTableIndexes` bound a table `oid` back as a parameter
+    (`operator does not exist: oid = bytea`); now looks columns up by
+    `relname`/`nspname` (text params).
+  - `i.indkey` (`int2vector`) decoded as raw bytes; now cast to `::text`.
+- The introspection → diff → ALTER pipeline is functional end to end:
+  `connection.getDoctrineSchemaManager().listTableDetails(...)` →
+  `Comparator().compareTables(...)` / `grammar.getChangedDiff(blueprint, sm)` →
+  `SchemaPostgresGrammar.compileTableDiff(diff, blueprint)` → executable
+  `ALTER TABLE ...` statements (add/drop/rename/retype/nullable/default,
+  indexes, FKs, unique constraints).
+- Exported the Doctrine schema classes from the package barrel (`Comparator`,
+  `Table`, `Column`, `TableDiff`, `ColumnDiff`, `Index`,
+  `ForeignKeyConstraint`, `UniqueConstraint`, `AbstractSchemaManager`).
+- Added `analysis_options.yaml` (ignores `unnecessary_import`, which the barrel
+  re-export pattern trips) so `dart analyze` is clean.
+- Tests: `test/doctrine_diff_alter_integration_test.dart` (live introspection,
+  empty round-trip diff, change-type/nullability, add/drop columns) validated
+  against PostgreSQL 17.
+
 ### Added — PostgreSQL query-builder features (Phase 9)
 
 - **JSON / JSONB:**
