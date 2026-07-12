@@ -77,6 +77,9 @@ class FakeConnection implements ConnectionInterface {
   }
 
   @override
+  DriverAccess? driver() => null;
+
+  @override
   Stream<Map<String, dynamic>> cursor(String query,
       [List bindings = const [], bool useReadPdo = true, int? fetchSize]) async* {
     lastSelectSql = query;

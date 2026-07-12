@@ -1,6 +1,7 @@
 import 'package:dpgsql/dpgsql.dart';
 import 'package:eloquent/eloquent.dart';
 
+import 'dpgsql_driver_access.dart';
 import 'dpgsql_pdo.dart';
 
 class DpgsqlPDOTransaction extends PDOExecutionContext {
@@ -15,6 +16,10 @@ class DpgsqlPDOTransaction extends PDOExecutionContext {
   PDOConfig getConfig() {
     return super.pdoInstance.config;
   }
+
+  @override
+  DriverAccess driverAccess() =>
+      DpgsqlDriverAccess.forConnection(connection);
 
   @override
   Future<int> execute(String statement, [int? timeoutInSeconds]) async {

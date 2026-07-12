@@ -6,6 +6,7 @@ export 'src/query/sql_constants.dart';
 
 export 'src/query/join_clause.dart';
 export 'src/query/on_conflict_clause.dart';
+export 'src/driver/driver_access.dart';
 
 export 'src/grammar.dart'; //BaseGrammar
 export 'src/query/grammars/query_grammar.dart';

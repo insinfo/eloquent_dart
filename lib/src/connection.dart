@@ -318,6 +318,15 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   }
 
   ///
+  /// Direct, driver-specific access (COPY, pipelining, LISTEN/NOTIFY, raw
+  /// connection). Returns `null` when the active driver adapter has no such
+  /// capabilities (only the `dpgsql` adapter implements it today).
+  @override
+  DriverAccess? driver() {
+    return this.getPdo().driverAccess();
+  }
+
+  ///
   /// Get the PDO connection to use for a select query.
   ///
   /// @param  bool  $useReadPdo

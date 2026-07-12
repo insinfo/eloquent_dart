@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:eloquent/src/connection.dart';
 import 'package:eloquent/src/connection_interface.dart';
+import 'package:eloquent/src/driver/driver_access.dart';
 import 'package:eloquent/src/contracts/pagination/default_length_aware_paginator.dart';
 import 'package:eloquent/src/contracts/pagination/default_paginator.dart';
 import 'package:eloquent/src/contracts/pagination/length_aware_paginator.dart';
@@ -1854,6 +1855,18 @@ class QueryBuilder {
   /// Alias for [cursor] — lazily stream rows without loading them all in memory.
   ///
   Stream<Map<String, dynamic>> lazy([int? fetchSize]) => this.cursor(fetchSize);
+
+  ///
+  /// Direct, driver-specific access (bulk COPY, pipelining, LISTEN/NOTIFY, raw
+  /// connection). Returns `null` when the active driver has no such support.
+  ///
+  /// ```dart
+  /// final drv = db.table('t').driver();
+  /// if (drv != null && drv.supportsCopy) {
+  ///   await drv.copyInRows('temp_location', ['id', 'city'], rows);
+  /// }
+  /// ```
+  DriverAccess? driver() => this.connection.driver();
 
   ///
   /// Paginate the given query into a simple paginator.

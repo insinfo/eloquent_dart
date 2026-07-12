@@ -169,6 +169,36 @@ final stream = db.table('big_table').lazy();
 
 Contrast with `chunk`/`each`, which page with `LIMIT/OFFSET` and load a full
 page into memory per round-trip.
+
+## Direct driver access (COPY, LISTEN/NOTIFY, raw connection)
+
+`db.driver()` (or `queryBuilder.driver()`) returns a `DriverAccess?` — a typed
+escape hatch for driver features the query builder cannot express. It is `null`
+when the active driver does not support it (only `dpgsql` today).
+
+```dart
+final drv = db.table('temp_location').driver();
+if (drv != null && drv.supportsCopy) {
+  // Bulk load via COPY ... FROM STDIN (much faster than many inserts)
+  await drv.copyInRows(
+    'temp_location',
+    ['id', 'city'],
+    [ [1, 'Rio'], [2, 'Niteroi'] ],
+  );
+
+  // COPY ... TO STDOUT
+  final csv = await drv.copyOutText('COPY (SELECT * FROM temp_location) TO STDOUT');
+}
+
+// LISTEN / NOTIFY
+final sub = drv!.listen('canal').listen((n) => print(n.payload));
+await drv.notify('canal', 'ping');
+
+// Full escape hatch: the native DpgsqlConnection (pipelining, batch, etc.)
+await drv.withRawConnection((conn) async {
+  // conn is a DpgsqlConnection
+});
+```
 ## using connection pool (works for mysql and postgresql)
 
 ```dart
