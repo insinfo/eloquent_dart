@@ -1,5 +1,22 @@
 ## Unreleased (branch `performace`)
 
+### Tests / CI
+
+- Added `test/regression_bugs_test.dart` — unit regression guards for the bugs
+  fixed on this branch: schema DDL (`compileCreate`/`compileAdd`/`compileDrop`/
+  `compileDropIfExists`, previously stubbed to `['']`), `compileInsert` empty
+  values (stray `}`), `SchemaBuilder._getSchemaName` List/CSV schema config, and
+  the `wrap()`/`wrapValue()` fast paths.
+- Added `test/mysql_upsert_integration_test.dart` — validates the MySQL
+  UPSERT / `INSERT IGNORE` paths against a live MariaDB.
+- Added `dart_test.yaml` pinning `concurrency: 1` (matching CI). The DB
+  integration suites share fixtures — the three driver-variant PostgreSQL
+  suites reuse the same tables — so parallel file execution collides. Tagged the
+  integration test files with `@Tags(['integration'])` (`dart test -x integration`
+  runs only the isolated unit tests).
+- CI (`.github/workflows/dart.yml`) now also triggers on the `performace`
+  branch and creates the `dart_test` PostgreSQL database.
+
 ### Performance
 
 - **Query compilation hot path** (~17% faster `toSql()` on a medium query in an

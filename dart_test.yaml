@@ -1,0 +1,19 @@
+# Test runner configuration.
+#
+# The suite mixes pure-unit tests (no database) with database-integration tests
+# that share fixtures. In particular, the three driver-variant suites
+# (postgres_query_test, postgres_v3_query_test, dargres_query_test) exercise the
+# SAME PostgreSQL database with identical table names (temp_location, people,
+# temp_*), so running test files in parallel makes them drop/create each other's
+# tables. Run serially by default (this mirrors the CI, which uses
+# `--concurrency 1`). Override on the command line with `dart test -j <N>` if you
+# only run isolated/unit files.
+concurrency: 1
+
+# Fail fast on a hung DB connection instead of blocking the whole suite.
+timeout: 2x
+
+tags:
+  # Database-integration tests (require a live PostgreSQL / MySQL). Select with
+  # `dart test -t integration` or exclude with `dart test -x integration`.
+  integration:
