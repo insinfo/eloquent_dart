@@ -29,6 +29,17 @@ export 'src/migrations/database_migration_repository.dart';
 export 'src/seeds/seeder.dart';
 export 'src/seeds/seeder_runner.dart';
 
+// Doctrine schema (introspection + diff -> ALTER)
+export 'src/doctrine/schema/abstract_schema_manager.dart';
+export 'src/doctrine/schema/comparator.dart';
+export 'src/doctrine/schema/table.dart';
+export 'src/doctrine/schema/column.dart';
+export 'src/doctrine/schema/table_diff.dart';
+export 'src/doctrine/schema/column_diff.dart';
+export 'src/doctrine/schema/index.dart';
+export 'src/doctrine/schema/foreign_key_constraint.dart';
+export 'src/doctrine/schema/unique_constraint.dart';
+
 export 'src/connection_interface.dart';
 export 'src/connection_resolver_interface.dart';
 export 'src/connection.dart';

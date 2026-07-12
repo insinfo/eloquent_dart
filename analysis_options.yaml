@@ -1,0 +1,10 @@
+# Analysis options for the eloquent package.
+#
+# The public API is exposed through the `lib/eloquent.dart` barrel, which
+# re-exports many internal `src/...` libraries. Internal files that import both
+# the barrel and a sibling `src/...` file therefore trip `unnecessary_import`.
+# That is an intentional consequence of the barrel pattern, not a real issue,
+# so the hint is disabled to keep `dart analyze` clean.
+analyzer:
+  errors:
+    unnecessary_import: ignore
