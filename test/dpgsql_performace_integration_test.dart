@@ -7,6 +7,9 @@
 // Connection: localhost:5432 db=postgres user/pass=dart (dpgsql driver).
 // Run with:  dart test test/dpgsql_performace_integration_test.dart
 
+@Tags(['integration'])
+library;
+
 import 'package:eloquent/eloquent.dart';
 import 'package:test/test.dart';
 

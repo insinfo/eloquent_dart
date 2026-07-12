@@ -6,9 +6,9 @@ name: Dart
 run-name: ${{ github.actor }} is testing Dart
 on:
   push:
-    branches: [ main ]
+    branches: [ main, performace ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, performace ]
 
 #env: 
   #DB_HOST: localhost
@@ -97,9 +97,10 @@ jobs:
           sudo -u postgres psql --command="SELECT rolname,rolpassword FROM pg_authid" 
       - name: Create additional database
         run: |
-          sudo -u postgres createdb banco_teste --owner=sisadmin 
-          sudo -u postgres createdb sistemas --owner=sisadmin 
-          PGPASSWORD=s1sadm1n     
+          sudo -u postgres createdb banco_teste --owner=sisadmin
+          sudo -u postgres createdb sistemas --owner=sisadmin
+          sudo -u postgres createdb dart_test --owner=dart
+          PGPASSWORD=s1sadm1n
       - uses: actions/checkout@v2
       - name: Copy pg_hba
         run: |          
