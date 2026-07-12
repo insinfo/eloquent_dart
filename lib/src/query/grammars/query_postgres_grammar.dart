@@ -114,7 +114,7 @@ class QueryPostgresGrammar extends QueryGrammar {
   String compileInsert(QueryBuilder query, Map<String, dynamic> values) {
     final table = this.wrapTable(query.fromProp);
     return values.isEmpty
-        ? "insert into $table} DEFAULT VALUES"
+        ? "insert into $table DEFAULT VALUES"
         : super.compileInsert(query, values);
   }
 
