@@ -1,3 +1,38 @@
+## Unreleased (branch `performace`)
+
+### Added
+
+- **`QueryBuilder.upsert(values, uniqueBy, [update])`** — atomic UPSERT.
+  PostgreSQL: `INSERT ... ON CONFLICT (uniqueBy) DO UPDATE SET ...`;
+  MySQL: `INSERT ... ON DUPLICATE KEY UPDATE ...`. When `update` is omitted,
+  all non-`uniqueBy` columns are updated from the would-be-inserted row.
+- **`QueryBuilder.insertOrIgnore(values)`** — PostgreSQL `ON CONFLICT DO NOTHING`
+  / MySQL `INSERT IGNORE`. Returns the number of rows actually inserted.
+- **Low-level fluent conflict API** — `onConflict([columns], [constraint])`,
+  `doUpdate(values, [whereRaw])`, `doNothing()`, and `returning([columns])`
+  applied to `insert(...)`. Enables lock-free sequence patterns such as:
+
+  ```dart
+  final rows = await db.table('processos_sequences')
+    .onConflict(['ano'])
+    .doUpdate({'last_id': db.raw('processos_sequences.last_id + 1')})
+    .returning(['last_id'])
+    .insert({'ano': 2026, 'last_id': 1});
+  final seq = rows.first['last_id']; // equivalent to PL/pgSQL "RETURNING ... INTO"
+  ```
+
+### Fixed
+
+- `QueryPostgresGrammar.compileInsert` emitted a stray `}` for empty inserts
+  (`insert into <table>} DEFAULT VALUES`).
+- `DargresPDO` now compiles against `dargres` 4.0.0 (immutable `TimeZoneSettings`;
+  `PostgreSqlPool` no longer implements `ConnectionInterface`).
+
+### Docs
+
+- Added `docs/PERFORMANCE_REWRITE_PLAN.md` — phased roadmap for the
+  performance-focused rewrite.
+
 ## 4.0.0
 
 ### Breaking changes

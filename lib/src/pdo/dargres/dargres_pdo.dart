@@ -20,15 +20,22 @@ class DargresPDO extends PDOInterface {
     super.pdoInstance = this;
   }
 
-  /// CoreConnection
-  dargres.ConnectionInterface? connection;
+  /// Underlying dargres connection. Either a [dargres.CoreConnection] (single)
+  /// or a [dargres.PostgreSqlPool] (pool). As of dargres 4.0.0 the pool no
+  /// longer implements `ConnectionInterface`, but both expose the same
+  /// `execute`/`queryNamed`/`runInTransaction`/`close` surface used here.
+  dynamic connection;
 
   //called from postgres_connector.dart
   Future<DargresPDO> connect() async {
-    final timeZone = dargres.TimeZoneSettings(config.timezone ?? 'UTC');
-    timeZone.forceDecodeTimestamptzAsUTC = config.forceDecodeTimestamptzAsUTC;
-    timeZone.forceDecodeTimestampAsUTC = config.forceDecodeTimestampAsUTC;
-    timeZone.forceDecodeDateAsUTC = config.forceDecodeDateAsUTC;
+    // dargres 4.0.0: TimeZoneSettings is immutable; pass the decode flags via
+    // the constructor instead of mutating fields after construction.
+    final timeZone = dargres.TimeZoneSettings(
+      config.timezone ?? 'UTC',
+      forceDecodeTimestamptzAsUTC: config.forceDecodeTimestamptzAsUTC,
+      forceDecodeTimestampAsUTC: config.forceDecodeTimestampAsUTC,
+      forceDecodeDateAsUTC: config.forceDecodeDateAsUTC,
+    );
 
     if (config.pool == true) {
       final settings = dargres.ConnectionSettings(
