@@ -62,6 +62,45 @@ class SchemaPostgresGrammar extends SchemaGrammar {
 
   // --- Métodos de Compilação de Comandos (Retornam List<String>) ---
 
+  /// Compila um comando "create" (CREATE TABLE ...).
+  @override
+  List<String> compileCreate(
+      Blueprint blueprint, Fluent command, Connection connection) {
+    final defs = blueprint.getAddedColumns().map((column) {
+      var sql = '${wrap(column)} ${getType(column)}';
+      sql = addModifiers(sql, blueprint, column);
+      // A single auto-increment column becomes the primary key inline
+      // (`bigserial primary key`), matching the common `increments('id')` case.
+      if (column['autoIncrement'] == true) {
+        sql += ' primary key';
+      }
+      return sql;
+    }).join(', ');
+
+    final temporary = blueprint.temporaryV ? 'create temporary' : 'create';
+    return ['$temporary table ${wrapTable(blueprint)} ($defs)'];
+  }
+
+  /// Compila um comando "add" (ALTER TABLE ... ADD COLUMN ...).
+  @override
+  List<String> compileAdd(Blueprint blueprint, Fluent command) {
+    final adds =
+        getColumns(blueprint).map((column) => 'add column $column').join(', ');
+    return ['alter table ${wrapTable(blueprint)} $adds'];
+  }
+
+  /// Compila um comando "drop" (DROP TABLE ...).
+  @override
+  List<String> compileDrop(Blueprint blueprint, Fluent command) {
+    return ['drop table ${wrapTable(blueprint)}'];
+  }
+
+  /// Compila um comando "dropIfExists" (DROP TABLE IF EXISTS ...).
+  @override
+  List<String> compileDropIfExists(Blueprint blueprint, Fluent command) {
+    return ['drop table if exists ${wrapTable(blueprint)}'];
+  }
+
   /// Compila um comando de chave primária (ALTER TABLE ... ADD PRIMARY KEY).
   @override
   List<String> compilePrimary(Blueprint blueprint, Fluent command) {

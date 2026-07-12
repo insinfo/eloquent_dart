@@ -16,6 +16,18 @@ export 'src/query/grammars/query_postgres_grammar.dart';
 export 'src/schema/grammars/schema_grammar.dart';
 export 'src/schema/grammars/schema_postgres_grammar.dart';
 export 'src/schema/blueprint.dart';
+export 'src/schema/schema_builder.dart';
+
+// Migrations
+export 'src/migrations/migration.dart';
+export 'src/migrations/migrator.dart';
+export 'src/migrations/migration_creator.dart';
+export 'src/migrations/migration_repository_interface.dart';
+export 'src/migrations/database_migration_repository.dart';
+
+// Seeders
+export 'src/seeds/seeder.dart';
+export 'src/seeds/seeder_runner.dart';
 
 export 'src/connection_interface.dart';
 export 'src/connection_resolver_interface.dart';

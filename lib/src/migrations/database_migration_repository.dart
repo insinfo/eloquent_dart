@@ -49,20 +49,23 @@ class DatabaseMigrationRepository implements MigrationRepositoryInterface {
         .get();
   }
 
-  /// Get the migrations based on a batch limit.
+  /// Get the migrations belonging to the last [steps] batches, in reverse
+  /// order (batch desc, migration desc).
+  ///
+  /// [steps] is a number of *batches* (not rows), matching Laravel semantics:
+  /// rolling back one step reverts every migration in the most recent batch.
   @override
   Future<List<Map<String, dynamic>>> getMigrations(int steps) async {
+    final lastBatch = await getLastBatchNumber();
+    if (lastBatch == 0) return [];
+    final minBatch = (lastBatch - steps + 1).clamp(1, lastBatch);
+
     final query = await _table();
-    final results = await query
-        .where('batch', '>=', 1) // Ensure batch is valid
+    return query
+        .where('batch', '>=', minBatch)
         .orderBy('batch', 'desc')
         .orderBy('migration', 'desc')
-        .take(
-            steps) // Limit by number of migrations, not batches directly like PHP
         .get();
-    // Note: The PHP version limits by batch number difference, which is harder
-    // to replicate precisely without knowing max batch first. This limits by row count.
-    return results;
   }
 
   /// Log that a migration was run.
@@ -155,7 +158,10 @@ class DatabaseMigrationRepository implements MigrationRepositoryInterface {
 
   /// Resolve the database connection instance. (Helper)
   Future<ConnectionInterface> _getConnection() async {
-    return resolver.connection(connectionName!); // Pass optional connection name
+    // When no explicit source connection is set, fall back to the resolver's
+    // default connection instead of dereferencing a null connection name.
+    final name = connectionName;
+    return name == null ? resolver.connection() : resolver.connection(name);
   }
 
   /// Set the information source (connection name).
