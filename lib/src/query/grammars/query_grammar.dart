@@ -205,12 +205,51 @@ class QueryGrammar extends BaseGrammar {
         isProp = proP.isNotEmpty;
       }
       if (isProp) {
-        final methodName = 'compile' + Utils.ucfirst(component);
-        final extraParam = proP;
-        sql[component] = callMethod(methodName, [query, extraParam]);
+        // Direct dispatch (avoids per-call string construction + map lookup in
+        // the hot path). Virtual dispatch still reaches dialect overrides.
+        sql[component] = _compileComponent(query, component, proP);
       }
     }
     return sql;
+  }
+
+  /// Compile a single select component by name via a direct switch.
+  ///
+  /// SQL output is identical to routing through [callMethod]; the switch just
+  /// skips the `'compile' + ucfirst(...)` allocation and the `_methodMap`
+  /// lookup performed on every component of every compile.
+  dynamic _compileComponent(
+      QueryBuilder query, String component, dynamic prop) {
+    switch (component) {
+      case 'expressions':
+        return compileExpressions(query);
+      case 'aggregate':
+        return compileAggregate(query, prop);
+      case 'columns':
+        return compileColumns(query, prop);
+      case 'from':
+        return compileFrom(query, prop);
+      case 'joins':
+        return compileJoins(query, prop);
+      case 'wheres':
+        return compileWheres(query);
+      case 'groups':
+        return compileGroups(query, prop);
+      case 'havings':
+        return compileHavings(query, prop);
+      case 'orders':
+        return compileOrders(query, prop);
+      case 'limit':
+        return compileLimit(query, prop);
+      case 'offset':
+        return compileOffset(query, prop);
+      case 'unions':
+        return compileUnions(query);
+      case 'lock':
+        return compileLock(query, prop);
+      default:
+        return callMethod('compile' + Utils.ucfirst(component), [query, prop]);
+    }
   }
 
   ///
@@ -378,12 +417,7 @@ class QueryGrammar extends BaseGrammar {
     // for actually creating the where clauses SQL. This helps keep the code nice
     // and maintainable since each clause has a very small method that it uses.
     for (var where in query.wheresProp) {
-      final methodName = "where${where['type']}";
-
-      //call whereBasic
-      //sql.add(where['boolean'] +  ' ' +  Utils.call_method(this, methodName, [query, where]));
-
-      sql.add(where['boolean'] + ' ' + callMethod(methodName, [query, where]));
+      sql.add(where['boolean'] + ' ' + _compileWhere(query, where));
     }
 
     // If we actually have some where clauses, we will strip off the first boolean
@@ -396,6 +430,56 @@ class QueryGrammar extends BaseGrammar {
     }
 
     return '';
+  }
+
+  /// Compile a single where clause by its `type` via a direct switch.
+  ///
+  /// SQL is identical to routing through [callMethod]; the switch avoids the
+  /// `"where" + type` string allocation and `_methodMap` lookup per clause.
+  /// Unknown types fall back to [callMethod] for full backward compatibility.
+  String _compileWhere(QueryBuilder query, Map<String, dynamic> where) {
+    switch (where['type']) {
+      case 'Basic':
+        return whereBasic(query, where);
+      case 'Nested':
+        return whereNested(query, where);
+      case 'Sub':
+        return whereSub(query, where);
+      case 'Between':
+        return whereBetween(query, where);
+      case 'Exists':
+        return whereExists(query, where);
+      case 'NotExists':
+        return whereNotExists(query, where);
+      case 'In':
+        return whereIn(query, where);
+      case 'NotIn':
+        return whereNotIn(query, where);
+      case 'InSub':
+        return whereInSub(query, where);
+      case 'NotInSub':
+        return whereNotInSub(query, where);
+      case 'Null':
+        return whereNull(query, where);
+      case 'NotNull':
+        return whereNotNull(query, where);
+      case 'Date':
+        return whereDate(query, where);
+      case 'Time':
+        return whereTime(query, where);
+      case 'Day':
+        return whereDay(query, where);
+      case 'Month':
+        return whereMonth(query, where);
+      case 'Year':
+        return whereYear(query, where);
+      case 'Raw':
+        return whereRaw(query, where);
+      case 'Column':
+        return whereColumn(query, where);
+      default:
+        return callMethod('where${where['type']}', [query, where]).toString();
+    }
   }
 
   ///
