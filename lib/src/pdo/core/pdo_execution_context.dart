@@ -10,5 +10,18 @@ abstract class PDOExecutionContext {
   Future<PDOResults> query(String query,
       [dynamic params, int? timeoutInSeconds]);
 
+  /// Stream rows from a query using a server-side cursor / incremental reader,
+  /// keeping memory roughly constant regardless of result-set size.
+  ///
+  /// Default: [UnsupportedError]. Driver adapters that expose an incremental
+  /// reader (e.g. dpgsql's `executeReader`) override this. [fetchSize] is a
+  /// hint for the number of rows to buffer per network round-trip.
+  Stream<Map<String, dynamic>> queryStream(String query,
+      [dynamic params, int? fetchSize]) {
+    throw UnsupportedError(
+      'Streaming (cursor) is not supported by this driver adapter.',
+    );
+  }
+
   PDOConfig getConfig();
 }

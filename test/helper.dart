@@ -77,6 +77,17 @@ class FakeConnection implements ConnectionInterface {
   }
 
   @override
+  Stream<Map<String, dynamic>> cursor(String query,
+      [List bindings = const [], bool useReadPdo = true, int? fetchSize]) async* {
+    lastSelectSql = query;
+    lastSelectBindings = List.from(bindings);
+    selectCallCount++;
+    for (final row in mockSelectResult) {
+      yield row;
+    }
+  }
+
+  @override
   Future<PDOResults> insert(String query,
       [List bindings = const [], int? timeoutInSeconds]) async {
     lastInsertSql = query;

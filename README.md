@@ -150,6 +150,25 @@ RETURNING last_id;
 > Note: `RETURNING ... INTO` is PL/pgSQL syntax (inside functions/DO blocks).
 > The client-side idiom is `RETURNING <col>` whose value is read in Dart — which
 > is exactly what `.returning([...]).insert(...)` returns (a `List<Map>`).
+
+## Streaming large result sets (server-side cursor)
+
+`cursor()` streams rows one at a time using the driver's incremental reader,
+so memory stays roughly constant even for millions of rows (only the `dpgsql`
+driver implementation supports it today; others throw `UnsupportedError`).
+
+```dart
+// driver_implementation: 'dpgsql'
+await for (final row in db.table('big_table').where('ativo', '=', true).cursor()) {
+  process(row); // constant memory, no full materialization
+}
+
+// lazy() is an alias
+final stream = db.table('big_table').lazy();
+```
+
+Contrast with `chunk`/`each`, which page with `LIMIT/OFFSET` and load a full
+page into memory per round-trip.
 ## using connection pool (works for mysql and postgresql)
 
 ```dart
