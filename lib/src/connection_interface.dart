@@ -42,6 +42,19 @@ abstract class ConnectionInterface {
       int? timeoutInSeconds]);
 
   ///
+  /// Stream a select statement's rows using a server-side cursor / incremental
+  /// reader, keeping memory roughly constant for very large result sets.
+  ///
+  /// [query]  String
+  /// [bindings]  List
+  /// [useReadPdo]  bool
+  /// [fetchSize]  advisory rows-per-round-trip hint
+  /// @return Stream of row maps
+  ///
+  Stream<Map<String, dynamic>> cursor(String query,
+      [List bindings = listVoid, bool useReadPdo = true, int? fetchSize]);
+
+  ///
   /// Run an insert statement against the database.
   ///
   /// [query]  String

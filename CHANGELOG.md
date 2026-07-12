@@ -2,6 +2,15 @@
 
 ### Added
 
+- **Server-side streaming / cursor** — `QueryBuilder.cursor([fetchSize])`
+  (and its alias `lazy()`) returns a `Stream<Map<String, dynamic>>` backed by
+  an incremental reader, keeping memory roughly constant for very large result
+  sets (unlike `chunk`/`each`, which page with LIMIT/OFFSET and materialize
+  each page). Plumbed through `ConnectionInterface.cursor(...)`,
+  `Connection.cursor(...)` and `PDOExecutionContext.queryStream(...)`.
+  Implemented for the `dpgsql` adapter (via `executeReader`); other adapters
+  throw `UnsupportedError`.
+
 - **`QueryBuilder.upsert(values, uniqueBy, [update])`** — atomic UPSERT.
   PostgreSQL: `INSERT ... ON CONFLICT (uniqueBy) DO UPDATE SET ...`;
   MySQL: `INSERT ... ON DUPLICATE KEY UPDATE ...`. When `update` is omitted,

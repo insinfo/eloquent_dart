@@ -103,6 +103,40 @@ class DpgsqlPDO extends PDOInterface {
     });
   }
 
+  @override
+  Stream<Map<String, dynamic>> queryStream(String query,
+      [dynamic params, int? fetchSize]) async* {
+    // Server-side, incremental streaming via dpgsql's forward-only reader.
+    // Memory stays roughly constant regardless of result-set size. For pooled
+    // connections the connection is held for the lifetime of the stream and
+    // returned to the pool once the stream is fully drained (or on error).
+    final connection = await _openConnectionForOperation();
+    DpgsqlDataReader? reader;
+    try {
+      reader = await connection.executeReader(
+        query,
+        parameters: parametersFromBindings(params),
+      );
+      while (await reader.read()) {
+        yield reader.toMap();
+      }
+    } catch (e) {
+      if (_isConnectionFailure(e)) {
+        connection.markUnusable();
+      }
+      rethrow;
+    } finally {
+      if (reader != null) {
+        try {
+          await reader.close();
+        } catch (_) {}
+      }
+      if (_dataSource != null) {
+        await connection.close();
+      }
+    }
+  }
+
   static bool expectsRows(String sql) {
     final lower = sql.trimLeft().toLowerCase();
     return lower.startsWith('select') ||

@@ -1818,6 +1818,44 @@ class QueryBuilder {
   }
 
   ///
+  /// Stream the query results row-by-row using a server-side cursor.
+  ///
+  /// Unlike [chunk]/[each] (which page with LIMIT/OFFSET and materialize each
+  /// page), this keeps memory roughly constant for arbitrarily large result
+  /// sets by consuming an incremental reader. Only supported on drivers that
+  /// implement streaming (currently `dpgsql`); otherwise throws
+  /// [UnsupportedError].
+  ///
+  /// ```dart
+  /// await for (final row in db.table('big').where('ok', '=', true).cursor()) {
+  ///   process(row);
+  /// }
+  /// ```
+  Stream<Map<String, dynamic>> cursor([int? fetchSize]) async* {
+    final original = this.columnsProp != null ? [...this.columnsProp!] : null;
+    if (this.columnsProp == null) {
+      this.columnsProp = ['*'];
+    }
+    try {
+      final sqlStr = this.toSql();
+      final bid = this.getBindings();
+      yield* this.connection.cursor(
+            sqlStr,
+            bid,
+            !this.useWritePdoProp,
+            fetchSize,
+          );
+    } finally {
+      this.columnsProp = original;
+    }
+  }
+
+  ///
+  /// Alias for [cursor] — lazily stream rows without loading them all in memory.
+  ///
+  Stream<Map<String, dynamic>> lazy([int? fetchSize]) => this.cursor(fetchSize);
+
+  ///
   /// Paginate the given query into a simple paginator.
   ///
   ///

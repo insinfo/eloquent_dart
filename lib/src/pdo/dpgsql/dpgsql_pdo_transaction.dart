@@ -45,4 +45,22 @@ class DpgsqlPDOTransaction extends PDOExecutionContext {
     final affected = await command.executeNonQuery().timeout(timeout);
     return PDOResults([], affected);
   }
+
+  @override
+  Stream<Map<String, dynamic>> queryStream(String query,
+      [dynamic params, int? fetchSize]) async* {
+    // Streams over the transaction's live connection; the connection is owned
+    // by the surrounding transaction, so it is not closed here.
+    final reader = await connection.executeReader(
+      query,
+      parameters: DpgsqlPDO.parametersFromBindings(params),
+    );
+    try {
+      while (await reader.read()) {
+        yield reader.toMap();
+      }
+    } finally {
+      await reader.close();
+    }
+  }
 }

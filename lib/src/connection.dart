@@ -295,6 +295,29 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   }
 
   ///
+  /// Stream a select statement's rows using a server-side cursor / incremental
+  /// reader, keeping memory roughly constant regardless of result-set size.
+  ///
+  /// Throws [UnsupportedError] on driver adapters without streaming support
+  /// (only the `dpgsql` adapter implements it today). [fetchSize] is an
+  /// advisory hint for rows buffered per round-trip.
+  ///
+  /// Note: unlike [select], this does not go through the reconnect wrapper —
+  /// a dropped connection mid-stream surfaces as an error to the consumer.
+  @override
+  Stream<Map<String, dynamic>> cursor(String query,
+      [List bindings = const [],
+      bool useReadPdo = true,
+      int? fetchSize]) async* {
+    if (this.pretending()) {
+      return;
+    }
+    final pdoL = this.getPdoForSelect(useReadPdo);
+    final params = this.prepareBindings(bindings);
+    yield* pdoL.queryStream(query, params, fetchSize);
+  }
+
+  ///
   /// Get the PDO connection to use for a select query.
   ///
   /// @param  bool  $useReadPdo
