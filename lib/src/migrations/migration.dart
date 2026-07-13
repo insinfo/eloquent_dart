@@ -1,5 +1,6 @@
 // lib/src/migrations/migration.dart
 import 'dart:async';
+import '../connection.dart'; // Connection (transaction override)
 import '../schema/schema_builder.dart'; // Need Schema facade
 import '../database_manager.dart'; // Need DatabaseManager or similar
 
@@ -17,9 +18,23 @@ abstract class Migration {
   DatabaseManager? db; // Or a similar way to access connections/schema builder
   String? connectionName; // Option 2
 
+  /// When set (by the migrator during a transactional run), `schema` resolves
+  /// its [SchemaBuilder] from this connection so DDL participates in the
+  /// migration's transaction.
+  Connection? connectionOverride;
+
+  /// Whether this migration should run inside a database transaction (so a
+  /// failure rolls back its DDL). Set to `false` for statements that cannot run
+  /// in a transaction (e.g. `CREATE INDEX CONCURRENTLY` on PostgreSQL).
+  bool withinTransaction = true;
+
   /// The Schema builder instance for the default or specified connection.
   Future<SchemaBuilder> get schema async {
     // <--- Marcado como async
+    final override = connectionOverride;
+    if (override != null) {
+      return override.getSchemaBuilder();
+    }
     if (db == null) {
       throw StateError('DatabaseManager (db) is not set on this migration.');
     }

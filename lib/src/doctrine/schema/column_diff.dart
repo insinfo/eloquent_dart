@@ -1,3 +1,5 @@
+import 'package:collection/collection.dart';
+
 import 'column.dart';
 
 /// Representa as diferenças entre duas definições de coluna.
@@ -35,9 +37,10 @@ class ColumnDiff {
       changedProperties.add('comment');
     if (oldColumn.collation != newColumn.collation)
       changedProperties.add('collation');
-    // TODO: Comparar platformOptions de forma mais robusta
-    if (oldColumn.platformOptions.toString() !=
-        newColumn.platformOptions.toString()) {
+    // Deep, key-order-independent comparison of platformOptions (a Map),
+    // instead of a fragile toString() compare.
+    if (!const DeepCollectionEquality()
+        .equals(oldColumn.platformOptions, newColumn.platformOptions)) {
       changedProperties.add('platformOptions');
     }
     if (oldColumn.columnDefinition != newColumn.columnDefinition)

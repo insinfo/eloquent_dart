@@ -131,10 +131,14 @@ bin/eloquent.dart          CLI (migrate / seed / make:*)
 
 Ordem escolhida por **valor entregue × risco × dependências**. Cada item = 1+ commit com testes.
 
+> Legenda: `[x]` implementado e testado; `[ ]` deliberadamente adiado ou parcial
+> (menor valor, beco sem saída, ou fora do escopo entregue). Veja a tabela de
+> **Status de implementação** no topo para o resumo por fase.
+
 ### Fase 0 — Infra e baseline (habilitador)
-- [ ] Exportar em `lib/eloquent.dart`: migrations, seeders, `DriverAccess`, streaming, `Migration`, `Blueprint`/grammars de schema faltantes, `SchemaMysqlGrammar`.
-- [ ] Corrigir bug `compileInsert` (`$table}` → `$table`).
-- [ ] Script de benchmark de compilação (`benchmark/query_compile_benchmark.dart`) para medir antes/depois do hot-path.
+- [x] Exportar em `lib/eloquent.dart`: migrations, seeders, `DriverAccess`, streaming, `Migration`, `Blueprint`/grammars de schema faltantes, `SchemaMysqlGrammar`.
+- [x] Corrigir bug `compileInsert` (`$table}` → `$table`).
+- [x] Script de benchmark de compilação (`benchmark/query_compile_benchmark.dart`) para medir antes/depois do hot-path.
 - [ ] Baseline de I/O com `dpgsql` (insert/select/upsert/copy) em `benchmark/`.
 
 ### Fase 1 — Query Builder: UPSERT / ON CONFLICT / RETURNING *(alta prioridade, pedido explícito)*
@@ -145,72 +149,72 @@ VALUES (?, 1)
 ON CONFLICT (ano) DO UPDATE SET last_id = processos_sequences.last_id + 1
 RETURNING last_id;
 ```
-- [ ] `QueryBuilder.upsert(values, uniqueBy, {update})` — Laravel-style, atômico.
-- [ ] `QueryBuilder.insertOrIgnore(values)` → `ON CONFLICT DO NOTHING`.
-- [ ] `QueryBuilder.onConflict(...)` fluente de baixo nível para casos avançados (`DO UPDATE SET col = tabela.col + 1`, `WHERE`, `DO NOTHING`, `ON CONSTRAINT`).
-- [ ] `QueryBuilder.returning([cols])` genérico (aplica a `insert`/`update`/`delete`/`upsert`), retornando as linhas do `RETURNING`.
-- [ ] `compileUpsert` + `compileInsertReturning` em `QueryPostgresGrammar` e `QueryMySqlGrammar` (MySQL: `ON DUPLICATE KEY UPDATE`).
-- [ ] Testes de SQL gerado (grammar) + testes de integração com `dpgsql`.
+- [x] `QueryBuilder.upsert(values, uniqueBy, {update})` — Laravel-style, atômico.
+- [x] `QueryBuilder.insertOrIgnore(values)` → `ON CONFLICT DO NOTHING`.
+- [x] `QueryBuilder.onConflict(...)` fluente de baixo nível para casos avançados (`DO UPDATE SET col = tabela.col + 1`, `WHERE`, `DO NOTHING`, `ON CONSTRAINT`).
+- [x] `QueryBuilder.returning([cols])` genérico (aplica a `insert`/`update`/`delete`/`upsert`), retornando as linhas do `RETURNING`.
+- [x] `compileUpsert` + `compileInsertReturning` em `QueryPostgresGrammar` e `QueryMySqlGrammar` (MySQL: `ON DUPLICATE KEY UPDATE`).
+- [x] Testes de SQL gerado (grammar) + testes de integração com `dpgsql`.
 
 > **`RETURNING ... INTO`** é sintaxe de **PL/pgSQL** (dentro de funções/DO blocks), não de SQL client. A tradução idiomática em client-side é `RETURNING col` cujo valor é lido no Dart (equivalente ao `INTO v_seq`). O plano cobre isso via `returning()` + leitura do resultado. Para quem realmente escreve funções, adicionaremos helper `db.plpgsql(...)`/`db.doBlock(...)` para blocos anônimos.
 
 ### Fase 2 — Hot-path de compilação (performance)
 - [ ] Introduzir classes de cláusula tipadas (`WhereClause`, `JoinClause`, `OrderClause`, …) internas, mantendo a API pública.
-- [ ] Trocar concatenação por `StringBuffer` nas gramáticas.
-- [ ] Substituir `callMethod`/`getProperty` por dispatch direto (switch/tipo), eliminando `Map<String,Function>` e montagem de nomes por string.
+- [x] Trocar concatenação por `StringBuffer` nas gramáticas.
+- [x] Substituir `callMethod`/`getProperty` por dispatch direto (switch/tipo), eliminando `Map<String,Function>` e montagem de nomes por string.
 - [ ] Reduzir alocações em `getBindings()`/`clone()`.
-- [ ] Comparar no benchmark de compilação (meta: ≥2× no throughput de `toSql()` de queries médias).
+- [x] Comparar no benchmark de compilação (meta: ≥2× no throughput de `toSql()` de queries médias).
 
 ### Fase 3 — Streaming / Cursor server-side
-- [ ] `PDOExecutionContext.queryStream(sql, params, {int fetchSize})` → `Stream<Map<String,dynamic>>` (default: `UnsupportedError`; sobrescrito no dpgsql via `executeReader().read()`).
+- [x] `PDOExecutionContext.queryStream(sql, params, {int fetchSize})` → `Stream<Map<String,dynamic>>` (default: `UnsupportedError`; sobrescrito no dpgsql via `executeReader().read()`).
 - [ ] Em drivers sem reader nativo: fallback com cursor SQL (`DECLARE ... FETCH`) dentro de transação.
-- [ ] `ConnectionInterface.selectStream(...)` + `Connection.cursor(...)`.
-- [ ] `QueryBuilder.cursor()` → `Stream<Map>` e `lazy()/lazyById()` construídos sobre o cursor (substituem `chunk` OFFSET por backpressure real).
+- [x] `ConnectionInterface.selectStream(...)` + `Connection.cursor(...)`.
+- [x] `QueryBuilder.cursor()` → `Stream<Map>` e `lazy()/lazyById()` construídos sobre o cursor (substituem `chunk` OFFSET por backpressure real).
 - [ ] Testes: consumir 100k linhas com memória ~constante.
 
 ### Fase 4 — Acesso direto ao driver: COPY, pipelining, batch, LISTEN/NOTIFY
-- [ ] Interface `DriverAccess` + `Connection.driver()` / `QueryBuilder.driver()`.
-- [ ] `DpgsqlDriverAccess`:
+- [x] Interface `DriverAccess` + `Connection.driver()` / `QueryBuilder.driver()`.
+- [x] `DpgsqlDriverAccess`:
   - `copyInText/copyInBinary(table, columns, rows/stream)` e `copyOutText/copyOutBinary(query)` → COPY.
   - `pipeline([...])`, `batch([...])`.
   - `listen(channel)` → `Stream<Notification>`, `notify(channel, payload)`.
   - `rawConnection()` → `DpgsqlConnection` (escape hatch tipado).
 - [ ] Helper de alto nível `QueryBuilder.copyInto(rows)` para carga em massa (usa COPY quando disponível, cai para `insertMany` senão).
-- [ ] Testes de COPY round-trip e de LISTEN/NOTIFY.
+- [x] Testes de COPY round-trip e de LISTEN/NOTIFY.
 
 ### Fase 5 — Migrations utilizáveis de ponta a ponta *(sem codegen)*
-- [ ] Exportar `Migration`, `Migrator`, `MigrationCreator`, repositório.
-- [ ] Injetar `migration.db` em `_runUp/_runDown` (corrige o getter `schema`).
+- [x] Exportar `Migration`, `Migrator`, `MigrationCreator`, repositório.
+- [x] Injetar `migration.db` em `_runUp/_runDown` (corrige o getter `schema`).
 - [ ] `registry_scanner.dart`: em runtime, o app registra migrations num `Map` (padrão explícito, sem reflexão) **ou** usamos um _barrel_ gerado por comando CLI (`make:migration` já cria o arquivo; um comando `migrate:sync` regenera o barrel `migrations.dart` com os imports+registro). Isso mantém "sem code generation" no sentido de build-time/macros — é geração de texto simples opcional via CLI.
 - [ ] CLI `bin/eloquent.dart`: `migrate`, `migrate:rollback`, `migrate:reset`, `migrate:status`, `make:migration`.
-- [ ] Transação por migration (TODO em `migrator.dart:111`).
-- [ ] Testes do ciclo up/down contra `dpgsql`.
+- [x] Transação por migration (TODO em `migrator.dart:111`).
+- [x] Testes do ciclo up/down contra `dpgsql`.
 
 ### Fase 6 — Seeds / Seeders / Factories
-- [ ] `abstract class Seeder { Future<void> run(); }` + `call(otherSeeder)`.
-- [ ] `SeederRunner` + registro explícito (mesmo padrão das migrations).
+- [x] `abstract class Seeder { Future<void> run(); }` + `call(otherSeeder)`.
+- [x] `SeederRunner` + registro explícito (mesmo padrão das migrations).
 - [ ] `Factory<T>` leve (definição via callback, `count`, `state`, `make`/`create`) — usa `insertMany`/COPY para volume.
 - [ ] CLI: `db:seed`, `make:seeder`.
-- [ ] Testes.
+- [x] Testes.
 
 ### Fase 7 — Schema diff → ALTER (fechar o loop Doctrine)
 - [ ] Implementar `CreateSchemaObjectsSQLBuilder`/`DropSchemaObjectsSQLBuilder` (`schema.dart:319/329`).
-- [ ] Rotear `compileChange`/`compileRenameColumn` pelo `Comparator`/`SchemaDiff` quando houver schema manager.
-- [ ] Refinar igualdade de colunas (hoje "SIMPLIFICADO").
+- [x] Rotear `compileChange`/`compileRenameColumn` pelo `Comparator`/`SchemaDiff` quando houver schema manager.
+- [x] Refinar igualdade de colunas (hoje "SIMPLIFICADO").
 - [ ] `parsePortableTableIndexDefinition` (postgres_schema_manager.dart:534).
-- [ ] Comando CLI `schema:diff` (introspecção viva vs. schema desejado).
+- [x] Comando CLI `schema:diff` (introspecção viva vs. schema desejado).
 
 ### Fase 8 — ORM leve sem code generation (opcional, camada fina)
-- [ ] Mapeamento por convenção + configuração fluente (`EntityMap`), sem macros.
-- [ ] `Repository<T>` sobre o QueryBuilder: `find/all/save/delete`, hidratação map→objeto via callback do usuário (sem reflexão).
+- [x] Mapeamento por convenção + configuração fluente (`EntityMap`), sem macros.
+- [x] `Repository<T>` sobre o QueryBuilder: `find/all/save/delete`, hidratação map→objeto via callback do usuário (sem reflexão).
 - [ ] Identity map opcional e _change tracking_ leve para `save()` gerar UPDATE mínimo.
 - [ ] Relacionamentos carregados sob demanda via query builder (sem lazy-proxies mágicos).
 
 ### Fase 9 — Recursos PostgreSQL de query builder
-- [ ] JSON/JSONB: `whereJsonContains`, `->`/`->>`, `jsonb_set`, path updates.
+- [x] JSON/JSONB: `whereJsonContains`, `->`/`->>`, `jsonb_set`, path updates.
 - [ ] Arrays: operadores `@>`, `&&`, `ANY`, `unnest`.
 - [ ] Ranges e tipos ricos do dpgsql.
-- [ ] `LATERAL` (parcial já existe), window functions helpers, full-text (`tsvector`/`tsquery`), `DISTINCT ON`.
+- [x] `LATERAL` (parcial já existe), window functions helpers, full-text (`tsvector`/`tsquery`), `DISTINCT ON`.
 - [ ] `INSERT ... FROM SELECT` com RETURNING; `MERGE` (PG 15+).
 
 ---

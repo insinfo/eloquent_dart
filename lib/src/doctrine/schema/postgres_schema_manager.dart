@@ -232,7 +232,13 @@ class PostgreSQLSchemaManager extends AbstractSchemaManager {
       if (indexDef.contains('DESC')) flags.add('DESC');
       if (indexDef.contains('NULLS FIRST')) flags.add('NULLS FIRST');
       if (indexDef.contains('NULLS LAST')) flags.add('NULLS LAST');
-      // TODO: Extrair tipo de índice (USING btree/hash/gist/gin) etc.
+      // Access method (USING btree | hash | gist | gin | spgist | brin ...)
+      // extracted from pg_get_indexdef(). Stored under options['using'].
+      final usingMatch =
+          RegExp(r'\bUSING\s+(\w+)', caseSensitive: false).firstMatch(indexDef);
+      if (usingMatch != null) {
+        options['using'] = usingMatch.group(1)!.toLowerCase();
+      }
 
       final index = Index(
         name: indexName,

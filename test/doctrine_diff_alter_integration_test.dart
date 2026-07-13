@@ -64,6 +64,12 @@ void main() {
 
     final indexNames = table.getIndexes().map((i) => i.getName()).toList();
     expect(indexNames, containsAll(['perf_diff_pkey', 'perf_diff_name_idx']));
+
+    // The access method is extracted from pg_get_indexdef() into options['using'].
+    final nameIdx = table
+        .getIndexes()
+        .firstWhere((i) => i.getName() == 'perf_diff_name_idx');
+    expect(nameIdx.getOption('using'), equals('btree'));
   });
 
   test('introspecting the same table twice yields an empty diff', () async {

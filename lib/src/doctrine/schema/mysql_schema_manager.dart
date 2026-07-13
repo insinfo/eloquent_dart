@@ -252,7 +252,12 @@ class MySqlSchemaManager extends AbstractSchemaManager {
 
     // Extract length, precision, scale from `type` string
     final typeMatch = RegExp(r'^[a-z]+\((.+)\)').firstMatch(dbTypeFull);
-    if (typeMatch != null) {
+    if (typeMatch != null && (dbType == 'enum' || dbType == 'set')) {
+      // enum/set: the parenthesized content is the comma-separated list of
+      // allowed values (not a length/precision), so parse it as such —
+      // splitting on comma here would break multi-value enums.
+      values = _parseEnumOrSetExpression(typeMatch.group(1)!);
+    } else if (typeMatch != null) {
       final args = typeMatch.group(1)!.split(',');
       if (args.isNotEmpty) {
         if (args.length == 1) {
@@ -276,8 +281,6 @@ class MySqlSchemaManager extends AbstractSchemaManager {
           } else if (['decimal', 'numeric', 'float', 'double', 'real']
               .contains(dbType)) {
             precision = val;
-          } else if (dbType == 'enum' || dbType == 'set') {
-            values = _parseEnumOrSetExpression(typeMatch.group(1)!);
           }
           // Ignore for int types where length is often display width
         } else if (args.length == 2) {
@@ -469,16 +472,65 @@ class MySqlSchemaManager extends AbstractSchemaManager {
   /// Parses the arguments inside ENUM('a','b',...) or SET('a','b',...).
   List<String> _parseEnumOrSetExpression(String expression) {
     final List<String> values = [];
-    // Matches quoted values, handling escaped quotes inside
-    final matches = RegExp(r"'((?:[^'\\]|\\.)*)'").allMatches(expression);
+    // Matches quoted values, allowing escaped quotes (\') and doubled quotes ('').
+    final matches =
+        RegExp(r"'((?:[^'\\]|\\.|'')*)'").allMatches(expression);
     for (final match in matches) {
-      // Unescape standard SQL double quotes ('') and MySQL/MariaDB backslash escapes (\')
-      String value = match.group(1)!;
-      value = value.replaceAll("''", "'").replaceAll("\\'", "'");
-      // TODO: Handle other potential backslash escapes if necessary (e.g., \\ -> \)
-      values.add(value);
+      values.add(_unescapeMysqlStringLiteral(match.group(1)!));
     }
     return values;
+  }
+
+  /// Unescape a MySQL/MariaDB single-quoted string body in a single pass,
+  /// handling backslash escapes (`\\`, `\'`, `\"`, `\n`, `\t`, `\r`, `\0`,
+  /// `\b`, `\Z`) and SQL doubled quotes (`''`). Doing it in one scan avoids the
+  /// order-dependence bugs of chained `replaceAll` (e.g. `\\'`).
+  String _unescapeMysqlStringLiteral(String s) {
+    final buf = StringBuffer();
+    for (var i = 0; i < s.length; i++) {
+      final ch = s[i];
+      if (ch == '\\' && i + 1 < s.length) {
+        final next = s[i + 1];
+        switch (next) {
+          case '\\':
+            buf.write('\\');
+            break;
+          case "'":
+            buf.write("'");
+            break;
+          case '"':
+            buf.write('"');
+            break;
+          case 'n':
+            buf.write('\n');
+            break;
+          case 't':
+            buf.write('\t');
+            break;
+          case 'r':
+            buf.write('\r');
+            break;
+          case '0':
+            buf.write('\x00');
+            break;
+          case 'b':
+            buf.write('\b');
+            break;
+          case 'Z':
+            buf.write('\x1a');
+            break;
+          default:
+            buf.write(next); // \x for any other x -> x
+        }
+        i++;
+      } else if (ch == "'" && i + 1 < s.length && s[i + 1] == "'") {
+        buf.write("'");
+        i++;
+      } else {
+        buf.write(ch);
+      }
+    }
+    return buf.toString();
   }
 
   /// Parses index data, needs grouping logic from the caller.
