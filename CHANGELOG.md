@@ -1,5 +1,15 @@
 ## Unreleased (branch `performace`)
 
+### Added / Improved
+
+- **PostgreSQL array operators** — `whereArrayContains` (`@>`),
+  `whereArrayContainedBy` (`<@`), `whereArrayOverlaps` (`&&`) and their
+  `orWhere...` variants. The list value is bound as a single array parameter
+  (not spread). Implemented in `QueryPostgresGrammar`; base grammar throws
+  `UnsupportedError`.
+- **`get()` fast path** — no longer clones/restores `columnsProp` on every call
+  when columns are already set (removes a per-query list allocation).
+
 ### Improved / Fixed
 
 - **Transactional migrations** — `Migrator` now runs each migration's `up`/`down`

@@ -483,6 +483,8 @@ class QueryGrammar extends BaseGrammar {
         return whereJsonLength(query, where);
       case 'Fulltext':
         return whereFullText(query, where);
+      case 'ArrayOp':
+        return whereArrayOp(query, where);
       default:
         return callMethod('where${where['type']}', [query, where]).toString();
     }
@@ -757,6 +759,13 @@ class QueryGrammar extends BaseGrammar {
   /// Full-text search predicate. Dialect-specific — overridden where supported.
   String whereFullText(QueryBuilder query, Map<String, dynamic> where) {
     throw UnsupportedError('whereFullText is not supported by this grammar.');
+  }
+
+  /// Array operator predicate (`@>`/`<@`/`&&`). Dialect-specific — overridden
+  /// where supported (PostgreSQL).
+  String whereArrayOp(QueryBuilder query, Map<String, dynamic> where) {
+    throw UnsupportedError(
+        'Array operators are not supported by this grammar.');
   }
 
   ///

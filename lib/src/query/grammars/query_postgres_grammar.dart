@@ -125,6 +125,13 @@ class QueryPostgresGrammar extends QueryGrammar {
     return "($columns) @@ $tsquery('$language', ${parameter(where['value'])})";
   }
 
+  /// `"column" <op> ?` for PostgreSQL array operators `@>`, `<@`, `&&`.
+  @override
+  String whereArrayOp(QueryBuilder query, Map<String, dynamic> where) {
+    return '${this.wrap(where['column'])} ${where['operator']} '
+        '${parameter(where['value'])}';
+  }
+
   ///
   /// Compile the lock into SQL.
   ///
