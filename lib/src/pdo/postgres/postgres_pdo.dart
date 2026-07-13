@@ -70,22 +70,6 @@ class PostgresV2PDO extends PDOInterface {
       };
       settings.timeZone = timeZone;
       connection = PgPool(endpoint, settings: settings);
-      // TODO remover logs para produção
-
-      //  logger simples para todos os eventos do pool
-      // connection.events.listen((e) {
-      //   // encurta SQL pra log não virar um livro
-      //   String q(String? s) => s == null
-      //       ? '-'
-      //       : (s.length <= 120 ? s : s.substring(0, 117) + '...');
-      //   print('[PgPool] c${e.connectionId} ${e.action}'
-      //       '${e.sessionId != null ? ' session=' + e.sessionId! : ''}'
-      //       '${e.traceId != null ? ' trace=' + e.traceId! : ''}'
-      //       '${e.elapsed != null ? ' in ${e.elapsed!.inMilliseconds}ms' : ''}'
-      //       '${e.query != null ? ' sql=' + q(e.query) : ''}'
-      //       '${e.error != null ? ' error=' + e.error.toString() : ''}');
-      // });
-
     } else {
       connection = PostgreSQLConnection(
         config.host,
