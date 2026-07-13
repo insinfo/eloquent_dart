@@ -224,6 +224,11 @@ await db.table('docs').whereJsonLength('tags', '>', 1).get();
 // JSON column access via the -> selector  ("meta"->>'name')
 await db.table('docs').where('meta->name', '=', 'ada').get();
 
+// Array operators (text[] / int[] columns): @>  <@  &&
+await db.table('docs').whereArrayContains('tags', ['urgent']).get();    // @>
+await db.table('docs').whereArrayContainedBy('tags', ['a', 'b']).get(); // <@
+await db.table('docs').whereArrayOverlaps('tags', ['x', 'y']).get();    // &&
+
 // Full-text search (mode: plain | phrase | websearch; language default english)
 await db.table('docs').whereFullText('body', 'quick fox').get();
 await db.table('docs')
