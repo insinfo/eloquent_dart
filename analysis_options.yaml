@@ -5,6 +5,6 @@
 # the barrel and a sibling `src/...` file therefore trip `unnecessary_import`.
 # That is an intentional consequence of the barrel pattern, not a real issue,
 # so the hint is disabled to keep `dart analyze` clean.
-analyzer:
-  errors:
-    unnecessary_import: ignore
+#analyzer:
+  #errors:
+    #unnecessary_import: ignore

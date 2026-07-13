@@ -1,9 +1,6 @@
 import 'package:eloquent/eloquent.dart';
-import 'abstract_schema_manager.dart'; // <-- Certifique-se de que este caminho esteja correto
+// <-- Certifique-se de que este caminho esteja correto
 
-import 'column.dart';
-import 'index.dart';
-import 'foreign_key_constraint.dart';
 import 'view.dart';
 import 'sequence.dart'; // <-- Importar Sequence
 import 'schema_config.dart';

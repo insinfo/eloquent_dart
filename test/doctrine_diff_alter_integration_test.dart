@@ -11,7 +11,6 @@
 library;
 
 import 'package:eloquent/eloquent.dart';
-import 'package:eloquent/src/doctrine/schema/comparator.dart';
 import 'package:test/test.dart';
 
 const _config = {

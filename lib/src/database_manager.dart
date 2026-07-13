@@ -1,5 +1,4 @@
 import 'package:eloquent/eloquent.dart';
-import 'package:eloquent/src/schema/schema_builder.dart';
 
 import 'container/container.dart';
 

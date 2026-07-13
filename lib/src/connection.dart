@@ -1,10 +1,7 @@
 import 'package:eloquent/eloquent.dart';
 import 'package:eloquent/src/doctrine/connection.dart' as doctrine;
-import 'package:eloquent/src/doctrine/schema/column.dart';
-import 'package:eloquent/src/doctrine/schema/abstract_schema_manager.dart';
 import 'package:eloquent/src/doctrine/schema/mysql_schema_manager.dart';
 import 'package:eloquent/src/doctrine/schema/postgres_schema_manager.dart';
-import 'package:eloquent/src/schema/schema_builder.dart';
 
 /// posgresql Connection implementation
 class Connection with DetectsLostConnections implements ConnectionInterface {

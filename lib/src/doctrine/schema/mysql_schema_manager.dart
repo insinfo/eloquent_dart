@@ -1,9 +1,5 @@
 import 'package:eloquent/eloquent.dart';
 import 'package:eloquent/src/schema/grammars/schema_mysql_grammar.dart';
-import 'abstract_schema_manager.dart';
-import 'column.dart';
-import 'index.dart';
-import 'foreign_key_constraint.dart';
 import 'view.dart';
 import 'sequence.dart';
 //import 'schema_config.dart';

@@ -1,6 +1,5 @@
 import 'package:eloquent/eloquent.dart';
 import 'package:eloquent/src/container/container.dart';
-import 'package:eloquent/src/schema/schema_builder.dart';
 
 //with CapsuleManagerTrait
 class Manager {

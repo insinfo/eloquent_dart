@@ -1,8 +1,6 @@
 // lib/src/migrations/database_migration_repository.dart
 import 'dart:async';
 import 'package:eloquent/eloquent.dart'; // Access to QueryBuilder, ConnectionResolverInterface, etc.
-import 'package:eloquent/src/schema/schema_builder.dart';
-import 'migration_repository_interface.dart';
 
 /// Database-backed implementation of the migration repository.
 ///

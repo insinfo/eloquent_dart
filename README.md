@@ -170,6 +170,47 @@ final stream = db.table('big_table').lazy();
 Contrast with `chunk`/`each`, which page with `LIMIT/OFFSET` and load a full
 page into memory per round-trip.
 
+## Lightweight ORM (Repository, no code generation)
+
+```dart
+class User {
+  int? id;
+  String name;
+  User({this.id, required this.name});
+}
+
+final userMapper = EntityMapper<User>(
+  table: 'users',
+  fromRow: (r) => User(id: (r['id'] as num?)?.toInt(), name: r['name'] as String),
+  toRow: (u) => {'name': u.name},   // omit the PK; the DB assigns it
+  getId: (u) => u.id,
+);
+
+final repo = Repository<User>(await manager.connection(), userMapper);
+
+final id = await repo.save(User(name: 'Ada'));  // insert -> returns id
+final ada = await repo.findOrFail(id);
+ada.name = 'Ada Lovelace';
+await repo.save(ada);                            // update (has id)
+
+final all = await repo.all();
+final some = await repo.findBy('name', 'Ada Lovelace');
+await for (final u in repo.cursor()) { /* streamed hydration */ }
+await repo.delete(ada);
+```
+
+## schema:diff CLI
+
+```bash
+# print the ALTER statements to make table_a match table_b
+dart run eloquent:eloquent schema:diff table_a table_b \
+  --database=mydb --username=dart --password=dart
+
+# ...and execute them
+dart run eloquent:eloquent schema:diff table_a table_b \
+  --database=mydb --username=dart --password=dart --apply
+```
+
 ## PostgreSQL JSON / full-text / distinct-on
 
 ```dart

@@ -1,7 +1,6 @@
 //lib\src\schema\grammars\schema_postgres_grammar.dart
 
 import 'package:eloquent/eloquent.dart';
-import 'package:eloquent/src/doctrine/schema/table_diff.dart';
 import 'package:meta/meta.dart'; // Import for @protected
 
 /// Gramática específica do PostgreSQL para operações de Schema.

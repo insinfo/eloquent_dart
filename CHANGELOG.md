@@ -1,5 +1,23 @@
 ## Unreleased (branch `performace`)
 
+### Added — lightweight ORM (Phase 8) & schema:diff CLI (Phase 7)
+
+- **`Repository<T>` + `EntityMapper<T>`** — a thin data-mapper over the query
+  builder, no code generation and no reflection. The app supplies `fromRow` /
+  `toRow` / `getId` callbacks; the repository provides `find` / `findOrFail` /
+  `all` / `findBy` / `firstBy` / `insert` / `update` / `save` (insert-or-update
+  by PK) / `delete` / `deleteById` / `count` / `cursor` (streamed hydrated
+  entities). Exported from the barrel; validated with live PostgreSQL tests.
+- **`schema:diff` CLI command** (`bin/eloquent.dart`): introspects two tables
+  and prints the `ALTER TABLE <a> ...` statements that make `<a>` match `<b>`;
+  dry-run by default, `--apply` to execute. Connection via
+  `--database/--username/--password/--host/--port/--schema/--driver-impl`.
+
+### Chore
+
+- Removed unnecessary imports across `lib`/`test` (via `dart fix`); `dart
+  analyze lib test` is clean without lint suppression.
+
 ### Schema diff → ALTER (Phase 7 — Doctrine loop)
 
 - **Live introspection now works.** Fixed three bugs in

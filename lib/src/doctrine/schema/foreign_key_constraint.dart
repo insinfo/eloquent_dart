@@ -2,7 +2,6 @@ import 'dart:collection';
 import 'package:eloquent/eloquent.dart';
 import 'abstract_asset.dart';
 import 'package:collection/collection.dart';
-import 'index.dart';
 import 'identifier.dart';
 
 /// Representa uma constraint de chave estrangeira em memória.
