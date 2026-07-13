@@ -79,6 +79,23 @@ void main() {
     );
   });
 
+  test('array operators -> @> / <@ / &&', () async {
+    await qb().whereArrayContains('tags', ['a', 'b']).get();
+    expect(conn.lastSelectSql,
+        equals('select * from "docs" where "tags" @> ?'));
+    expect(conn.lastSelectBindings, equals([['a', 'b']]));
+
+    await qb().whereArrayContainedBy('tags', ['a']).get();
+    expect(conn.lastSelectSql,
+        equals('select * from "docs" where "tags" <@ ?'));
+
+    await qb().whereArrayOverlaps('tags', ['x', 'y']).get();
+    expect(conn.lastSelectSql,
+        equals('select * from "docs" where "tags" && ?'));
+    // The list is bound as a single parameter, not spread.
+    expect(conn.lastSelectBindings, equals([['x', 'y']]));
+  });
+
   test('distinctOn -> select distinct on (...)', () async {
     await qb()
         .distinctOn(['user_id'])

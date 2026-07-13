@@ -101,6 +101,37 @@ void main() {
     expect(count, equals(1));
   });
 
+  test('array operators @> / <@ / && on a text[] column', () async {
+    await db.execute('DROP TABLE IF EXISTS perf_arr');
+    await db.execute(
+        'CREATE TABLE perf_arr (id serial primary key, tags text[])');
+    await db.execute("INSERT INTO perf_arr (tags) VALUES "
+        "(ARRAY['a','b']), (ARRAY['b','c']), (ARRAY['x'])");
+
+    final contains = await db
+        .table('perf_arr')
+        .whereArrayContains('tags', ['b'])
+        .orderBy('id')
+        .get();
+    expect(contains.map((r) => r['id']).toList(), equals([1, 2]));
+
+    final overlaps = await db
+        .table('perf_arr')
+        .whereArrayOverlaps('tags', ['c', 'x'])
+        .orderBy('id')
+        .get();
+    expect(overlaps.map((r) => r['id']).toList(), equals([2, 3]));
+
+    final containedBy = await db
+        .table('perf_arr')
+        .whereArrayContainedBy('tags', ['a', 'b', 'z'])
+        .orderBy('id')
+        .get();
+    expect(containedBy.map((r) => r['id']).toList(), equals([1]));
+
+    await db.execute('DROP TABLE IF EXISTS perf_arr');
+  });
+
   test('distinctOn returns one row per user_id', () async {
     final rows = await db
         .table('perf_pgfeat')

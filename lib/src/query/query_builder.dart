@@ -1418,6 +1418,47 @@ class QueryBuilder {
           [Map<String, dynamic> options = const {}]) =>
       this.whereFullText(columns, value, options, SqlBool.or);
 
+  /// PostgreSQL array containment: `"column" @> ?` — true when [column]
+  /// contains every element of [value].
+  QueryBuilder whereArrayContains(String column, List value,
+          [String boolean = SqlBool.and]) =>
+      _whereArrayOp(column, '@>', value, boolean);
+
+  QueryBuilder orWhereArrayContains(String column, List value) =>
+      _whereArrayOp(column, '@>', value, SqlBool.or);
+
+  /// PostgreSQL array containment: `"column" <@ ?` — true when every element of
+  /// [column] is present in [value].
+  QueryBuilder whereArrayContainedBy(String column, List value,
+          [String boolean = SqlBool.and]) =>
+      _whereArrayOp(column, '<@', value, boolean);
+
+  QueryBuilder orWhereArrayContainedBy(String column, List value) =>
+      _whereArrayOp(column, '<@', value, SqlBool.or);
+
+  /// PostgreSQL array overlap: `"column" && ?` — true when [column] and [value]
+  /// share at least one element.
+  QueryBuilder whereArrayOverlaps(String column, List value,
+          [String boolean = SqlBool.and]) =>
+      _whereArrayOp(column, '&&', value, boolean);
+
+  QueryBuilder orWhereArrayOverlaps(String column, List value) =>
+      _whereArrayOp(column, '&&', value, SqlBool.or);
+
+  QueryBuilder _whereArrayOp(
+      String column, String operator, List value, String boolean) {
+    this.wheresProp.add({
+      'type': 'ArrayOp',
+      'column': column,
+      'operator': operator,
+      'value': value,
+      'boolean': boolean,
+    });
+    // Add the whole List as a single binding (addBinding would spread it).
+    this.bindings['where'].add(value);
+    return this;
+  }
+
   ///
   /// Add a "where not null" clause to the query.
   ///
@@ -1879,16 +1920,21 @@ class QueryBuilder {
   ///
   Future<List<Map<String, dynamic>>> get(
       [List<String> columnsP = const ['*'], int? timeoutInSeconds]) async {
-    var original = this.columnsProp != null ? [...this.columnsProp!] : null;
-
-    if (original == null) {
+    // Only take over `columnsProp` (and restore it) when the caller passed
+    // columns via this call, i.e. when no columns were set on the builder. When
+    // columns are already set we leave them untouched — avoiding the previous
+    // per-call `[...columnsProp]` clone/restore allocation.
+    final hadColumns = this.columnsProp != null;
+    if (!hadColumns) {
       this.columnsProp = columnsP;
     }
 
     final resultRunSelect = await this.runSelect(timeoutInSeconds);
-
     final results = this.processor.processSelect(this, resultRunSelect);
-    this.columnsProp = original;
+
+    if (!hadColumns) {
+      this.columnsProp = null;
+    }
     return results;
   }
 

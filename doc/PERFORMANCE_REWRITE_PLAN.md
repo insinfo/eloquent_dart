@@ -57,6 +57,12 @@ db `banco_teste`). Duas rodadas:
 Leitura: o gargalo são chamadas pequenas repetidas (`scalar_select`, `insert`,
 `select_by_id`, transações pequenas), não result-sets grandes. `dpgsql` lidera;
 `dargres` está ~10× atrás em chamadas pequenas (a investigar no próprio driver).
+
+MySQL (`tool/mysql_dart_benchmark.dart`, 200 inserts + 200 selects + 50 inserts
+em transação): `mysql_dart` 1.2.1 → 903 ops/s (total 498 ms); 2.0.0 → 779 ops/s
+(total 578 ms). Observação histórica: neste microbenchmark via Eloquent, o
+2.0.0 ficou **mais lento** no total apesar de melhorar setup e selects — vale
+revisitar se o driver MySQL virar gargalo.
 O benchmark de **compilação** (`benchmark/query_compile_benchmark.dart`) mede o
 hot-path do query builder isoladamente (Fase 2: ~26.5 → ~21.9 µs/op, AOT).
 
@@ -73,7 +79,7 @@ hot-path do query builder isoladamente (Fase 2: ~26.5 → ~21.9 µs/op, AOT).
 - Cachear `getDateFormat()`/driver name no hot-path de `prepareBindings()` e evitar iterar bindings vazios.
 
 **Query builder (Fase 9, continuação)**
-- Operadores de array: `@>`, `<@`, `&&`, `ANY`, `unnest`.
+- Operadores de array: `ANY`, `unnest` (containment/overlap `@>`/`<@`/`&&` já feitos via `whereArrayContains`/`ContainedBy`/`Overlaps`).
 - Ranges e tipos ricos do `dpgsql` (`tsvector`/`tsquery`/geometric já existem no driver).
 - `jsonb_set`/atualização por path; `DISTINCT ON` já feito.
 
@@ -272,7 +278,7 @@ RETURNING last_id;
 
 ### Fase 9 — Recursos PostgreSQL de query builder
 - [x] JSON/JSONB: `whereJsonContains`, `->`/`->>`, `jsonb_set`, path updates.
-- [ ] Arrays: operadores `@>`, `&&`, `ANY`, `unnest`.
+- [x] Arrays: operadores de containment/overlap `@>`, `<@`, `&&` (`whereArrayContains`/`ContainedBy`/`Overlaps`). Falta `ANY`/`unnest`.
 - [ ] Ranges e tipos ricos do dpgsql.
 - [x] `LATERAL` (parcial já existe), window functions helpers, full-text (`tsvector`/`tsquery`), `DISTINCT ON`.
 - [ ] `INSERT ... FROM SELECT` com RETURNING; `MERGE` (PG 15+).
