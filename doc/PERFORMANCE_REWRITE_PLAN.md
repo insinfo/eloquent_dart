@@ -39,6 +39,66 @@ Não implementado por serem becos sem saída / baixo valor:
 - `Schema.toSql`/`CreateSchemaObjectsSQLBuilder` (`schema.dart:319/329`) — dependem da camada `AbstractPlatform`, que **não tem subclasse concreta**; o caminho funcional é `compileTableDiff`.
 - `parsePortableTableIndexDefinition` no Postgres é stub obrigatório (método abstrato usado pelo MySQL); a introspecção de índices do Postgres funciona por `listTableIndexes`.
 
+> Este documento **unifica** os antigos `performance_optimization_roadmap.md` e
+> `roadmap_doctrine_migrations_console.md` (removidos) — é a fonte única.
+
+### Baseline de performance dos drivers PostgreSQL
+
+`dart run benchmark/postgres_drivers_benchmark.dart` (sem pool, 200 iterações,
+db `banco_teste`). Duas rodadas:
+
+| Driver | total ms (r1) | ops/s (r1) | total ms (r2) | ops/s (r2) |
+|---|---:|---:|---:|---:|
+| `postgres_fork` (v2) | 458.1 | 1855 | 426.5 | 1993 |
+| `postgres` v3 | 820.2 | 1036 | 781.1 | 1088 |
+| `dargres` | 3098.7 | 274 | 2763.5 | 308 |
+| **`dpgsql`** | **280.0** | **3036** | **276.4** | **3075** |
+
+Leitura: o gargalo são chamadas pequenas repetidas (`scalar_select`, `insert`,
+`select_by_id`, transações pequenas), não result-sets grandes. `dpgsql` lidera;
+`dargres` está ~10× atrás em chamadas pequenas (a investigar no próprio driver).
+O benchmark de **compilação** (`benchmark/query_compile_benchmark.dart`) mede o
+hot-path do query builder isoladamente (Fase 2: ~26.5 → ~21.9 µs/op, AOT).
+
+---
+
+## Backlog priorizado (o que falta) — vale a pena × não vale a pena
+
+### ✅ Vale a pena (valor real, risco baixo/médio, testável)
+
+**Performance (Fase 2, continuação)**
+- `first()` com fast-path sem clonar `columnsProp` nem passar pelo `get()` completo.
+- `getBindings()`/`cleanBindings()`/`clone()` com menos alocações (evitar re-alocar os 8 segmentos e deep-copies quando desnecessário).
+- `insertGetId()`/`update()`/`insertMany()` com listas pré-dimensionadas.
+- Cachear `getDateFormat()`/driver name no hot-path de `prepareBindings()` e evitar iterar bindings vazios.
+
+**Query builder (Fase 9, continuação)**
+- Operadores de array: `@>`, `<@`, `&&`, `ANY`, `unnest`.
+- Ranges e tipos ricos do `dpgsql` (`tsvector`/`tsquery`/geometric já existem no driver).
+- `jsonb_set`/atualização por path; `DISTINCT ON` já feito.
+
+**Streaming / bulk (Fases 3–4)**
+- Fallback de cursor SQL (`DECLARE ... FETCH` em transação) para drivers sem reader nativo.
+- Teste de 100k linhas com memória ~constante.
+- Helper `QueryBuilder.copyInto(rows)` (COPY quando disponível, senão `insertMany`).
+
+**Migrations/seeders CLI (Fases 5–6)**
+- Comando `migrate` / `migrate:rollback` / `migrate:reset` / `migrate:status` (precisa de um barrel `migrations.dart` gerado por `migrate:sync` — geração de texto, sem code-gen de build).
+- `Factory<T>` leve para gerar volume (usa `insertMany`/COPY).
+- Comando `db:seed`.
+
+**Drivers**
+- Investigar a lentidão do `dargres` em chamadas pequenas (no repo do driver).
+
+### ❌ Não vale a pena (beco sem saída / baixo valor / scope creep)
+
+- `Schema.toSql` / `CreateSchemaObjectsSQLBuilder` / `DropSchemaObjectsSQLBuilder` — dependem da camada `AbstractPlatform` que **não tem subclasse concreta**; o caminho funcional (`compileTableDiff`) já cobre diff→ALTER.
+- Refatorar `parsePortableTableIndexDefinition` — método morto; introspecção de índices já funciona (inclusive `USING`).
+- Classes de cláusula tipadas (`WhereClause`/`OrderClause`) — refactor grande para ganho marginal sobre o dispatch direto já implementado.
+- ORM: identity map, change-tracking, relacionamentos lazy — scope creep; o `Repository<T>` é intencionalmente fino (data-mapper explícito).
+- `MERGE` (PG 15+) — nicho; `upsert`/`ON CONFLICT` já cobre o caso comum.
+- Grammars de SQL Server / SQLite — não são alvos suportados.
+
 ---
 
 ## 0. Diagnóstico do estado atual (baseline)
