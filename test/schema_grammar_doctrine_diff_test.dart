@@ -1,10 +1,4 @@
 import 'package:eloquent/eloquent.dart';
-import 'package:eloquent/src/doctrine/schema/column.dart';
-import 'package:eloquent/src/doctrine/schema/foreign_key_constraint.dart';
-import 'package:eloquent/src/doctrine/schema/index.dart';
-import 'package:eloquent/src/doctrine/schema/table.dart';
-import 'package:eloquent/src/doctrine/schema/table_diff.dart';
-import 'package:eloquent/src/doctrine/schema/unique_constraint.dart';
 import 'package:eloquent/src/schema/grammars/schema_mysql_grammar.dart';
 import 'package:test/test.dart';
 

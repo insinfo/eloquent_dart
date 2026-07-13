@@ -11,6 +11,36 @@
 
 ---
 
+## Status de implementação (atualizado)
+
+Progresso no branch `performace` (validado com testes unitários + integração ao
+vivo em PostgreSQL 17 e MariaDB 10.11):
+
+| Fase | Escopo | Status |
+|------|--------|--------|
+| 0 | Infra: exports, fix `compileInsert`, benchmark de compilação | ✅ feito |
+| 1 | UPSERT / `ON CONFLICT` / `RETURNING` (`upsert`, `insertOrIgnore`, `onConflict`/`doUpdate`/`doNothing`, `returning`) | ✅ feito (PG + MySQL, testes ao vivo) |
+| 2 | Hot-path de compilação: dispatch direto (`_compileWhere`/`_compileComponent`), `wrap`/`wrapValue` fast-paths | ✅ feito (~17% mais rápido, SQL idêntico) |
+| 3 | Streaming/cursor server-side (`cursor()`/`lazy()` via `queryStream`) | ✅ feito (dpgsql; outros lançam `UnsupportedError`) |
+| 4 | Acesso direto ao driver: COPY, LISTEN/NOTIFY, `withRawConnection` (`db.driver()` → `DriverAccess`) | ✅ feito (dpgsql, COPY testado ao vivo) |
+| 5 | Migrations end-to-end (injeção de `db`, exports, schema DDL `compileCreate`/`Add`/`Drop`) | ✅ feito (ciclo up/rollback ao vivo) |
+| 6 | Seeds/Seeders (`Seeder`/`SeederRunner`) + CLI `make:migration`/`make:seeder` | ✅ feito |
+| 7 | Schema-diff → ALTER (Doctrine): introspecção ao vivo corrigida (3 bugs), `compileTableDiff` provado end-to-end; CLI `schema:diff` | ✅ feito |
+| 8 | ORM leve `Repository<T>` sem code-gen | ✅ feito |
+| 9 | PostgreSQL query builder: JSONB (`whereJsonContains`/`whereJsonLength`), full-text (`whereFullText`), `distinctOn`, acesso `->` | ✅ feito (testes ao vivo) |
+
+Extras entregues fora do plano original:
+- Correção do adaptador `dargres` para a API 4.0.0 (o pacote não compilava).
+- Correção e publicação do driver **`dpgsql 1.0.2`** (decode de `name`/`char`).
+- Correções de introspecção no `PostgreSQLSchemaManager` (`adinhcount`, `oid = bytea`, `int2vector`).
+- CI dispara em `performace` + cria `dart_test`; `dart_test.yaml` (execução serial); testes de regressão; `dart fix` removeu imports desnecessários.
+
+Não implementado por serem becos sem saída / baixo valor:
+- `Schema.toSql`/`CreateSchemaObjectsSQLBuilder` (`schema.dart:319/329`) — dependem da camada `AbstractPlatform`, que **não tem subclasse concreta**; o caminho funcional é `compileTableDiff`.
+- `parsePortableTableIndexDefinition` no Postgres é stub obrigatório (método abstrato usado pelo MySQL); a introspecção de índices do Postgres funciona por `listTableIndexes`.
+
+---
+
 ## 0. Diagnóstico do estado atual (baseline)
 
 Levantamento feito diretamente sobre o código em `lib/src`.

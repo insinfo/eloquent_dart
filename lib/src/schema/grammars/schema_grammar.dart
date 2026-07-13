@@ -1,13 +1,5 @@
 //lib\src\schema\grammars\schema_grammar.dart
 import 'package:eloquent/eloquent.dart';
-import 'package:eloquent/src/doctrine/schema/abstract_schema_manager.dart';
-import 'package:eloquent/src/doctrine/schema/column.dart';
-import 'package:eloquent/src/doctrine/schema/comparator.dart';
-import 'package:eloquent/src/doctrine/schema/foreign_key_constraint.dart';
-import 'package:eloquent/src/doctrine/schema/index.dart';
-import 'package:eloquent/src/doctrine/schema/table.dart';
-import 'package:eloquent/src/doctrine/schema/table_diff.dart';
-import 'package:eloquent/src/doctrine/schema/unique_constraint.dart';
 
 import 'package:meta/meta.dart'; // Import for @protected if needed by subclasses
 

@@ -29,6 +29,10 @@ export 'src/migrations/database_migration_repository.dart';
 export 'src/seeds/seeder.dart';
 export 'src/seeds/seeder_runner.dart';
 
+// Lightweight ORM (data mapper, no code generation)
+export 'src/orm/entity_mapper.dart';
+export 'src/orm/repository.dart';
+
 // Doctrine schema (introspection + diff -> ALTER)
 export 'src/doctrine/schema/abstract_schema_manager.dart';
 export 'src/doctrine/schema/comparator.dart';

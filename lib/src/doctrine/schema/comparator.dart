@@ -5,13 +5,6 @@ import 'package:eloquent/eloquent.dart'; // Para SchemaGrammar (pode ser removid
 import 'package:meta/meta.dart'; // Para @protected
 
 // Importar as outras classes de schema criadas sem prefixo
-import 'table.dart';
-import 'column.dart';
-import 'index.dart';
-import 'foreign_key_constraint.dart';
-import 'unique_constraint.dart';
-import 'column_diff.dart';
-import 'table_diff.dart';
 import 'schema_config.dart'; // Assumindo que existe
 import 'identifier.dart'; // Assumindo que existe
 

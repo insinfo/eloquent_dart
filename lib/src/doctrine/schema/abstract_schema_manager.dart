@@ -1,8 +1,4 @@
 import 'package:eloquent/eloquent.dart';
-import 'table.dart';
-import 'column.dart';
-import 'index.dart';
-import 'foreign_key_constraint.dart';
 import 'view.dart'; // <-- Importar a classe View
 import 'sequence.dart'; // <-- Importar a classe Sequence
 

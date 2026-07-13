@@ -40,6 +40,9 @@ Future<void> main(List<String> args) async {
     case 'make:seeder':
       await _makeSeeder(positional, flags);
       break;
+    case 'schema:diff':
+      await _schemaDiff(positional, flags);
+      break;
     case 'help':
     case '--help':
     case '-h':
@@ -69,6 +72,70 @@ Future<void> _makeMigration(
   final filePath =
       await creator.create(name, path, table: table, create: create);
   stdout.writeln('Created migration: $filePath');
+}
+
+/// `schema:diff <tableA> <tableB>` — introspect both tables from the connected
+/// database and print the `ALTER TABLE tableA ...` statements that would make
+/// `tableA` match `tableB`. Read-only by default; pass `--apply` to execute.
+///
+/// Connection flags: --driver-impl (default dpgsql), --host, --port,
+/// --database, --username, --password, --schema.
+Future<void> _schemaDiff(
+    List<String> positional, Map<String, String> flags) async {
+  if (positional.length < 2) {
+    stderr.writeln('Usage: schema:diff <tableA> <tableB> '
+        '--database=<db> --username=<u> --password=<p> '
+        '[--host=127.0.0.1] [--port=5432] [--schema=public] '
+        '[--driver-impl=dpgsql] [--apply]');
+    exit(64);
+  }
+  final tableA = positional[0];
+  final tableB = positional[1];
+
+  final manager = Manager();
+  manager.addConnection({
+    'driver': 'pgsql',
+    'driver_implementation': flags['driver-impl'] ?? 'dpgsql',
+    'host': flags['host'] ?? '127.0.0.1',
+    'port': flags['port'] ?? '5432',
+    'database': flags['database'] ?? 'postgres',
+    'username': flags['username'] ?? 'postgres',
+    'password': flags['password'] ?? '',
+    'schema': [flags['schema'] ?? 'public'],
+  });
+  manager.setAsGlobal();
+  final db = await manager.connection();
+  try {
+    final sm = db.getDoctrineSchemaManager();
+    final current = await sm.listTableDetails(tableA);
+    final target = await sm.listTableDetails(tableB);
+
+    final diff = Comparator().compareTables(current, target);
+    final grammar = db.getSchemaBuilder().grammar as SchemaPostgresGrammar;
+    final statements = grammar.compileTableDiff(diff, Blueprint(tableA));
+
+    if (statements.isEmpty) {
+      stdout.writeln(
+          '-- No actionable differences: "$tableA" already matches "$tableB".');
+      return;
+    }
+
+    stdout.writeln('-- ALTER statements to make "$tableA" match "$tableB":');
+    for (final s in statements) {
+      stdout.writeln('$s;');
+    }
+
+    if (flags.containsKey('apply')) {
+      for (final s in statements) {
+        await db.execute(s);
+      }
+      stdout.writeln('-- Applied ${statements.length} statement(s).');
+    } else {
+      stdout.writeln('-- (dry run; pass --apply to execute)');
+    }
+  } finally {
+    await manager.getDatabaseManager().purge('default');
+  }
 }
 
 Future<void> _makeSeeder(
@@ -141,6 +208,12 @@ Commands:
 
   make:seeder <ClassName> [--path=seeders]
       Generate a Seeder subclass file.
+
+  schema:diff <tableA> <tableB> --database=<db> --username=<u> --password=<p>
+              [--host=127.0.0.1] [--port=5432] [--schema=public]
+              [--driver-impl=dpgsql] [--apply]
+      Introspect both tables and print the ALTER TABLE statements that make
+      <tableA> match <tableB>. Dry run unless --apply is given.
 
   help
       Show this help.
