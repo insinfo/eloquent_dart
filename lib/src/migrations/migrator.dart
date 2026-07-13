@@ -119,13 +119,10 @@ class Migrator {
        return; // Don't log in pretend mode
     }
 
-    // Get connection for this migration
-    //final conn = await _resolveConnection(migration.getConnectionName());
-
-    // TODO: Implement transaction logic if desired per migration
     try {
-       // Execute the 'up' method
-       await migration.up();
+       // Execute the 'up' method, optionally inside a transaction so a failure
+       // rolls back the migration's DDL (PostgreSQL supports transactional DDL).
+       await _runMigrationMethod(migration, () => migration.up());
 
        // Log the migration if execution was successful
        await repository.log(file, batch);
@@ -218,8 +215,8 @@ class Migrator {
     //final conn = await _resolveConnection(instance.getConnectionName());
 
     try {
-      // Execute the 'down' method
-      await instance.down();
+      // Execute the 'down' method (optionally transactional, see _runUp).
+      await _runMigrationMethod(instance, () => instance.down());
 
       // Delete the migration record if successful
       await repository.delete(migrationMap);
@@ -228,6 +225,35 @@ class Migrator {
       note("<error>Failed Rollback:</error> $file - $e");
       print(s);
       rethrow;
+    }
+  }
+
+  /// Run a migration's `up`/`down` body, wrapping it in a database transaction
+  /// when [Migration.withinTransaction] is true and the connection is a
+  /// [Connection]. On failure the DDL is rolled back (PostgreSQL supports
+  /// transactional DDL); `withinTransaction = false` opts out.
+  @protected
+  Future<void> _runMigrationMethod(
+      Migration migration, Future<void> Function() body) async {
+    if (!migration.withinTransaction) {
+      await body();
+      return;
+    }
+
+    final conn = await _resolveConnection(migration.getConnectionName());
+    if (conn is! Connection) {
+      // Cannot open a transaction on a non-concrete connection; run directly.
+      await body();
+      return;
+    }
+
+    try {
+      await conn.transaction((txConn) async {
+        migration.connectionOverride = txConn;
+        await body();
+      });
+    } finally {
+      migration.connectionOverride = null;
     }
   }
 
@@ -340,7 +366,12 @@ class Migrator {
   /// Resolve the database connection instance.
   @protected
   Future<ConnectionInterface> _resolveConnection(String? connectionName) async {
-    return resolver.connection(connectionName ?? connection!); // Use instance connection if name is null
+    // Fall back to the resolver's default connection when neither the migration
+    // nor the migrator specifies a name (instead of dereferencing a null).
+    final name = connectionName ?? connection;
+    return name == null
+        ? resolver.connection()
+        : resolver.connection(name);
   }
 
   /// Set the default connection name.

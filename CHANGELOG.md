@@ -1,5 +1,22 @@
 ## Unreleased (branch `performace`)
 
+### Improved / Fixed
+
+- **Transactional migrations** — `Migrator` now runs each migration's `up`/`down`
+  inside a database transaction (PostgreSQL DDL is transactional), so a failure
+  rolls back the migration's DDL. Opt out per migration with
+  `withinTransaction = false` (e.g. `CREATE INDEX CONCURRENTLY`).
+- **MySQL ENUM/SET introspection fixed** — multi-value enums were never parsed
+  (the args were comma-split before the enum branch, so `allowedValues` stayed
+  null); enum/set are now handled first, with a robust single-pass unescaper for
+  `''`, `\\`, `\'`, `\"`, `\n`, `\t`, `\r`, `\0`, `\b`, `\Z`.
+- **PostgreSQL index access method** — `listTableIndexes` now extracts the
+  `USING btree|hash|gist|gin|...` method into `index.getOption('using')`.
+- **Robust column-diff `platformOptions` comparison** — `ColumnDiff` uses a
+  deep, key-order-independent equality instead of a fragile `toString()` compare.
+- `Migrator._resolveConnection` falls back to the resolver's default connection
+  instead of dereferencing a null name.
+
 ### Added — lightweight ORM (Phase 8) & schema:diff CLI (Phase 7)
 
 - **`Repository<T>` + `EntityMapper<T>`** — a thin data-mapper over the query

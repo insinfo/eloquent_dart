@@ -59,6 +59,21 @@ class AddWidgetsActiveColumn extends Migration {
   }
 }
 
+/// Creates a table and then throws — used to verify transactional rollback.
+class FailingMigration extends Migration {
+  @override
+  Future<void> up() async {
+    final s = await schema;
+    await s.create('perf_txfail', (Blueprint t) {
+      t.increments('id');
+    });
+    throw Exception('intentional failure after DDL');
+  }
+
+  @override
+  Future<void> down() async {}
+}
+
 // --- Example seeder ---
 
 class WidgetsSeeder extends Seeder {
@@ -74,6 +89,7 @@ class WidgetsSeeder extends Seeder {
 
 const _mig1 = '2026_07_12_000001_create_widgets_table';
 const _mig2 = '2026_07_12_000002_add_widgets_active_column';
+const _migFail = '2026_07_12_000003_failing';
 
 void main() {
   late Manager manager;
@@ -85,6 +101,7 @@ void main() {
   final registry = <String, Migration Function()>{
     _mig1: () => CreateWidgetsTable(),
     _mig2: () => AddWidgetsActiveColumn(),
+    _migFail: () => FailingMigration(),
   };
 
   setUp(() async {
@@ -144,5 +161,23 @@ void main() {
     final active = await db.table('perf_widgets')
         .where('active', '=', true).count();
     expect(active, equals(1));
+  });
+
+  test('a failing migration rolls back its DDL (transactional)', () async {
+    await db.execute('DROP TABLE IF EXISTS perf_txfail');
+
+    // The migration creates perf_txfail and then throws; because it runs inside
+    // a transaction, the table must not survive.
+    await expectLater(
+      migrator.runMigrationList([_migFail]),
+      throwsA(isA<Exception>()),
+    );
+
+    final schema = await dbm.schema();
+    expect(await schema.hasTable('perf_txfail'), isFalse,
+        reason: 'DDL of a failed transactional migration must be rolled back');
+    expect(await repo.getRan(), isNot(contains(_migFail)));
+
+    await db.execute('DROP TABLE IF EXISTS perf_txfail');
   });
 }
