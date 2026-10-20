@@ -105,7 +105,10 @@ void main() {
         final tstz = read['tstz'] as DateTime;
         await db.table(_table).where('k', 'local').update({'tstz': tstz});
         expect((await stored(db, 'local'))['tstz_utc'], _fields(_local.toUtc()));
-        expect(await db.table(_table).where('tstz', tstz).count(), 1);
+        // In a process running in UTC the local and UTC values are the same
+        // instant (CI); elsewhere they differ.
+        expect(await db.table(_table).where('tstz', tstz).count(),
+            _local.isAtSameMomentAs(_utc) ? 2 : 1);
         expect(await db.table(_table).where('ts', _local).count(), 2,
             reason: 'both rows store the same wall clock fields');
       });
