@@ -1,8 +1,17 @@
+import 'dart:typed_data';
+import 'dart:convert';
 import 'package:eloquent/eloquent.dart';
 
 class QueryGrammar extends BaseGrammar {
   /// The grammar specific operators.
   List<String> operators = [];
+
+  /// Operators accepted by `QueryBuilder2.whereSqlOperator`: the ones that
+  /// compare a column with one value and yield a boolean. Arithmetic and
+  /// other non-predicate operators are not listed.
+  Set<String> get predicateOperators => const {
+        '=', '<>', '!=', '<', '>', '<=', '>=', 'like', 'not like', //
+      };
 
   List<String> getOperators() {
     return operators;
@@ -46,7 +55,7 @@ class QueryGrammar extends BaseGrammar {
       'compileunions': (args) => compileUnions(args[0]),
       'compilelock': (args) => compileLock(args[0], args[1]),
       'compileexpressions': (args) => compileExpressions(args[0]),
-      'compilerecursionLimit': (args) => compileRecursionLimit(args[0]),
+      'compilerecursionlimit': (args) => compileRecursionLimit(args[0]),
       'compileinsertUsing': (args) =>
           compileInsertUsing(args[0], args[1], args[2]),
     };
@@ -178,9 +187,15 @@ class QueryGrammar extends BaseGrammar {
     }
     final compiledComps = compileComponents(query);
 
-    final sql = Utils.trim(concatenate(compiledComps));
+    var sql = Utils.trim(concatenate(compiledComps));
 
     query.setColumns(original);
+
+    // Dialects without a query-level recursion limit throw here instead of
+    // silently ignoring recursionLimit().
+    if (query.recursionLimitProp != null) {
+      sql = Utils.trim('$sql ${compileRecursionLimit(query)}');
+    }
 
     return sql;
   }
@@ -485,6 +500,12 @@ class QueryGrammar extends BaseGrammar {
         return whereFullText(query, where);
       case 'ArrayOp':
         return whereArrayOp(query, where);
+      case 'Like':
+        return whereLike(query, where);
+      case 'InRaw':
+        return whereInRaw(query, where);
+      case 'NotInRaw':
+        return whereNotInRaw(query, where);
       default:
         return callMethod('where${where['type']}', [query, where]).toString();
     }
@@ -567,8 +588,12 @@ class QueryGrammar extends BaseGrammar {
   ///  @param  array  $where
   ///  @return String
   ///
+  static bool _isEmptyInList(dynamic values) =>
+      values == null || (values is Iterable && values.isEmpty);
+
   String whereIn(QueryBuilder query, Map<String, dynamic> where) {
-    if (Utils.empty(where['values'])) {
+    // An empty list matches nothing (instead of the invalid `in ()`).
+    if (_isEmptyInList(where['values'])) {
       return '0 = 1';
     }
 
@@ -587,7 +612,8 @@ class QueryGrammar extends BaseGrammar {
   ///  @return String
   ///
   String whereNotIn(QueryBuilder query, Map<String, dynamic> where) {
-    if (Utils.empty(where['values'])) {
+    // An empty list excludes nothing (instead of the invalid `not in ()`).
+    if (_isEmptyInList(where['values'])) {
       return '1 = 1';
     }
 
@@ -761,6 +787,31 @@ class QueryGrammar extends BaseGrammar {
     throw UnsupportedError('whereFullText is not supported by this grammar.');
   }
 
+  /// `column [not] like ?`. Dialects override it for case handling; the
+  /// generic grammar has no case-sensitive form.
+  String whereLike(QueryBuilder query, Map<String, dynamic> where) {
+    if (where['caseSensitive'] == true) {
+      throw UnsupportedError(
+          'Case-sensitive like is not supported by this grammar.');
+    }
+    final operator = where['not'] == true ? 'not like' : 'like';
+    return '${this.wrap(where['column'])} $operator ${this.parameter(where['value'])}';
+  }
+
+  /// `column in (1, 2, 3)` with integers inlined (whereIntegerInRaw).
+  String whereInRaw(QueryBuilder query, Map<String, dynamic> where) {
+    final values = where['values'] as List;
+    if (values.isEmpty) return '0 = 1';
+    return '${this.wrap(where['column'])} in (${values.join(', ')})';
+  }
+
+  /// `column not in (1, 2, 3)` with integers inlined.
+  String whereNotInRaw(QueryBuilder query, Map<String, dynamic> where) {
+    final values = where['values'] as List;
+    if (values.isEmpty) return '1 = 1';
+    return '${this.wrap(where['column'])} not in (${values.join(', ')})';
+  }
+
   /// Array operator predicate (`@>`/`<@`/`&&`). Dialect-specific — overridden
   /// where supported (PostgreSQL).
   String whereArrayOp(QueryBuilder query, Map<String, dynamic> where) {
@@ -808,8 +859,22 @@ class QueryGrammar extends BaseGrammar {
     // If the having clause is "raw", we can just return the clause straight away
     // without doing any more processing on it. Otherwise, we will compile the
     // clause into SQL based on the components that make it up from builder.
-    if (having['type'] == 'raw') {
-      return having['boolean'] + ' ' + having['sql'];
+    switch (having['type']) {
+      case 'raw':
+        return having['boolean'] + ' ' + having['sql'];
+      case 'between':
+        final not = having['not'] == true ? 'not ' : '';
+        return '${having['boolean']} ${this.wrap(having['column'])} '
+            '${not}between ? and ?';
+      case 'Null':
+        return '${having['boolean']} ${this.wrap(having['column'])} is null';
+      case 'NotNull':
+        return '${having['boolean']} ${this.wrap(having['column'])} is not null';
+      case 'Nested':
+        final nested = having['query'] as QueryBuilder;
+        final sql = this.compileHavings(nested, nested.havingsProp);
+        // Strip "having " from the nested compilation.
+        return '${having['boolean']} (${sql.substring(7)})';
     }
     return this.compileBasicHaving(having);
   }
@@ -1044,7 +1109,11 @@ class QueryGrammar extends BaseGrammar {
 
   /// Reference to the pseudo-row of would-be-inserted values in a conflict
   /// update. PostgreSQL/SQLite use `excluded.<col>`.
-  String _excludedColumn(String column) => 'excluded.${this.wrap(column)}';
+  String _excludedColumn(String column) => upsertInsertedValue(column);
+
+  /// SQL for "the value this upsert tried to insert" in the update part:
+  /// `excluded."col"` (PostgreSQL/SQLite), `values(`col`)` on MySQL.
+  String upsertInsertedValue(String column) => 'excluded.${this.wrap(column)}';
 
   /// Compile a standalone `ON CONFLICT` clause from an [OnConflictClause].
   String compileOnConflict(OnConflictClause conflict) {
@@ -1127,29 +1196,34 @@ class QueryGrammar extends BaseGrammar {
     var where = this.compileWheres(query);
     final res = Utils.trim("update $table$joins set $columns $where");
 
-    return this.compileExpressions(query) + ' ' + res;
+    return (this.compileExpressions(query) + ' ' + res).trim();
   }
 
   ///
-  /// Prepare the bindings for an update statement.
+  /// Bindings of an UPDATE, in the order the compiled SQL uses them:
+  /// `[with ...] update t [joins] set ... [where]`.
+  /// [QueryExpression] values are removed later by `cleanBindings`.
   ///
-  /// @param  List  bindingsP
-  /// @param  Map  valuesP
-  /// @return List
+  List<dynamic> prepareBindingsForUpdate(
+      QueryBuilder query, Map<String, dynamic> values) {
+    return [
+      ...query.bindings['expressions'],
+      ...query.bindings['join'],
+      ...values.values,
+      ...query.bindings['where'],
+    ];
+  }
+
   ///
-  prepareBindingsForUpdate(dynamic bindingsP, dynamic valuesP) {
-    // Obtém os bindings de CTEs, se existirem
-    //final exprBindings = bindingsP['expressions'] ?? <dynamic>[];
-    //print('prepareBindingsForUpdate $valuesP');
-
-    // Mescla os bindings de expressions antes dos valores normais
-    // ignore: unused_local_variable
-    //final mergedValues = [...exprBindings, ...valuesP];
-
-    // Remove o grupo 'expressions' para não causar binding duplicado
-    //bindingsP.remove('expressions');
-
-    return bindingsP;
+  /// Bindings of a DELETE, in the order the compiled SQL uses them:
+  /// `[with ...] delete from t [where]`.
+  ///
+  List<dynamic> prepareBindingsForDelete(QueryBuilder query) {
+    return [
+      ...query.bindings['expressions'],
+      ...query.bindings['join'],
+      ...query.bindings['where'],
+    ];
   }
 
   ///
@@ -1164,7 +1238,7 @@ class QueryGrammar extends BaseGrammar {
         Utils.is_array(query.wheresProp) ? this.compileWheres(query) : '';
     final res = Utils.trim("delete from $table " + where);
 
-    return this.compileExpressions(query) + ' ' + res;
+    return (this.compileExpressions(query) + ' ' + res).trim();
   }
 
   ///
@@ -1239,6 +1313,62 @@ class QueryGrammar extends BaseGrammar {
   ///  @param  String  $value
   ///  @return String
   ///
+  ///
+  /// Replaces each `?` outside string literals in [sql] with the escaped
+  /// binding, for logs and debugging (QueryBuilder.toRawSql). Never execute
+  /// the result: the escaping is best-effort.
+  ///
+  String substituteBindingsIntoRawSql(String sql, List bindings) {
+    final escaped = bindings.map(this.escapeRawValue).toList();
+    final buffer = StringBuffer();
+    var next = 0;
+    var inString = false;
+    for (var i = 0; i < sql.length; i++) {
+      final char = sql[i];
+      final pair = i + 1 < sql.length ? sql.substring(i, i + 2) : char;
+      // '' (SQL) and \' (MySQL) are escaped quotes inside a literal.
+      if (inString && (pair == "''" || pair == "\\'")) {
+        buffer.write(pair);
+        i++;
+        continue;
+      }
+      if (char == "'") {
+        inString = !inString;
+        buffer.write(char);
+      } else if (char == '?' && !inString && next < escaped.length) {
+        buffer.write(escaped[next++]);
+      } else {
+        buffer.write(char);
+      }
+    }
+    return buffer.toString();
+  }
+
+  /// SQL literal for a binding in [substituteBindingsIntoRawSql].
+  String escapeRawValue(dynamic value) {
+    if (value == null) return 'null';
+    if (value is bool) return this.escapeRawBool(value);
+    if (value is num || value is BigInt) return value.toString();
+    if (value is QueryExpression) return value.getValue().toString();
+    if (value is Uint8List) return this.escapeRawBinary(value);
+    if (value is DateTime) {
+      return this.quoteRawString(
+          Utils.formatDate(value, this.getDateFormat()));
+    }
+    if (value is Map || value is List) {
+      return this.quoteRawString(jsonEncode(value));
+    }
+    return this.quoteRawString(value.toString());
+  }
+
+  /// A quoted string literal (`'` doubled).
+  String quoteRawString(String value) => "'${value.replaceAll("'", "''")}'";
+
+  String escapeRawBool(bool value) => value ? '1' : '0';
+
+  String escapeRawBinary(Uint8List value) =>
+      "x'${value.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}'";
+
   String removeLeadingBoolean(String value) {
     //return preg_replace('/and |or /i', '', $value, 1);
     return value.replaceFirst(RegExp(r"and |or ", caseSensitive: true), '');

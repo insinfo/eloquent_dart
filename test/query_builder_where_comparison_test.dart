@@ -365,7 +365,8 @@ void main() {
       qb.whereIn('id', []);
 
       expect(() => qb.toSql(), returnsNormally);
-      expect(qb.toSql(), equals('select * from "users" where "id" in ()'));
+      // `in ()` is invalid SQL; an empty list matches nothing.
+      expect(qb.toSql(), equals('select * from "users" where 0 = 1'));
       expect(qb.getBindings(), isEmpty);
     });
 
@@ -374,8 +375,7 @@ void main() {
       qb.whereNotIn('id', []);
       // A gramática deve gerar algo como "1 = 1" que sempre será verdadeiro
       expect(() => qb.toSql(), returnsNormally);
-      expect(qb.toSql(),
-          equals('select * from "users" where "id" not in ()')); // Ou ajuste
+      expect(qb.toSql(), equals('select * from "users" where 1 = 1'));
       expect(qb.getBindings(), isEmpty);
     });
 

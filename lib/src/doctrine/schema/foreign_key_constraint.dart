@@ -75,6 +75,17 @@ class ForeignKeyConstraint extends AbstractAsset {
 
   // --- Getters para Nomes (retornam cópias imutáveis) ---
   List<String> getLocalColumns() => List.unmodifiable(_localColumnNames.keys);
+
+  /// Replaces the local columns (used by `Table.renameColumn`); the count must
+  /// still match the foreign columns.
+  void replaceLocalColumns(List<String> columns) {
+    if (columns.length != _foreignColumnNames.length) {
+      throw ArgumentError('Foreign key "${getName()}" needs '
+          '${_foreignColumnNames.length} local columns.');
+    }
+    _localColumnNames = LinkedHashMap.fromEntries(
+        columns.map((c) => MapEntry(c, Identifier(c))));
+  }
   List<String> getQuotedLocalColumns(SchemaGrammar grammar) =>
       List.unmodifiable(
           _localColumnNames.values.map((id) => id.getQuotedName(grammar)));

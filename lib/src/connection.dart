@@ -60,30 +60,34 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   ///
   /// The number of active transactions.
   ///
-  /// @var int
-  ///
-  int transactions = 0;
+  @Deprecated('Use transactionLevel() / isInTransaction.')
+  int get transactions => transactionLevel();
+
+  /// Query log, listeners and pretend state. Shared with the connections
+  /// handed to transaction callbacks, so queries run through `ctx` are logged
+  /// and reported like the others.
+  _QueryObservers _observers = _QueryObservers();
 
   ///
-  /// All of the queries run against the connection.
+  /// All of the queries run against the connection: maps with `query`,
+  /// `bindings` and `time` (milliseconds), as in Laravel.
   ///
-  /// @var array
-  ///
-  List queryLog = [];
+  List get queryLog => _observers.log;
+  set queryLog(List value) => _observers.log = value;
 
   ///
   /// Indicates whether queries are being logged.
   ///
-  /// @var bool
-  ///
-  bool loggingQueries = false;
+  bool get loggingQueries => _observers.logging;
+  set loggingQueries(bool value) => _observers.logging = value;
 
   ///
   /// Indicates if the connection is in a "dry run".
   ///
   /// @var bool
   ///
-  bool pretendingProp = false;
+  bool get pretendingProp => _observers.pretending;
+  set pretendingProp(bool value) => _observers.pretending = value;
 
   ///
   /// The name of the connected database.
@@ -214,6 +218,12 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
     return this.query().from(table);
   }
 
+  /// A [QueryBuilder2] (Dart 3 API: enums, named parameters with a fixed
+  /// meaning, typed results) on [table].
+  QueryBuilder2 table2(String table) {
+    return QueryBuilder2(this, table);
+  }
+
   ///
   /// Get a new query builder instance.
   ///
@@ -242,10 +252,7 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   ///
   Future<Map<String, dynamic>?> selectOne(String query,
       [bindings = const [], int? timeoutInSeconds]) async {
-    final records = await this.select(
-      query,
-      bindings,
-    );
+    final records = await this.select(query, bindings, true, timeoutInSeconds);
     return records.isNotEmpty ? records.first : null;
   }
 
@@ -278,7 +285,7 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
     final res = await this.run(query, bindings,
         (me, query, bindings, timeoutInSeconds) async {
       if (me.pretending()) {
-        return [];
+        return <Map<String, dynamic>>[];
       }
       // For select statements, we'll simply execute the query and return an array
       // of the database result set. Each element in the array will be a single
@@ -307,11 +314,26 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
       bool useReadPdo = true,
       int? fetchSize]) async* {
     if (this.pretending()) {
+      _reportQuery(query, bindings, Duration.zero, null);
       return;
     }
     final pdoL = this.getPdoForSelect(useReadPdo);
     final params = this.prepareBindings(bindings);
-    yield* pdoL.queryStream(query, params, fetchSize);
+    if (!_observers.active) {
+      yield* pdoL.queryStream(query, params, fetchSize);
+      return;
+    }
+    // Reported when the stream ends (time until the last row).
+    final watch = Stopwatch()..start();
+    Object? error;
+    try {
+      yield* pdoL.queryStream(query, params, fetchSize);
+    } catch (e) {
+      error = e;
+      rethrow;
+    } finally {
+      _reportQuery(query, bindings, watch.elapsed, error);
+    }
   }
 
   ///
@@ -321,6 +343,67 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   @override
   DriverAccess? driver() {
     return this.getPdo().driverAccess();
+  }
+
+  /// One LISTEN listener per physical PDO, shared with the connections given
+  /// to transaction callbacks.
+  static final Expando<PostgresNotificationListener> _notificationListeners =
+      Expando<PostgresNotificationListener>();
+
+  /// Whether the driver adapter implements PostgreSQL LISTEN/NOTIFY.
+  bool get supportsNotifications => pdo.pdoInstance.supportsNotifications;
+
+  ///
+  /// PostgreSQL `NOTIFY` via `pg_notify(channel, payload)`. Inside a
+  /// transaction (on the `ctx` connection) the notification is delivered only
+  /// when the transaction commits, and dropped on rollback. The payload must
+  /// be shorter than 8000 bytes.
+  ///
+  /// ```dart
+  /// await db.transaction((ctx) async {
+  ///   await ctx.table('tramita_fila').insert(item);
+  ///   await ctx.notify('tramita_fila', '${item['id']}');
+  /// });
+  /// ```
+  ///
+  Future<void> notify(String channel, [String payload = '']) async {
+    _assertNotifications('notify');
+    await this.select('select 1 from pg_notify(?::text, ?::text)',
+        [channel, payload], false);
+  }
+
+  ///
+  /// PostgreSQL `LISTEN` on [channel]: a stream of the notifications sent to
+  /// it. All channels share one dedicated connection (outside the pool) that
+  /// reconnects by itself; see [notificationListener] for `ready()`,
+  /// `onReconnect` and `onError`.
+  ///
+  /// ```dart
+  /// final sub = db.notifications('tramita_fila').listen((n) => acordarWorker());
+  /// await db.notificationListener.ready();
+  /// // ...
+  /// await sub.cancel(); // UNLISTEN
+  /// ```
+  ///
+  Stream<DriverNotification> notifications(String channel) {
+    return notificationListener.channel(channel);
+  }
+
+  /// The shared LISTEN listener of this connection, created on first use and
+  /// closed by [disconnect].
+  PostgresNotificationListener get notificationListener {
+    _assertNotifications('notifications');
+    final pdoInstance = pdo.pdoInstance;
+    return _notificationListeners[pdoInstance] ??=
+        PostgresNotificationListener(pdoInstance.openNotificationConnection);
+  }
+
+  void _assertNotifications(String method) {
+    if (!supportsNotifications) {
+      throw UnsupportedError(
+          '$method() requires a PostgreSQL driver adapter (driver '
+          '"${getDriverName()}" has no LISTEN/NOTIFY).');
+    }
   }
 
   ///
@@ -387,7 +470,7 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
     final resp = await this.run(query, bindingsP,
         (me, query, bindings, timeoutInSeconds) async {
       if (me.pretending()) {
-        return true;
+        return PDOResults(<Map<String, dynamic>>[], 0);
       }
 
       final pdoL = me.getPdo();
@@ -467,13 +550,16 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   /// @param  array  bindings
   /// @return array
   ///
-  dynamic prepareBindings(List<dynamic> bindings) {
+  dynamic prepareBindings(List<dynamic> bindingsP) {
     var grammar = getQueryGrammar();
     String? driverName;
+    // Converted values go into a copy: the caller's list (often a builder's
+    // binding bucket, reused by the next execution) is never modified.
+    List<dynamic>? bindings;
 
-    for (var i = 0; i < bindings.length; i++) {
+    for (var i = 0; i < bindingsP.length; i++) {
       var key = i;
-      var value = bindings[key];
+      var value = bindingsP[key];
       // Ported from Laravel's Connection::prepareBindings().
       //
       // We need to transform all instances of DateTimeInterface into the actual
@@ -486,26 +572,41 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
       // semantics for timestamp without time zone instead of forcing a Dart
       // DateTime binary/UTC encoding path.
       if (value is DateTime) {
-        bindings[key] = Utils.formatDate(value, grammar.getDateFormat());
+        if (_nativeDateTimeBindings()) continue;
+        (bindings ??= List<dynamic>.of(bindingsP))[key] =
+            Utils.formatDate(value, grammar.getDateFormat());
       } else if (value == false) {
         driverName ??= _resolvedDriverName();
         if (driverName != 'pgsql') {
-          bindings[key] = 0;
+          (bindings ??= List<dynamic>.of(bindingsP))[key] = 0;
         }
       }
     }
 
-    return bindings;
+    return bindings ?? bindingsP;
   }
 
   String _resolvedDriverName() {
     return _cachedDriverName ??= getDriverName();
   }
 
+  bool? _cachedNativeDateTimeBindings;
+
+  /// `datetime_bindings: 'native'` passes DateTime bindings to the driver
+  /// unchanged (microseconds and, on PostgreSQL, the time zone are kept);
+  /// the default `'string'` formats them with the grammar date format
+  /// (`yyyy-MM-dd HH:mm:ss`), as Laravel does.
+  bool _nativeDateTimeBindings() {
+    return _cachedNativeDateTimeBindings ??=
+        PDOConfig.parseDateTimeBindings(getConfig('datetime_bindings')) ==
+            DateTimeBindings.native;
+  }
+
   /// Clears cached config-derived values when tests or custom integrations
   /// mutate the connection config map after construction.
   void clearConfigCache() {
     _cachedDriverName = null;
+    _cachedNativeDateTimeBindings = null;
   }
 
   ///
@@ -514,16 +615,85 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   /// @param  Function  callback
   /// @return mixed
   ///
-  /// @throws \Throwable
-  Future<dynamic> transaction(Future<dynamic> Function(Connection ctx) callback,
-      [int? timeoutInSeconds]) async {
-    var result = this.pdo.pdoInstance.runInTransaction((pdoCtx) {
-      final newConnection = Connection(
-          pdoCtx, this._databaseName, this._tablePrefix, this._config);
-      return callback(newConnection);
-    });
+  /// Outside a transaction this opens one (`BEGIN`/`COMMIT`, `ROLLBACK` on
+  /// error). Called on a connection that is already inside a transaction (the
+  /// `ctx` of an outer callback), it opens a nested transaction as a
+  /// `SAVEPOINT eloquent_savepoint_<level>`: success releases it, an error
+  /// rolls back to it and is rethrown, and the outer transaction stays usable
+  /// if the caller catches the error. A second physical transaction is never
+  /// opened; a driver without SAVEPOINT support throws
+  /// [UnsupportedNestedTransactionException].
+  ///
+  /// Use [transactionIfNeeded] to join an existing transaction instead.
+  ///
+  /// [timeoutInSeconds] is handed to the driver for the outer transaction and
+  /// used for the SAVEPOINT commands of a nested one.
+  @override
+  Future<T> transaction<T>(Future<T> Function(Connection ctx) callback,
+      [int? timeoutInSeconds]) {
+    if (isInTransaction) {
+      return _savepointTransaction(callback, timeoutInSeconds);
+    }
+    return pdo.pdoInstance.runInTransaction<T>(
+        (pdoCtx) => callback(_childConnection(pdoCtx)), timeoutInSeconds);
+  }
 
+  /// Runs [callback] in a transaction, reusing the current one (no SAVEPOINT)
+  /// when this connection is already inside a transaction.
+  @override
+  Future<T> transactionIfNeeded<T>(Future<T> Function(Connection ctx) callback,
+      [int? timeoutInSeconds]) {
+    if (isInTransaction) {
+      return callback(this);
+    }
+    return transaction<T>(callback, timeoutInSeconds);
+  }
+
+  Future<T> _savepointTransaction<T>(
+      Future<T> Function(Connection ctx) callback,
+      int? timeoutInSeconds) async {
+    final parent = pdo;
+    if (!parent.supportsSavepoints) {
+      throw UnsupportedNestedTransactionException();
+    }
+    final level = parent.transactionLevel + 1;
+    final name = savepointName(level);
+    await parent.createSavepoint(name, timeoutInSeconds);
+
+    final T result;
+    try {
+      result = await callback(
+          _childConnection(NestedPDOTransaction(parent, level)));
+    } catch (error, stackTrace) {
+      try {
+        await parent.rollbackToSavepoint(name, timeoutInSeconds);
+      } catch (_) {
+        // Keep the callback error; the outer transaction will report its own
+        // state if it cannot continue.
+      }
+      Error.throwWithStackTrace(error, stackTrace);
+    }
+    await parent.releaseSavepoint(name, timeoutInSeconds);
     return result;
+  }
+
+  /// SAVEPOINT name of a nested transaction at [level] (2 for the first).
+  static String savepointName(int level) => 'eloquent_savepoint_$level';
+
+  /// [newConnectionForPdo] sharing this connection's log, listeners,
+  /// event dispatcher and reconnector.
+  Connection _childConnection(PDOExecutionContext pdoContext) {
+    final child = newConnectionForPdo(pdoContext);
+    child._observers = _observers;
+    child._events = _events;
+    return child;
+  }
+
+  /// Creates a connection of this same kind (grammar, processor, config) over
+  /// another PDO context, such as a transaction context.
+  Connection newConnectionForPdo(PDOExecutionContext pdoContext) {
+    return Connection(
+        pdoContext, this._databaseName, this._tablePrefix, this._config);
   }
 
   ///
@@ -583,13 +753,22 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   //}
 
   ///
-  /// Get the number of active transactions.
+  /// Transaction depth of this connection: `0` outside a transaction, `1` in
+  /// the callback of a top-level [transaction], `2+` inside SAVEPOINTs.
   ///
-  /// @return int
-  ///
+  @override
   int transactionLevel() {
-    return this.transactions;
+    return pdo.transactionLevel;
   }
+
+  /// Whether this connection runs inside a transaction (the `ctx` given to a
+  /// [transaction] callback).
+  @override
+  bool get isInTransaction => pdo.isInTransaction;
+
+  /// Whether [transaction] can nest via SAVEPOINT on this connection.
+  @override
+  bool get supportsSavepoints => pdo.supportsSavepoints;
 
   ///
   /// Execute the given callback in "dry run" mode.
@@ -598,7 +777,8 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   /// @return array
   ///
   Future<dynamic> pretend(Function callback) async {
-    var loggingQueries = this.loggingQueries;
+    final loggingQueries = this.loggingQueries;
+    final previousLog = this.queryLog;
 
     this.enableQueryLog();
     this.pretendingProp = true;
@@ -607,10 +787,18 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
     // Basically to make the database connection "pretend", we will just return
     // the default values for all the query methods, then we will return an
     // array of queries that were "executed" within the Closure callback.
-    callback(this);
-    this.pretendingProp = false;
-    this.loggingQueries = loggingQueries;
-    return this.queryLog;
+    // The callback is awaited (it used to return before an async callback
+    // ran, giving an empty log).
+    final List log;
+    try {
+      await callback(this);
+    } finally {
+      log = this.queryLog;
+      this.pretendingProp = false;
+      this.loggingQueries = loggingQueries;
+      this.queryLog = previousLog;
+    }
+    return log;
   }
 
   ///
@@ -630,6 +818,30 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
               int? timeoutInSeconds)
           callback,
       [int? timeoutInSeconds]) async {
+    // Fast path: nothing observes the queries, so nothing is timed.
+    if (!_observers.active) {
+      return _runUnobserved(query, bindings, callback, timeoutInSeconds);
+    }
+    final watch = Stopwatch()..start();
+    Object? error;
+    try {
+      return await _runUnobserved(query, bindings, callback, timeoutInSeconds);
+    } catch (e) {
+      error = e;
+      rethrow;
+    } finally {
+      watch.stop();
+      _reportQuery(query, bindings, watch.elapsed, error);
+    }
+  }
+
+  Future<dynamic> _runUnobserved(
+      String query,
+      dynamic bindings,
+      Future<dynamic> Function(Connection con, String query, dynamic bindings,
+              int? timeoutInSeconds)
+          callback,
+      int? timeoutInSeconds) async {
     //this.reconnectIfMissingConnection();
 
     //var start = Utils.microtime();
@@ -642,28 +854,11 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
       result = await this
           .runQueryCallback(query, bindings, callback, timeoutInSeconds);
       //print('Connection@run $result');
-    } catch (e) {
-      //  print('Connection@run error $e $e');
-      // result = await this
-      //     .tryAgainIfCausedByLostConnection(e, query, bindings, callback, timeoutInSeconds);
-
-      if (causedByLostConnection(e) && tryReconnectCount < tryReconnectLimit) {
-        await Future.delayed(const Duration(milliseconds: 1000));
-        tryReconnectCount++; // incrementa o contador
-        await reconnect();
-        tryReconnectCount = 0; // zera depois do sucesso
-        return await runQueryCallback(
-            query, bindings, callback, timeoutInSeconds);
-      }
-      rethrow;
+    } catch (e, stackTrace) {
+      return await this.tryAgainIfCausedByLostConnection(
+          e, query, bindings, callback, timeoutInSeconds,
+          stackTrace: stackTrace);
     }
-
-    // Once we have run the query we will calculate the time that it took to run and
-    // then log the query, bindings, and execution time so we will report them on
-    // the event that the developer needs them. We'll log time in milliseconds.
-    //var time = this.getElapsedTime(start);
-
-    //this.logQuery(query, bindings, time);
 
     return result;
   }
@@ -722,19 +917,38 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
               Connection, String, dynamic, int? timeoutInSeconds)
           callback,
       int? timeoutInSeconds,
-      {int delay = 1000}) async {
-    if (this.causedByLostConnection(e) &&
-        tryReconnectCount < tryReconnectLimit) {
-      await Future.delayed(Duration(milliseconds: delay));
-
-      tryReconnectLimit++;
-      await this.reconnect();
-      tryReconnectLimit = 0;
-      return await this
-          .runQueryCallback(query, bindings, callback, timeoutInSeconds);
+      {int delay = 1000, StackTrace? stackTrace}) async {
+    // Inside a transaction the lost connection took the transaction with it:
+    // re-running only this statement on a new connection would be wrong.
+    if (!this.causedByLostConnection(e) ||
+        this.isInTransaction ||
+        this.reconnector == null) {
+      Error.throwWithStackTrace(e as Object, stackTrace ?? StackTrace.current);
     }
 
-    throw e;
+    Object lastError = e;
+    tryReconnectCount = 0;
+    while (tryReconnectCount < tryReconnectLimit) {
+      tryReconnectCount++;
+      // Linear backoff, capped at 5 s.
+      final wait = delay * tryReconnectCount;
+      await Future.delayed(Duration(milliseconds: wait > 5000 ? 5000 : wait));
+      try {
+        await this.reconnect();
+        final result = await this
+            .runQueryCallback(query, bindings, callback, timeoutInSeconds);
+        tryReconnectCount = 0;
+        return result;
+      } catch (error) {
+        if (!this.causedByLostConnection(error)) {
+          tryReconnectCount = 0;
+          rethrow;
+        }
+        lastError = error;
+      }
+    }
+    tryReconnectCount = 0;
+    throw lastError;
   }
 
   ///
@@ -743,8 +957,14 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   /// @return void
   ///
   Future<void> disconnect() async {
+    final pdoInstance = this.pdo.pdoInstance;
+    final listener = _notificationListeners[pdoInstance];
+    if (listener != null) {
+      _notificationListeners[pdoInstance] = null;
+      await listener.close();
+    }
     try {
-      await this.pdo.pdoInstance.close();
+      await pdoInstance.close();
     } catch (e, s) {
       print('eloquent@disconnect error $e $s');
     }
@@ -786,14 +1006,30 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   /// @return void
   ///
   dynamic logQuery(String query, bindings, [time = null]) {
-    // if (isset(this.events)) {
-    //     this.events->fire(new Events\QueryExecuted(
-    //         $query, $bindings, $time, $this
-    //     ));
-    // }
-
     if (this.loggingQueries) {
       this.queryLog.add({'query': query, 'bindings': bindings, 'time': time});
+    }
+  }
+
+  void _reportQuery(
+      String query, dynamic bindings, Duration elapsed, Object? error) {
+    final observers = _observers;
+    observers.total += elapsed;
+    final list = bindings is List ? bindings : const <dynamic>[];
+    if (observers.logging) {
+      logQuery(query, list, elapsed.inMicroseconds / 1000);
+    }
+    if (observers.listeners.isEmpty) return;
+    final event = QueryExecuted(
+      sql: query,
+      bindings: List<dynamic>.unmodifiable(list),
+      time: elapsed,
+      connection: this,
+      error: error,
+    );
+    // A copy: a listener may unsubscribe itself while being called.
+    for (final listener in List.of(observers.listeners)) {
+      listener(event);
     }
   }
 
@@ -803,11 +1039,35 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   /// @param  \Closure  $callback
   /// @return void
   ///
-  dynamic listen(Function callback) {
-    // if (isset(this.events)) {
-    //     this.events->listen(Events\QueryExecuted::class, $callback);
-    // }
-    throw UnimplementedError();
+  ///
+  /// [callback] receives every statement run on this connection (and on the
+  /// connections given to its transaction callbacks), with its time and
+  /// error. Returns a function that removes the listener.
+  ///
+  /// ```dart
+  /// final stop = db.listen((q) => print('${q.time.inMilliseconds} ms ${q.sql}'));
+  /// ```
+  ///
+  void Function() listen(void Function(QueryExecuted query) callback) {
+    _observers.listeners.add(callback);
+    return () => _observers.listeners.remove(callback);
+  }
+
+  /// Calls [handler] for every statement slower than [threshold].
+  void Function() onSlowQuery(
+      Duration threshold, void Function(QueryExecuted query) handler) {
+    return listen((query) {
+      if (query.time > threshold) handler(query);
+    });
+  }
+
+  /// Total time spent running statements on this connection (and its
+  /// transaction connections) while a query log or listener was active.
+  Duration totalQueryDuration() => _observers.total;
+
+  /// Resets [totalQueryDuration].
+  void resetTotalQueryDuration() {
+    _observers.total = Duration.zero;
   }
 
   ///
@@ -924,7 +1184,7 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   /// @return \PDO
   ///
   PDOExecutionContext getReadPdo() {
-    if (this.transactions >= 1) {
+    if (isInTransaction) {
       return this.getPdo();
     }
 
@@ -938,7 +1198,7 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   /// @return $this
   ///
   dynamic setPdo(PDOExecutionContext pdo) {
-    if (this.transactions >= 1) {
+    if (isInTransaction) {
       //RuntimeException
       throw Exception("Can't swap PDO instance while within transaction.");
     }
@@ -1094,9 +1354,12 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   /// @return \Illuminate\Contracts\Events\Dispatcher
   ///
   dynamic getEventDispatcher() {
-    //return this.events;
-    throw UnimplementedError();
+    return this._events;
   }
+
+  /// The dispatcher given to [setEventDispatcher] (kept for Laravel parity;
+  /// query events are delivered through [listen]).
+  dynamic _events;
 
   ///
   /// Set the event dispatcher instance on the connection.
@@ -1105,8 +1368,7 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   /// @return void
   ///
   dynamic setEventDispatcher($events) {
-    //this.events = $events;
-    throw UnimplementedError();
+    this._events = $events;
   }
 
   ///
@@ -1218,4 +1480,18 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
 
     return grammar;
   }
+}
+
+/// Query log, listeners and pretend state of a connection and of the
+/// connections created for its transactions.
+class _QueryObservers {
+  bool logging = false;
+  List log = [];
+  bool pretending = false;
+  Duration total = Duration.zero;
+  final List<void Function(QueryExecuted)> listeners =
+      <void Function(QueryExecuted)>[];
+
+  /// Whether statements must be timed and reported.
+  bool get active => logging || listeners.isNotEmpty;
 }

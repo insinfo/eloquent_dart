@@ -289,13 +289,9 @@ class Blueprint {
         ? List<String>.from(columns.map((e) => e.toString()))
         : [columns.toString()];
 
-    // Gera nome padrão se não fornecido, exceto para foreign
-    index ??= (type != 'foreign') ? createIndexName(type, columnList) : null;
-
-    // Valida se o nome é obrigatório e não foi fornecido/gerado
-    if (index == null && !['foreign', 'primary'].contains(type)) {
-      throw ArgumentError("Index name is required for command type '$type'.");
-    }
+    // Default name, as in Laravel (`{table}_{columns}_foreign` for foreign
+    // keys, the name dropForeign([...]) looks for).
+    index ??= createIndexName(type, columnList);
 
     return addCommand(type, {'index': index, 'columns': columnList});
   }

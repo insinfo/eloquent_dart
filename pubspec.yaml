@@ -1,8 +1,18 @@
 name: eloquent
 version: 4.0.0
-description: eloquent query builder port from PHP Laravel
+description: >-
+  Laravel-style (Eloquent 5.2) query builder, schema builder and migrations
+  for Dart, with PostgreSQL and MySQL drivers.
 homepage: https://github.com/insinfo/eloquent_dart
-publish_to: none
+repository: https://github.com/insinfo/eloquent_dart
+issue_tracker: https://github.com/insinfo/eloquent_dart/issues
+documentation: https://github.com/insinfo/eloquent_dart#readme
+topics:
+  - database
+  - orm
+  - query-builder
+  - postgresql
+  - mysql
 
 environment:
   sdk: ^3.6.0
@@ -10,13 +20,14 @@ environment:
 dependencies:  
   intl: '>=0.17.0 <3.0.0'
   #dargres: ^2.2.4
-  dargres: ^4.0.0
-  #dargres: 
-    #path: ../dargres
+  # 4.0.1: searchPath/sessionStatements/numericAsString used by DargresPDO
+  # Local development: pubspec_overrides.yaml (git-ignored) points dargres,
+  # dpgsql and mysql_dart at ../dargres, ../dpgsql and ../mysql.dart.
+  dargres: ^4.0.1
   
   #postgres:
     #path: ../postgresql-dart 
-  dpgsql: ^1.0.2
+  dpgsql: ^1.0.3
     #path: ../dpgsql
   # postgres v2
   postgres_fork: ^2.8.5
@@ -24,7 +35,7 @@ dependencies:
     #path: ../postgresql-fork 
 
   #mysql_client: ^0.0.27    
-  mysql_dart: ^3.0.0
+  mysql_dart: ^3.0.1
     #path: ../mysql.dart
   # postgres v3 
   postgres: ^3.5.4

@@ -11,22 +11,11 @@ class MySqlConnection extends Connection {
       Map<String, dynamic> configP = const {}])
       : super(pdoP, databaseP, tablePrefixP, configP);
 
- 
-  /// Execute a Closure within a transaction.
-  ///
-  /// @param  Function  callback
-  /// @return mixed
-  ///
-  /// @throws \Throwable
-  Future<dynamic> transaction(Future<dynamic> Function(Connection ctx) callback,
-      [int? timeoutInSeconds]) async {
-    var result = this.pdo.pdoInstance.runInTransaction((pdoCtx) {
-      final newConnection = MySqlConnection(pdoCtx, this.getDatabaseName(),
-          this.getTablePrefix(), this.getConfigs());
-      return callback(newConnection);
-    });
-
-    return result;
+  /// Transaction callbacks get a [MySqlConnection] too.
+  @override
+  Connection newConnectionForPdo(PDOExecutionContext pdoContext) {
+    return MySqlConnection(pdoContext, this.getDatabaseName(),
+        this.getTablePrefix(), this.getConfigs());
   }
 
   ///

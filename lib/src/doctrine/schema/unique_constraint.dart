@@ -69,6 +69,16 @@ class UniqueConstraint extends AbstractAsset {
   }
 
   /// Adiciona uma coluna à constraint internamente.
+  /// Replaces the column list (used by `Table.renameColumn`).
+  void replaceColumns(List<String> columns) {
+    if (columns.isEmpty) {
+      throw ArgumentError(
+          'Unique constraint "${getName()}" must span at least one column.');
+    }
+    _columns = LinkedHashMap.fromEntries(
+        columns.map((c) => MapEntry(c, Identifier(c))));
+  }
+
   void addColumn(String columnName) {
     // A chave do mapa é o nome original para preservar o case se necessário,
     // mas a comparação geralmente deve ser case-insensitive.

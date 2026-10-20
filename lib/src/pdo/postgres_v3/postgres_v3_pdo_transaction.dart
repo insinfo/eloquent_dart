@@ -5,7 +5,7 @@ import 'package:eloquent/src/pdo/core/pdo_result.dart';
 import 'package:postgres/postgres.dart';
 import 'postgres_v3_pdo.dart';
 
-class PostgresV3PDOTransaction extends PDOExecutionContext {
+class PostgresV3PDOTransaction extends PDOTransactionContext {
   final TxSession transactionContext;
 
   @override

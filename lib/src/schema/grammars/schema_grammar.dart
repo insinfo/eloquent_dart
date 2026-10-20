@@ -156,8 +156,46 @@ abstract class SchemaGrammar extends BaseGrammar {
     return compileIndex(blueprint, command);
   }
 
+  /// `alter table t add constraint name foreign key (cols) references
+  /// other (cols) [on delete ...] [on update ...]`. It returned `['']`, so a
+  /// migration's foreign() created nothing.
   List<String> compileForeign(Blueprint blueprint, Fluent command) {
-    /* ... */ return [''];
+    final on = command['on'];
+    final references = command['references'];
+    if (on == null || references == null) {
+      throw ArgumentError('Foreign key on "${blueprint.getTable()}" needs '
+          'references(...) and on(...).');
+    }
+    var sql = 'alter table ${wrapTable(blueprint)} '
+        'add constraint ${wrap(command['index'])} '
+        'foreign key (${columnize(command['columns'] as List)}) '
+        'references ${wrapTable(on)} (${columnize(references as List)})';
+    if (command['onDelete'] != null) {
+      sql += ' on delete ${referentialAction(command['onDelete'])}';
+    }
+    if (command['onUpdate'] != null) {
+      sql += ' on update ${referentialAction(command['onUpdate'])}';
+    }
+    return [sql];
+  }
+
+  static const _referentialActions = {
+    'cascade',
+    'restrict',
+    'set null',
+    'set default',
+    'no action',
+  };
+
+  /// The `on delete`/`on update` action, validated (it is inlined in SQL).
+  @protected
+  String referentialAction(dynamic action) {
+    final value = action.toString().trim().toLowerCase();
+    if (!_referentialActions.contains(value)) {
+      throw ArgumentError.value(action, 'action',
+          'Expected cascade, restrict, set null, set default or no action.');
+    }
+    return value;
   }
 
   List<String> compileDrop(Blueprint blueprint, Fluent command) {
@@ -168,8 +206,11 @@ abstract class SchemaGrammar extends BaseGrammar {
     /* ... */ return [''];
   }
 
+  /// `alter table t drop column a, drop column b`.
   List<String> compileDropColumn(Blueprint blueprint, Fluent command) {
-    /* ... */ return [''];
+    final columns =
+        prefixArray('drop column', wrapArray(command['columns'] as List));
+    return ['alter table ${wrapTable(blueprint)} ${columns.join(', ')}'];
   }
 
   List<String> compileDropPrimary(Blueprint blueprint, Fluent command) {
@@ -188,12 +229,18 @@ abstract class SchemaGrammar extends BaseGrammar {
     return compileDropIndex(blueprint, command);
   }
 
+  /// `alter table t drop constraint name` (MySQL overrides it).
   List<String> compileDropForeign(Blueprint blueprint, Fluent command) {
-    /* ... */ return [''];
+    return [
+      'alter table ${wrapTable(blueprint)} drop constraint ${wrap(command['index'])}'
+    ];
   }
 
+  /// `alter table t rename to new` (MySQL overrides it).
   List<String> compileRename(Blueprint blueprint, Fluent command) {
-    /* ... */ return [''];
+    return [
+      'alter table ${wrapTable(blueprint)} rename to ${wrapTable(command['to'])}'
+    ];
   }
 
   List<String> compileRenameIndex(Blueprint blueprint, Fluent command) {
@@ -241,9 +288,13 @@ abstract class SchemaGrammar extends BaseGrammar {
   //  compileTableExists, compileColumnExists, Doctrine stubs... como antes)
 
   @protected
+  /// `create [temporary] table t (column definitions)`. It returned `''`, so
+  /// `schema.create()` on MySQL (which builds on it) ran an empty query.
   String compileCreateTable(
       Blueprint blueprint, Fluent command, Connection connection) {
-    /* ... */ return '';
+    final temporary = blueprint.temporaryV ? 'create temporary' : 'create';
+    return '$temporary table ${wrapTable(blueprint)} '
+        '(${getColumns(blueprint).join(', ')})';
   }
 
   @protected
@@ -266,12 +317,13 @@ abstract class SchemaGrammar extends BaseGrammar {
 
   @protected
   List<Fluent> getCommandsByName(Blueprint blueprint, String name) {
-    return [];
+    return blueprint.getCommands().where((c) => c['name'] == name).toList();
   }
 
   @protected
   Fluent? getCommandByName(Blueprint blueprint, String name) {
-    return null;
+    final commands = getCommandsByName(blueprint, name);
+    return commands.isEmpty ? null : commands.first;
   }
 
   @protected

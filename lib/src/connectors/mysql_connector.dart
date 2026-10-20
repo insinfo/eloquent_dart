@@ -17,40 +17,36 @@ class MySqlConnector extends Connector implements ConnectorInterface {
   /// @return PostgreSQLConnection \PDO
   ///
   Future<PDOInterface> connect(Map<String, dynamic> config) async {
-    //final dsn = getDsn(config);
-    //final options = getOptions(config);
-    final connection = await createConnection(config);
+    // The session statements run on every physical connection (each pool
+    // connection and reconnects), not once on whichever connection the pool
+    // happened to hand out. The database is selected in the handshake.
+    return createConnection(config);
+  }
 
-    if (config.containsKey('database') && config['database'] != null) {
-      await connection.execute("use `${config['database']}`;");
-    }
-
-    // var collation =config.containsKey('collation') ? config['collation'] : null;
+  /// Session statements for a new physical connection: character set,
+  /// time zone and SQL modes.
+  List<String> sessionStatements(Map<String, dynamic> config) {
+    final statements = <String>[];
 
     // Next we will set the "names" and "collation" on the clients connections so
-    // a correct character set will be used by this client. The collation also
-    // is set on the server but needs to be set here on this client objects.
-
+    // a correct character set will be used by this client.
     if (config.containsKey('charset') && config['charset'] != null) {
       var charset = config['charset'];
 
-      var names = "set names '$charset'" +
+      statements.add("set names '$charset'" +
           (config.containsKey('collation')
               ? " collate '${config['collation']}'"
-              : '');
-
-      await connection.execute(names);
+              : ''));
     }
-    // Next, we will check to see if a timezone has been specified in this config
-    // and if it has we will issue a statement to modify the timezone with the
-    // database. Setting this DB timezone is an optional configuration item.
-    if (config.containsKey('timezone')) {
-      await connection.execute('set time_zone="' + config['timezone'] + '"');
+    // Setting this DB timezone is an optional configuration item.
+    if (config.containsKey('timezone') && config['timezone'] != null) {
+      statements.add('set time_zone="' + config['timezone'] + '"');
     }
 
-    await this.setModes(connection, config);
+    final mode = this.sqlModeStatement(config);
+    if (mode != null) statements.add(mode);
 
-    return connection;
+    return statements;
   }
 
   ///
@@ -111,19 +107,22 @@ class MySqlConnector extends Connector implements ConnectorInterface {
   ///
   Future<void> setModes(
       PDOInterface connection, Map<String, dynamic> config) async {
+    final mode = this.sqlModeStatement(config);
+    if (mode != null) await connection.execute(mode);
+  }
+
+  /// The `set session sql_mode` statement for [config], if any.
+  String? sqlModeStatement(Map<String, dynamic> config) {
     if (config.containsKey('modes')) {
       var modes = Utils.implode(',', config['modes']);
-
-      connection.execute("set session sql_mode='" + modes + "'");
+      return "set session sql_mode='" + modes + "'";
     } else if (config.containsKey('strict')) {
       if (config['strict'] != null) {
-        await connection.execute(
-            "set session sql_mode='ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION'");
-      } else {
-        await connection
-            .execute("set session sql_mode='NO_ENGINE_SUBSTITUTION'");
+        return "set session sql_mode='ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION'";
       }
+      return "set session sql_mode='NO_ENGINE_SUBSTITUTION'";
     }
+    return null;
   }
 
   ///
@@ -154,7 +153,8 @@ class MySqlConnector extends Connector implements ConnectorInterface {
 
     final pdoConfig = PDOConfig.fromMap(config);
 
-    pdo = MySqlClientPDO(pdoConfig);
+    pdo = MySqlClientPDO(pdoConfig,
+        sessionStatements: this.sessionStatements(config));
 
     await pdo.connect();
 

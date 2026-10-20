@@ -1,7 +1,7 @@
 import 'package:dargres/dargres.dart';
 import 'package:eloquent/eloquent.dart';
 
-class DargresPDOTransaction extends PDOExecutionContext {
+class DargresPDOTransaction extends PDOTransactionContext {
   final TransactionContext transactionContext;
   
   @override

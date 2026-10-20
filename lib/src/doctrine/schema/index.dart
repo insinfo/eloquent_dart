@@ -46,6 +46,14 @@ class Index extends AbstractAsset {
     }
   }
 
+  /// Replaces the column list (used by `Table.renameColumn`).
+  void replaceColumns(List<String> columns) {
+    if (columns.isEmpty) {
+      throw ArgumentError('Index "${getName()}" must span at least one column.');
+    }
+    _columns = List.from(columns);
+  }
+
   /// Construtor de fábrica a partir de um comando Fluent do Blueprint.
   factory Index.fromFluent(Fluent command, String defaultName, String table) {
     final name = command['index'] as String? ?? defaultName;

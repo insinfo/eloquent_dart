@@ -153,11 +153,9 @@ void main() {
     builder.recursionLimit(100);
     expect(builder.recursionLimitProp, 100);
 
-    // O teste da *aplicação* do limite dependeria da gramática
-    // Ex: Se a gramática suportasse, o SQL poderia conter 'OPTION (MAXRECURSION 100)' etc.
-    // Com a gramática mock atual, toSql() não incluirá o limite.
-    final sql = builder.toSql(); // Apenas para garantir que não quebra
-    expect(sql, isNotNull);
+    // PostgreSQL has no per-query recursion limit: compiling fails loudly
+    // instead of silently ignoring it.
+    expect(() => builder.toSql(), throwsUnsupportedError);
   });
 
   test('Combines non-recursive and recursive CTEs', () {

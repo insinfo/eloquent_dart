@@ -3,6 +3,14 @@ import 'package:eloquent/eloquent.dart';
 import '../json_expression.dart';
 
 class QueryMySqlGrammar extends QueryGrammar {
+  /// MySQL/MariaDB predicate operators for `QueryBuilder2.whereSqlOperator`.
+  @override
+  Set<String> get predicateOperators => const {
+        '=', '<>', '!=', '<', '>', '<=', '>=', '<=>',
+        'like', 'not like', 'like binary', 'not like binary',
+        'rlike', 'not rlike', 'regexp', 'not regexp', 'sounds like',
+      };
+
   /// All of the available clause operators.
   List<String> operators = [
     '=',
@@ -33,6 +41,9 @@ class QueryMySqlGrammar extends QueryGrammar {
   ];
 
   List<String> selectComponents = [
+    // CTEs (MySQL 8 / MariaDB 10.2+); they were dropped while their bindings
+    // were still sent.
+    'expressions',
     'aggregate',
     'columns',
     'from',
@@ -53,11 +64,25 @@ class QueryMySqlGrammar extends QueryGrammar {
   /// @return string
   ///
   String compileSelect(QueryBuilder query) {
-    var sql = super.compileSelect(query);
-    if (query.unionsProp.isNotEmpty) {
-      sql = '(' + sql + ') ' + this.compileUnions(query);
+    if (query.unionsProp.isEmpty || query.expressionsProp.isEmpty) {
+      var sql = super.compileSelect(query);
+      if (query.unionsProp.isNotEmpty) {
+        sql = '(' + sql + ') ' + this.compileUnions(query);
+      }
+      return sql;
     }
-    return sql;
+
+    // The WITH clause must precede the parenthesized union operands.
+    final ctes = this.compileExpressions(query);
+    final expressions = query.expressionsProp;
+    query.expressionsProp = [];
+    final String sql;
+    try {
+      sql = super.compileSelect(query);
+    } finally {
+      query.expressionsProp = expressions;
+    }
+    return '$ctes ($sql) ${this.compileUnions(query)}';
   }
 
   ///
@@ -100,6 +125,17 @@ class QueryMySqlGrammar extends QueryGrammar {
   /// @return string
   ///
   String compileLock(QueryBuilder query, value) {
+    if (value is QueryLock) {
+      // Modifiers need the MySQL 8.0 syntax (`FOR SHARE`, not
+      // `LOCK IN SHARE MODE`).
+      final sql = StringBuffer(value.forUpdate ? 'for update' : 'for share');
+      if (value.of.isNotEmpty) {
+        sql.write(' of ${value.of.map(wrapTable).join(', ')}');
+      }
+      if (value.skipLocked) sql.write(' skip locked');
+      if (value.noWait) sql.write(' nowait');
+      return sql.toString();
+    }
     if (value is! String) {
       return value ? 'for update' : 'lock in share mode';
     }
@@ -171,6 +207,52 @@ class QueryMySqlGrammar extends QueryGrammar {
     return '$insertSql on duplicate key update ${setParts.join(', ')}';
   }
 
+  @override
+  String upsertInsertedValue(String column) => 'values(${this.wrap(column)})';
+
+  /// `ON CONFLICT` in MySQL terms (it emitted PostgreSQL's `on conflict`):
+  /// `do update` becomes `on duplicate key update`, `do nothing` a no-op
+  /// update of the first key column (only duplicate keys are skipped, unlike
+  /// `insert ignore`). MySQL matches any unique key, so the conflict
+  /// columns only pick that column; a named constraint and a `where` on the
+  /// update have no MySQL equivalent and throw.
+  @override
+  String compileInsertWithClauses(
+    QueryBuilder query,
+    Map<String, dynamic> values,
+    OnConflictClause? conflict,
+    List<dynamic>? returning,
+  ) {
+    final buffer = StringBuffer(this.compileInsert(query, values));
+    if (conflict != null) {
+      if (conflict.constraint != null) {
+        throw UnsupportedError(
+            'MySQL cannot target a named constraint in ON DUPLICATE KEY.');
+      }
+      if (conflict.updateWhereRaw != null) {
+        throw UnsupportedError(
+            'MySQL ON DUPLICATE KEY UPDATE has no WHERE clause.');
+      }
+      final update = conflict.doNothing ? null : conflict.updateValues;
+      if (update == null || update.isEmpty) {
+        final key = this.wrap(conflict.columns.isNotEmpty
+            ? conflict.columns.first
+            : values.keys.first);
+        buffer.write(' on duplicate key update $key = $key');
+      } else {
+        final parts = [
+          for (final entry in update.entries)
+            '${this.wrap(entry.key)} = ${this.parameter(entry.value)}'
+        ];
+        buffer.write(' on duplicate key update ${parts.join(', ')}');
+      }
+    }
+    if (returning != null) {
+      buffer.write(this.compileReturning(returning));
+    }
+    return buffer.toString();
+  }
+
   /// MySQL does not support `RETURNING` on INSERT (MariaDB does, but this
   /// grammar targets MySQL). Reject it clearly instead of emitting bad SQL.
   @override
@@ -222,7 +304,9 @@ class QueryMySqlGrammar extends QueryGrammar {
     // intended records are updated by the SQL statements we generate to run.
     final where = this.compileWheres(query);
 
-    var sql = ("update $table$joins set $columnsStr $where").trimRight();
+    var sql = ("${this.compileExpressions(query)} update $table$joins "
+            "set $columnsStr $where")
+        .trim();
 
     if (query.ordersProp.isNotEmpty) {
       sql += ' ' + this.compileOrders(query, query.ordersProp);
@@ -262,20 +346,31 @@ class QueryMySqlGrammar extends QueryGrammar {
   /// [values] Map<String, dynamic>
   /// @return array
   ///
-  List<dynamic> prepareBindingsForUpdate(bindings, values) {
-    // Obtemos as chaves do Map na ordem de inserção.
-    final keys = values.keys.toList();
+  /// SQL order: `[with] update t [joins] set ... [where] [order by] [limit]`.
+  /// A boolean assigned to a JSON selector is emitted inline by
+  /// [compileJsonUpdateColumn], so it has no binding.
+  @override
+  List<dynamic> prepareBindingsForUpdate(
+      QueryBuilder query, Map<String, dynamic> values) {
+    return [
+      ...query.bindings['expressions'],
+      ...query.bindings['join'],
+      for (final entry in values.entries)
+        if (!(isJsonSelector(entry.key) && entry.value is bool)) entry.value,
+      ...query.bindings['where'],
+      ...query.bindings['order'],
+    ];
+  }
 
-    // Itera de trás para frente, removendo os bindings correspondentes
-    // para colunas que são seletores JSON e cujo valor é booleano.
-    for (int i = keys.length - 1; i >= 0; i--) {
-      final column = keys[i];
-      final value = values[column];
-      if (isJsonSelector(column) && value is bool) {
-        bindings.removeAt(i);
-      }
-    }
-    return bindings;
+  /// SQL order: `[with] delete ... [joins] [where] [order by] [limit]`.
+  @override
+  List<dynamic> prepareBindingsForDelete(QueryBuilder query) {
+    return [
+      ...query.bindings['expressions'],
+      ...query.bindings['join'],
+      ...query.bindings['where'],
+      if (query.joinsProp.isEmpty) ...query.bindings['order'],
+    ];
   }
 
   /**
@@ -298,16 +393,56 @@ class QueryMySqlGrammar extends QueryGrammar {
   /// @param  QueryBuilder $query
   /// @return string
   ///
+  /// `column like ?`, or `like binary ?` when case-sensitive (Laravel).
+  @override
+  String whereLike(QueryBuilder query, Map<String, dynamic> where) {
+    final not = where['not'] == true ? 'not ' : '';
+    final operator = where['caseSensitive'] == true ? 'like binary' : 'like';
+    return '${this.wrap(where['column'])} $not$operator '
+        '${this.parameter(where['value'])}';
+  }
+
+  /// `match (columns) against (? in natural language mode)`; the option
+  /// `mode: 'boolean'` uses boolean mode and `expanded: true` adds
+  /// `with query expansion` (natural language mode only).
+  @override
+  String whereFullText(QueryBuilder query, Map<String, dynamic> where) {
+    final options = (where['options'] as Map?) ?? const {};
+    final columns = this.columnize(where['columns'] as List);
+    final boolean = options['mode'] == 'boolean';
+    final mode = boolean ? ' in boolean mode' : ' in natural language mode';
+    final expanded =
+        options['expanded'] == true && !boolean ? ' with query expansion' : '';
+    return 'match ($columns) against '
+        '(${this.parameter(where['value'])}$mode$expanded)';
+  }
+
+  /// MySQL string literals also treat the backslash as an escape.
+  @override
+  String quoteRawString(String value) =>
+      "'${value.replaceAll('\\', '\\\\').replaceAll("'", "''")}'";
+
+  /// MySQL/MariaDB limit recursion with a session variable, not in the query.
+  @override
+  String compileRecursionLimit(QueryBuilder query) {
+    if (query.recursionLimitProp == null) return '';
+    throw UnsupportedError(
+        'recursionLimit() is not supported on MySQL/MariaDB; set the session '
+        'variable cte_max_recursion_depth (MySQL) or max_recursive_iterations '
+        '(MariaDB), or filter a depth column.');
+  }
+
   String compileDelete(QueryBuilder query) {
     final table = this.wrapTable(query.fromProp);
+    final ctes = this.compileExpressions(query);
 
     final where = query.wheresProp.isNotEmpty ? this.compileWheres(query) : '';
 
     if (query.joinsProp.isNotEmpty) {
       final joins = ' ' + this.compileJoins(query, query.joinsProp);
-      return "delete $table from $table$joins $where".trim();
+      return "$ctes delete $table from $table$joins $where".trim();
     } else {
-      var sql = "delete from $table $where".trim();
+      var sql = "$ctes delete from $table $where".trim();
 
       if (query.ordersProp.isNotEmpty) {
         sql += ' ' + this.compileOrders(query, query.ordersProp);

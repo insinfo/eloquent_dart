@@ -84,9 +84,7 @@ class Repository<T> {
           'Cannot update a ${mapper.table} entity without a primary key.');
     }
     final data = mapper.toRow(entity);
-    final affected =
-        await query().where(mapper.primaryKey, '=', id).update(data);
-    return affected is int ? affected : int.tryParse('$affected') ?? 0;
+    return query().where(mapper.primaryKey, '=', id).update(data);
   }
 
   /// Insert when the entity has no primary key, otherwise update. Returns the

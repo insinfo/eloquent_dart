@@ -144,9 +144,20 @@ class SchemaPostgresGrammar extends SchemaGrammar {
   /// Compila um comando de chave estrangeira (ALTER TABLE ... ADD CONSTRAINT).
   @override
   List<String> compileForeign(Blueprint blueprint, Fluent command) {
-    // Reutiliza a implementação da classe base que já retorna List<String>
-    // e tem a sintaxe padrão SQL correta para ADD CONSTRAINT FOREIGN KEY.
-    return super.compileForeign(blueprint, command);
+    var sql = super.compileForeign(blueprint, command).single;
+    // deferrable()/notDeferrable() and initiallyImmediate()/
+    // initiallyDeferred() were recorded by the Blueprint but never compiled.
+    final deferrable = command['deferrable'];
+    if (deferrable != null) {
+      sql += deferrable == true ? ' deferrable' : ' not deferrable';
+    }
+    final initiallyImmediate = command['initiallyImmediate'];
+    if (deferrable == true && initiallyImmediate != null) {
+      sql += initiallyImmediate == true
+          ? ' initially immediate'
+          : ' initially deferred';
+    }
+    return [sql];
   }
 
   /// Compila um comando para dropar uma chave primária (ALTER TABLE ... DROP CONSTRAINT ...).

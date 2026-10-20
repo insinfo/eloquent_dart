@@ -3,7 +3,7 @@ import 'package:postgres_fork/postgres.dart';
 
 import 'postgres_pdo.dart';
 
-class PostgresPDOTransaction extends PDOExecutionContext {
+class PostgresPDOTransaction extends PDOTransactionContext {
   final PostgreSQLExecutionContext transactionContext;
 
   @override
@@ -47,15 +47,9 @@ class PostgresPDOTransaction extends PDOExecutionContext {
       placeholderIdentifier: PlaceholderIdentifier.onlyQuestionMark,
     );
 
-    final rows = rs.map((row) => row.toTableColumnMap()).toList();
-
-    final maps = <Map<String, dynamic>>[];
-    if (rows.isNotEmpty) {
-      for (var item in rows) {
-        //Combine/merge multiple maps into 1 map
-        maps.add(item.values.reduce((map1, map2) => map1..addAll(map2)));
-      }
-    }
+    // Same mapping as outside a transaction (PostgresV2PDO.query) and as the
+    // other drivers: one entry per column name, the last duplicate wins.
+    final maps = rs.map((row) => row.toColumnMap()).toList();
 
     final pdoResult = PDOResults(maps, rs.affectedRowCount);
     return pdoResult;

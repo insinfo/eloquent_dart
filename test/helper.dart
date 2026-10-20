@@ -50,6 +50,8 @@ class FakeConnection implements ConnectionInterface {
     // *** LÓGICA DE CAPTURA PARA SELECT ***
     lastSelectSql = query;
     lastSelectBindings = List.from(bindings); // Copia os bindings
+    lastSelectUseReadPdo = useReadPdo;
+    lastSelectTimeout = timeoutInSeconds;
     selectCallCount++;
 
     // print('--- FakeConnection.select CALLED ---');
@@ -95,6 +97,7 @@ class FakeConnection implements ConnectionInterface {
       [List bindings = const [], int? timeoutInSeconds]) async {
     lastInsertSql = query;
     lastInsertBindings = List.from(bindings);
+    lastInsertTimeout = timeoutInSeconds;
     insertCallCount++;
     // print('--- FakeConnection.insert CALLED ---');
     // print('SQL: $query');
@@ -105,18 +108,35 @@ class FakeConnection implements ConnectionInterface {
   }
 
   @override
-  Future<dynamic> update(String query,
+  Future<int> update(String query,
       [List bindings = const [], int? timeoutInSeconds]) async {
-    // Poderia adicionar captura aqui se necessário
+    lastUpdateSql = query;
+    lastUpdateBindings = List.from(bindings);
+    lastUpdateTimeout = timeoutInSeconds;
+    updateCallCount++;
     return 1; // Simula 1 linha afetada
   }
 
   @override
   Future<int> delete(String query,
       [List bindings = const [], int? timeoutInSeconds]) async {
-    // Poderia adicionar captura aqui se necessário
+    lastDeleteSql = query;
+    lastDeleteBindings = List.from(bindings);
+    lastDeleteTimeout = timeoutInSeconds;
     return 1; // Simula 1 linha afetada
   }
+
+  // --- Captura de select (flags), insert, update e delete ---
+  bool? lastSelectUseReadPdo;
+  int? lastSelectTimeout;
+  int? lastInsertTimeout;
+  String? lastUpdateSql;
+  List<dynamic>? lastUpdateBindings;
+  int? lastUpdateTimeout;
+  int updateCallCount = 0;
+  String? lastDeleteSql;
+  List<dynamic>? lastDeleteBindings;
+  int? lastDeleteTimeout;
 
   @override
   Future<PDOResults> statement(String query,
@@ -151,16 +171,27 @@ class FakeConnection implements ConnectionInterface {
   }
 
   @override
-  Future<dynamic> transaction(Future<dynamic> Function(Connection ctx) callback,
+  Future<T> transaction<T>(Future<T> Function(Connection ctx) callback,
       [int? timeoutInSeconds]) async {
     // Simula execução direta sem transação real
     return await callback(this as Connection);
   }
 
   @override
+  Future<T> transactionIfNeeded<T>(Future<T> Function(Connection ctx) callback,
+          [int? timeoutInSeconds]) =>
+      transaction<T>(callback, timeoutInSeconds);
+
+  @override
   int transactionLevel() {
     return 0;
   }
+
+  @override
+  bool get isInTransaction => false;
+
+  @override
+  bool get supportsSavepoints => false;
 
   @override
   Future<dynamic> pretend(Function callback) async {

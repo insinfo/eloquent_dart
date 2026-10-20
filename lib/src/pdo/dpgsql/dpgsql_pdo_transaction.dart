@@ -4,7 +4,7 @@ import 'package:eloquent/eloquent.dart';
 import 'dpgsql_driver_access.dart';
 import 'dpgsql_pdo.dart';
 
-class DpgsqlPDOTransaction extends PDOExecutionContext {
+class DpgsqlPDOTransaction extends PDOTransactionContext {
   DpgsqlPDOTransaction(this.connection, this.transaction, PDOInterface pdo) {
     super.pdoInstance = pdo;
   }
@@ -27,7 +27,8 @@ class DpgsqlPDOTransaction extends PDOExecutionContext {
       seconds: timeoutInSeconds ?? DpgsqlPDO.defaultTimeoutInSeconds,
     );
     final command = connection.createCommand(statement);
-    return command.executeNonQuery().timeout(timeout);
+    return DpgsqlPDO.runWithTimeout(
+        connection, () => command.executeNonQuery(), timeout);
   }
 
   @override
@@ -36,19 +37,7 @@ class DpgsqlPDOTransaction extends PDOExecutionContext {
     final timeout = Duration(
       seconds: timeoutInSeconds ?? DpgsqlPDO.defaultTimeoutInSeconds,
     );
-    if (DpgsqlPDO.expectsRows(query)) {
-      final rows = await connection
-          .executeMaps(
-            query,
-            parameters: DpgsqlPDO.parametersFromBindings(params),
-          )
-          .timeout(timeout);
-      return PDOResults(rows, rows.length);
-    }
-    final command = connection.createCommand(query);
-    DpgsqlPDO.addParametersFromBindings(command, params);
-    final affected = await command.executeNonQuery().timeout(timeout);
-    return PDOResults([], affected);
+    return DpgsqlPDO.runQuery(connection, query, params, timeout);
   }
 
   @override

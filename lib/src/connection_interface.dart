@@ -77,7 +77,7 @@ abstract class ConnectionInterface {
   /// [bindings]  List
   /// @return int
   ///
-  Future<dynamic> update(String query,
+  Future<int> update(String query,
       [List bindings = listVoid, int? timeoutInSeconds]);
 
   ///
@@ -134,15 +134,32 @@ abstract class ConnectionInterface {
   ///
   /// @throws \Throwable
   ///
-  Future<dynamic> transaction(Future<dynamic> Function(Connection ctx) callback,
+  /// Inside an existing transaction this nests through a SAVEPOINT; see
+  /// [Connection.transaction].
+  ///
+  Future<T> transaction<T>(Future<T> Function(Connection ctx) callback,
       [int? timeoutInSeconds]);
 
   ///
-  /// Get the number of active transactions.
+  /// Runs [callback] in a transaction, reusing the current one (without a
+  /// SAVEPOINT) when this connection is already inside a transaction.
+  ///
+  Future<T> transactionIfNeeded<T>(Future<T> Function(Connection ctx) callback,
+      [int? timeoutInSeconds]);
+
+  ///
+  /// Transaction depth: 0 outside a transaction, 1 in the outer transaction,
+  /// 2+ inside nested SAVEPOINTs.
   ///
   /// Returns `int`
   ///
   int transactionLevel();
+
+  /// Whether this connection runs inside a transaction.
+  bool get isInTransaction;
+
+  /// Whether [transaction] can nest through SAVEPOINT on this connection.
+  bool get supportsSavepoints;
 
   ///
   /// Execute the given callback in "dry run" mode.

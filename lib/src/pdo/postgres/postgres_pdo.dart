@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:eloquent/eloquent.dart';
 import 'package:eloquent/src/utils/codecs/windows.dart';
@@ -88,18 +89,39 @@ class PostgresV2PDO extends PDOInterface {
     return this;
   }
 
-  /// ajuda: normaliza valores tipo "3000", "250ms", "3s", "2min" -> string aceita pelo PG
-  String _pgTimeout(String raw) {
-    final s = raw.trim().toLowerCase();
-    // 0 desabilita
-    if (s == '0' || s == '0ms' || s == '0s' || s == '0min') return '0';
-    // já vem com unidade suportada pelo PG?
-    final okUnits = ['ms', 's', 'min'];
-    if (okUnits.any((u) => s.endsWith(u))) return s;
-    // só números -> trata como ms
-    if (RegExp(r'^\d+$').hasMatch(s)) return '${s}ms';
-    throw ArgumentError(
-        'Timeout inválido: "$raw". Use "250ms", "3s", "2min" ou "0".');
+  @override
+  bool get supportsNotifications => true;
+
+  /// A new PostgreSQLConnection, outside the pool, for LISTEN.
+  @override
+  Future<PDONotificationConnection> openNotificationConnection() async {
+    final timeZone = TimeZoneSettings(config.timezone ?? 'UTC');
+    timeZone.forceDecodeTimestamptzAsUTC = config.forceDecodeTimestamptzAsUTC;
+    timeZone.forceDecodeTimestampAsUTC = config.forceDecodeTimestampAsUTC;
+    timeZone.forceDecodeDateAsUTC = config.forceDecodeDateAsUTC;
+    final conn = PostgreSQLConnection(
+      config.host,
+      config.port,
+      config.database,
+      username: config.username,
+      password: config.password,
+      timeZone: timeZone,
+      encoding: _getEncoding(config.charset ?? 'utf8'),
+    );
+    await conn.open();
+    try {
+      await _onOpen(conn, config);
+    } catch (_) {
+      await conn.close();
+      rethrow;
+    }
+    return PDONotificationConnection(
+      notifications: conn.notifications.map(
+          (n) => DriverNotification(n.channel, n.payload, n.processID)),
+      execute: (sql, timeout) => conn.execute(sql,
+          timeoutInSeconds: math.max(1, timeout.inSeconds)),
+      close: conn.close,
+    );
   }
 
   /// inicializa configurações ao conectar com o banco de dados
@@ -116,19 +138,8 @@ class PostgresV2PDO extends PDOInterface {
     if (conf.applicationName != null) {
       await conn.execute("SET application_name TO '${conf.applicationName}'");
     }
-    //
-    if (conf.statementTimeout != null && conf.statementTimeout!.isNotEmpty) {
-      final v = _pgTimeout(conf.statementTimeout!);
-      await conn.execute("SET statement_timeout = '$v'");
-    }
-    if (conf.lockTimeout != null && conf.lockTimeout!.isNotEmpty) {
-      final v = _pgTimeout(conf.lockTimeout!);
-      await conn.execute("SET lock_timeout = '$v'");
-    }
-    if (conf.idleInTransactionSessionTimeout != null &&
-        conf.idleInTransactionSessionTimeout!.isNotEmpty) {
-      final v = _pgTimeout(conf.idleInTransactionSessionTimeout!);
-      await conn.execute("SET idle_in_transaction_session_timeout = '$v'");
+    for (final statement in conf.postgresTimeoutStatements()) {
+      await conn.execute(statement);
     }
   }
 

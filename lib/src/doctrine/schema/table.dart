@@ -412,7 +412,11 @@ class Table extends AbstractAsset {
 
   @protected
   void _ensureConstraintIndex(dynamic constraint, {required bool isUnique}) {
-    final List<String> columns = constraint.getColumns();
+    // A foreign key exposes its columns as getLocalColumns() (calling
+    // getColumns() made every addForeignKey() throw NoSuchMethodError).
+    final List<String> columns = constraint is ForeignKeyConstraint
+        ? constraint.getLocalColumns()
+        : constraint.getColumns();
     bool indexExists = _indexes.values.any((index) =>
         (isUnique ? index.isUnique : true) && index.spansColumns(columns));
 
@@ -420,8 +424,6 @@ class Table extends AbstractAsset {
       final indexName = _generateIdentifierName(columns, 'idx');
       final implicitIndexName = normalizeIdentifier(indexName);
       if (!_indexes.containsKey(implicitIndexName)) {
-        print(
-            "Info: Adding implicit ${isUnique ? 'unique ' : ''}index '$indexName' for constraint '${constraint.getName()}'.");
         final indexCandidate =
             _createIndex(columns, indexName, isUnique, false);
         _addIndexInternal(indexCandidate);
@@ -540,62 +542,37 @@ class Table extends AbstractAsset {
         options: options);
   }
 
+  /// Points the indexes, unique constraints and foreign keys that use the
+  /// renamed column at its new name (they kept the old one, and the foreign
+  /// keys printed "Error/TODO").
   void _updateColumnInIndexesAndFKs(
       String oldNameCanonical, String newNameCanonical) {
     final originalNewName = _columns[newNameCanonical]!.getOriginalName();
 
-    // Atualiza Índices
-    _indexes.values.forEach((index) {
-      //bool changed = false;
-      // final newColumns = index.getColumns().map((col) {
-      //   if (normalizeIdentifier(col) == oldNameCanonical) {
-      //     changed = true;
-      //     return originalNewName;
-      //   }
-      //   return col;
-      // }).toList();
-      // if (changed) {
-      //   // Não podemos modificar _columns diretamente se for final e imutável em DartIndex
-      //   // Precisaríamos recriar o índice ou tornar _columns mutável em DartIndex
-      //   print(
-      //       "Error/TODO: Cannot update columns in immutable Index object '${index.getName()}'. Needs recreation or mutable Index._columns.");
-      //   // Exemplo (se _columns fosse mutável): index._columns = List.unmodifiable(newColumns);
-      // }
-    });
-    // Atualiza Unique Constraints
-    _uniqueConstraints.values.forEach((uc) {
-      //bool changed = false;
-      // final newColumns = uc.getColumns().map((col) {
-      //   if (normalizeIdentifier(col) == oldNameCanonical) {
-      //     changed = true;
-      //     return originalNewName;
-      //   }
-      //   return col;
-      // }).toList();
-      // if (changed) {
-      //   // Mesmo problema de imutabilidade que DartIndex
-      //   print(
-      //       "Error/TODO: Cannot update columns in immutable UniqueConstraint object '${uc.getName()}'.");
-      //   // Exemplo (se _columns fosse mutável): uc._columns = LinkedHashMap.fromEntries(newColumns.map((c) => MapEntry(c, Identifier(c))));
-      // }
-    });
-    // Atualiza Chaves Estrangeiras (Locais)
-    _foreignKeys.values.forEach((fk) {
-      bool changed = false;
-      final newLocalColumns = fk.getLocalColumns().map((col) {
+    List<String>? renamed(List<String> columns) {
+      var changed = false;
+      final result = columns.map((col) {
         if (normalizeIdentifier(col) == oldNameCanonical) {
           changed = true;
           return originalNewName;
         }
         return col;
       }).toList();
-      if (changed) {
-        // Mesmo problema de imutabilidade
-        print(
-            "Error/TODO: Cannot update columns in immutable ForeignKeyConstraint object '${fk.getName()}'.");
-        // Exemplo (se _localColumnNames fosse mutável): fk._localColumnNames = LinkedHashMap.fromEntries(newLocalColumns.map((c) => MapEntry(c, Identifier(c))));
-      }
-    });
+      return changed ? result : null;
+    }
+
+    for (final index in _indexes.values) {
+      final columns = renamed(index.getColumns());
+      if (columns != null) index.replaceColumns(columns);
+    }
+    for (final constraint in _uniqueConstraints.values) {
+      final columns = renamed(constraint.getColumns());
+      if (columns != null) constraint.replaceColumns(columns);
+    }
+    for (final foreignKey in _foreignKeys.values) {
+      final columns = renamed(foreignKey.getLocalColumns());
+      if (columns != null) foreignKey.replaceLocalColumns(columns);
+    }
   }
 
   /// Cria uma cópia profunda desta tabela e seus assets.

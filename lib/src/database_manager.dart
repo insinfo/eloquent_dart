@@ -170,8 +170,7 @@ class DatabaseManager implements ConnectionResolverInterface {
     // and will call the Closure if so, which allows us to have a more generic
     // resolver for the drivers themselves which applies to all connections.
     if (Utils.isset(this.extensions[driver])) {
-      //return call_user_func($this->extensions[$driver], $config, $name);
-      return this.extensions[name](config, name);
+      return this.extensions[driver](config, name);
     }
 
     return this.factory.make(config, name);

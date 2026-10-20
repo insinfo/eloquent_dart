@@ -1,231 +1,126 @@
-## Unreleased (branch `performace`)
-
-### Added / Improved
-
-- **PostgreSQL array operators** — `whereArrayContains` (`@>`),
-  `whereArrayContainedBy` (`<@`), `whereArrayOverlaps` (`&&`) and their
-  `orWhere...` variants. The list value is bound as a single array parameter
-  (not spread). Implemented in `QueryPostgresGrammar`; base grammar throws
-  `UnsupportedError`.
-- **`get()` fast path** — no longer clones/restores `columnsProp` on every call
-  when columns are already set (removes a per-query list allocation).
-
-### Improved / Fixed
-
-- **Transactional migrations** — `Migrator` now runs each migration's `up`/`down`
-  inside a database transaction (PostgreSQL DDL is transactional), so a failure
-  rolls back the migration's DDL. Opt out per migration with
-  `withinTransaction = false` (e.g. `CREATE INDEX CONCURRENTLY`).
-- **MySQL ENUM/SET introspection fixed** — multi-value enums were never parsed
-  (the args were comma-split before the enum branch, so `allowedValues` stayed
-  null); enum/set are now handled first, with a robust single-pass unescaper for
-  `''`, `\\`, `\'`, `\"`, `\n`, `\t`, `\r`, `\0`, `\b`, `\Z`.
-- **PostgreSQL index access method** — `listTableIndexes` now extracts the
-  `USING btree|hash|gist|gin|...` method into `index.getOption('using')`.
-- **Robust column-diff `platformOptions` comparison** — `ColumnDiff` uses a
-  deep, key-order-independent equality instead of a fragile `toString()` compare.
-- `Migrator._resolveConnection` falls back to the resolver's default connection
-  instead of dereferencing a null name.
-
-### Added — lightweight ORM (Phase 8) & schema:diff CLI (Phase 7)
-
-- **`Repository<T>` + `EntityMapper<T>`** — a thin data-mapper over the query
-  builder, no code generation and no reflection. The app supplies `fromRow` /
-  `toRow` / `getId` callbacks; the repository provides `find` / `findOrFail` /
-  `all` / `findBy` / `firstBy` / `insert` / `update` / `save` (insert-or-update
-  by PK) / `delete` / `deleteById` / `count` / `cursor` (streamed hydrated
-  entities). Exported from the barrel; validated with live PostgreSQL tests.
-- **`schema:diff` CLI command** (`bin/eloquent.dart`): introspects two tables
-  and prints the `ALTER TABLE <a> ...` statements that make `<a>` match `<b>`;
-  dry-run by default, `--apply` to execute. Connection via
-  `--database/--username/--password/--host/--port/--schema/--driver-impl`.
-
-### Chore
-
-- Removed unnecessary imports across `lib`/`test` (via `dart fix`); `dart
-  analyze lib test` is clean without lint suppression.
-
-### Schema diff → ALTER (Phase 7 — Doctrine loop)
-
-- **Live introspection now works.** Fixed three bugs in
-  `PostgreSQLSchemaManager` that made `listTableDetails` throw against a real
-  database:
-  - `listTableColumns` referenced the non-existent `pg_attrdef.adinhcount`
-    (`42703`); removed the bogus predicate.
-  - `listTableIndexes` bound a table `oid` back as a parameter
-    (`operator does not exist: oid = bytea`); now looks columns up by
-    `relname`/`nspname` (text params).
-  - `i.indkey` (`int2vector`) decoded as raw bytes; now cast to `::text`.
-- The introspection → diff → ALTER pipeline is functional end to end:
-  `connection.getDoctrineSchemaManager().listTableDetails(...)` →
-  `Comparator().compareTables(...)` / `grammar.getChangedDiff(blueprint, sm)` →
-  `SchemaPostgresGrammar.compileTableDiff(diff, blueprint)` → executable
-  `ALTER TABLE ...` statements (add/drop/rename/retype/nullable/default,
-  indexes, FKs, unique constraints).
-- Exported the Doctrine schema classes from the package barrel (`Comparator`,
-  `Table`, `Column`, `TableDiff`, `ColumnDiff`, `Index`,
-  `ForeignKeyConstraint`, `UniqueConstraint`, `AbstractSchemaManager`).
-- Added `analysis_options.yaml` (ignores `unnecessary_import`, which the barrel
-  re-export pattern trips) so `dart analyze` is clean.
-- Tests: `test/doctrine_diff_alter_integration_test.dart` (live introspection,
-  empty round-trip diff, change-type/nullability, add/drop columns) validated
-  against PostgreSQL 17.
-
-### Added — PostgreSQL query-builder features (Phase 9)
-
-- **JSON / JSONB:**
-  - `whereJsonContains(column, value)` / `orWhereJsonContains` /
-    `whereJsonDoesntContain` / `orWhereJsonDoesntContain` →
-    `("column")::jsonb @> ?` (value is JSON-encoded and bound).
-  - `whereJsonLength(column, operator, value)` / `orWhereJsonLength` →
-    `jsonb_array_length(("column")::jsonb) <op> ?`.
-  - JSON column access via the `->` selector already worked in `wrap()`
-    (`where('meta->name', '=', ...)` → `"meta"->>'name'`); now covered by tests.
-- **Full-text search:** `whereFullText(columns, value, {language, mode})` /
-  `orWhereFullText` → `to_tsvector(lang, col) [|| ...] @@ <tsquery>(lang, ?)`,
-  where `mode` is `plain` (default), `phrase`, or `websearch`.
-- **`distinctOn(columns)`** → `SELECT DISTINCT ON (columns) ...`.
-
-  These are implemented in `QueryPostgresGrammar`; the base grammar throws
-  `UnsupportedError` for the JSON/full-text predicates on dialects without
-  support. Validated with unit tests and live PostgreSQL integration tests.
-
-### Tests / CI
-
-- Added `test/regression_bugs_test.dart` — unit regression guards for the bugs
-  fixed on this branch: schema DDL (`compileCreate`/`compileAdd`/`compileDrop`/
-  `compileDropIfExists`, previously stubbed to `['']`), `compileInsert` empty
-  values (stray `}`), `SchemaBuilder._getSchemaName` List/CSV schema config, and
-  the `wrap()`/`wrapValue()` fast paths.
-- Added `test/mysql_upsert_integration_test.dart` — validates the MySQL
-  UPSERT / `INSERT IGNORE` paths against a live MariaDB.
-- Added `dart_test.yaml` pinning `concurrency: 1` (matching CI). The DB
-  integration suites share fixtures — the three driver-variant PostgreSQL
-  suites reuse the same tables — so parallel file execution collides. Tagged the
-  integration test files with `@Tags(['integration'])` (`dart test -x integration`
-  runs only the isolated unit tests).
-- CI (`.github/workflows/dart.yml`) now also triggers on the `performace`
-  branch and creates the `dart_test` PostgreSQL database.
-
-### Performance
-
-- **Query compilation hot path** (~17% faster `toSql()` on a medium query in an
-  AOT micro-benchmark, SQL output byte-identical):
-  - `compileComponents` and `compileWheres` now dispatch via a direct `switch`
-    instead of constructing a `'compile' + ucfirst(...)` / `"where" + type`
-    method name and looking it up in a `Map<String,Function>` on every
-    component/clause (the string-keyed `_methodMap` is kept for compatibility
-    and the `default` fallback).
-  - `wrap()` skips the per-call `strtolower` full-string copy (case-insensitive
-    `" as "` scan) and adds a fast path for non-dotted identifiers, avoiding
-    `explode`/`implode` list allocations.
-  - `wrapValue()` only runs the quote-doubling replace when a `"` is present.
-  - Added `benchmark/query_compile_benchmark.dart`.
-
-### Added
-
-- **End-to-end migrations** — the migration engine now runs against a live
-  database (no code generation; migrations are registered explicitly in a
-  `Map<String, Migration Function()>`). `Migrator` injects the
-  `DatabaseManager` into each migration so `migration.schema` works;
-  migration/seeder classes are exported from the package barrel.
-- **Seeders** — `Seeder` base class + `SeederRunner`, with the
-  `DatabaseManager` injected so seeders reach the query builder via
-  `db!.connection(...).table(...)`. Supports nested `call(otherSeeder)`.
-- **Scaffolding CLI** (`bin/eloquent.dart`, `executables: eloquent`):
-  `make:migration <name> [--create=<t> | --table=<t>] [--path=]` and
-  `make:seeder <ClassName> [--path=]`. File generation only (no code
-  generation); running migrations/seeding is driven from the app's explicit
-  registry. Fixed the migration stubs to `await` the async `schema` getter.
-- **Working schema DDL for PostgreSQL** — implemented the previously-stubbed
-  `compileCreate` (CREATE TABLE, with `bigserial primary key` for
-  `increments`), `compileAdd` (ALTER TABLE ADD COLUMN), `compileDrop` and
-  `compileDropIfExists`.
-
-### Fixed
-
-- `SchemaBuilder` failed when the connection `schema` config was a `List`
-  (search path) — `_getSchemaName` now normalizes String/List/CSV to the first
-  schema name (previously threw `type 'List<String>' is not a subtype of String?`).
-- `DatabaseMigrationRepository.getMigrations(steps)` now selects by *batch*
-  (Laravel semantics: one rollback step reverts the whole last batch) instead
-  of by row count.
-- `DatabaseMigrationRepository._getConnection` no longer dereferences a null
-  connection name (falls back to the resolver's default connection).
-
-### Added
-
-- **Direct driver access (`db.driver()` / `queryBuilder.driver()`)** — a typed
-  `DriverAccess?` escape hatch beside the query builder for capabilities the SQL
-  abstraction cannot express. Returns `null` when unsupported. `dpgsql`
-  implementation (`DpgsqlDriverAccess`) provides:
-  - `copyInRows(table, columns, rows)` / `copyInRaw(sql, byteStream)` — bulk
-    `COPY ... FROM STDIN` (text/raw); far faster than row-by-row inserts.
-  - `copyOutText(sql)` — `COPY ... TO STDOUT`.
-  - `notify(channel, [payload])` / `listen(channel)` — `LISTEN`/`NOTIFY`.
-  - `withRawConnection(action)` — run against the native `DpgsqlConnection`
-    (pipelining, batch, large objects, …).
-  - `DriverAccess.formatCopyTextRow(...)` — COPY text-format escaping helper.
-  Plumbed through `PDOExecutionContext.driverAccess()` and `Connection.driver()`.
-- **Server-side streaming / cursor** — `QueryBuilder.cursor([fetchSize])`
-  (and its alias `lazy()`) returns a `Stream<Map<String, dynamic>>` backed by
-  an incremental reader, keeping memory roughly constant for very large result
-  sets (unlike `chunk`/`each`, which page with LIMIT/OFFSET and materialize
-  each page). Plumbed through `ConnectionInterface.cursor(...)`,
-  `Connection.cursor(...)` and `PDOExecutionContext.queryStream(...)`.
-  Implemented for the `dpgsql` adapter (via `executeReader`); other adapters
-  throw `UnsupportedError`.
-
-- **`QueryBuilder.upsert(values, uniqueBy, [update])`** — atomic UPSERT.
-  PostgreSQL: `INSERT ... ON CONFLICT (uniqueBy) DO UPDATE SET ...`;
-  MySQL: `INSERT ... ON DUPLICATE KEY UPDATE ...`. When `update` is omitted,
-  all non-`uniqueBy` columns are updated from the would-be-inserted row.
-- **`QueryBuilder.insertOrIgnore(values)`** — PostgreSQL `ON CONFLICT DO NOTHING`
-  / MySQL `INSERT IGNORE`. Returns the number of rows actually inserted.
-- **Low-level fluent conflict API** — `onConflict([columns], [constraint])`,
-  `doUpdate(values, [whereRaw])`, `doNothing()`, and `returning([columns])`
-  applied to `insert(...)`. Enables lock-free sequence patterns such as:
-
-  ```dart
-  final rows = await db.table('processos_sequences')
-    .onConflict(['ano'])
-    .doUpdate({'last_id': db.raw('processos_sequences.last_id + 1')})
-    .returning(['last_id'])
-    .insert({'ano': 2026, 'last_id': 1});
-  final seq = rows.first['last_id']; // equivalent to PL/pgSQL "RETURNING ... INTO"
-  ```
-
-### Fixed
-
-- `QueryPostgresGrammar.compileInsert` emitted a stray `}` for empty inserts
-  (`insert into <table>} DEFAULT VALUES`).
-- `DargresPDO` now compiles against `dargres` 4.0.0 (immutable `TimeZoneSettings`;
-  `PostgreSqlPool` no longer implements `ConnectionInterface`).
-
-### Docs
-
-- Added `docs/PERFORMANCE_REWRITE_PLAN.md` — phased roadmap for the
-  performance-focused rewrite.
-
 ## 4.0.0
+
+Details and migration notes: [doc/release_notes_4.0.0.md](doc/release_notes_4.0.0.md).
 
 ### Breaking changes
 
-- Replaced the public custom `InvalidArgumentException` with Dart's native `ArgumentError`.
-- Removed `InvalidArgumentException` from the public API exports in `eloquent.dart`.
-- Deleted `lib/src/exceptions/invalid_argument_exception.dart`.
-- Updated `QueryBuilder`, `DatabaseManager`, `ConnectionFactory`, and `Container` to throw `ArgumentError`, `ArgumentError.value`, or `ArgumentError.notNull` for invalid arguments.
-- External code that previously used `catch (InvalidArgumentException)` should now use `catch (ArgumentError)`.
+- `ConnectionInterface`: `transaction<T>()` is generic, and implementations
+  must add `transactionIfNeeded<T>()`, `isInTransaction` and
+  `supportsSavepoints`.
+- `transaction()` inside a transaction now creates a SAVEPOINT instead of a
+  new transaction, and `timeoutInSeconds` is passed to the driver.
+- `InvalidArgumentException` replaced by `ArgumentError`.
+- The dargres adapter requires dargres 4.0.1.
+- `where(col, op, null)` with an operator other than `=`, `<>` or `!=` throws
+  (it silently became `is not null`); `where(col, value)` means `= value`.
+- `value(col)` returns the column value instead of the row; `update()` and
+  `ConnectionInterface.update` return `Future<int>`.
+- `count()` on grouped/distinct/union queries counts their rows (it returned
+  the first group's count); `count('*', CountMode.laravel)` keeps Laravel's
+  semantics.
+- PostgreSQL `update`/`delete` with a left join and `recursionLimit()` on
+  PostgreSQL/MySQL throw instead of producing wrong or ignored SQL.
 
-### Notes
+### Added
 
-- Internal Doctrine/DBAL compatibility classes named `InvalidArgumentException` remain scoped to `lib/src/doctrine` and are not the removed public Eloquent exception.
+- `QueryBuilder2` (`db.table2()`): Dart 3 API with fixed-meaning arguments
+  (`where(column, value, {operator})`), `ComparisonOperator`/`SortDirection`
+  enums, typed group/join builders, `whereSqlOperator` validated per dialect
+  and typed results, `paginate`/`simplePaginate` (`PageResult`),
+  `OnConflict`, `insertReturning`/`updateReturning`/`deleteReturning`,
+  `upsert`, `insertOrIgnore`, `union` and (recursive) CTEs; compiled by the
+  existing grammars.
+- `datetime_bindings: 'native'` sends DateTime bindings to the driver
+  unchanged (microseconds kept, correct instant for `timestamptz`); the
+  default `'string'` keeps Laravel's `yyyy-MM-dd HH:mm:ss` formatting.
+- PostgreSQL LISTEN/NOTIFY on every PostgreSQL adapter: `db.notify()`
+  (transactional, via `pg_notify`), `db.notifications(channel)` and
+  `PostgresNotificationListener` (one dedicated connection, reconnection,
+  heartbeat, `ready()`, `onReconnect`).
+- Nested transactions via SAVEPOINT, `transactionIfNeeded()`,
+  `isInTransaction` and a real `transactionLevel()` (issue #6).
+- Row locks: `lockForUpdate({skipLocked, noWait, of})`, `sharedLock(...)`,
+  `skipLocked()`, `noWait()`.
+- `groupByRaw(sql, bindings)`; `groupBy` accepts `db.raw(...)` (it was
+  silently ignored) and rejects other values.
+- `upsert()`, `insertOrIgnore()`, `onConflict()`/`doUpdate()`/`doNothing()`
+  and `returning()`.
+- PostgreSQL JSON, full-text, `distinctOn()` and array operators
+  (`whereArrayContains`, `whereArrayContainedBy`, `whereArrayOverlaps`).
+- `cursor()`/`lazy()` streaming and `driver()` access (COPY, LISTEN/NOTIFY)
+  for dpgsql.
+- Migrations, seeders and CLI (`make:migration`, `make:seeder`,
+  `schema:diff`); transactional migrations.
+- Working schema introspection and diff → `ALTER TABLE` for PostgreSQL.
+- ORM without code generation or reflection, in two styles: Active Record
+  (`Model`, `ModelDefinition`, `ModelQuery`, casts, `save()` of the changed
+  columns, `HasOne`/`HasMany`/`BelongsTo`/`BelongsToMany`,
+  `latestOfMany`/`ofMany`, eager loading in batches, global and local scopes,
+  soft deletes, observers) and Data Mapper (`Repository<T>`,
+  `EntityMapper<T>`).
+- `DargresPDO` applies `search_path`, encoding, time zone, application name
+  and timeouts like the postgres_fork adapter; `numeric` as exact `String`.
+- pubspec `repository`, `issue_tracker`, `documentation` and `topics`.
+- From Laravel 12: `db.listen()`, `onSlowQuery()`, `totalQueryDuration()`
+  and the `QueryExecuted` event; `toRawSql()`/`dumpRawSql()`; `when()`,
+  `unless()`, `tap()`; `whereAny`/`whereAll`/`whereNone`/`whereNot`;
+  `whereLike` (case-insensitive by default); `orderByDesc`, `reorder` and
+  `orderBy` with a subquery; `select`/`addSelect` with subqueries,
+  `fromSub`, `leftJoinSub`/`rightJoinSub`/`crossJoinSub`; `lazyById`,
+  `eachById`, `chunkByIdDesc`, `chunkMap`; `sole`, `soleValue`,
+  `firstOrFail`, `findOr`, `doesntExist`, `existsOr`; `havingBetween`,
+  `havingNull`, nested `having`; `whereIntegerInRaw` (no 65535 parameter
+  limit); `incrementEach`/`decrementEach`; MySQL `whereFullText`.
 
-### Tests
+### Fixed
 
-- Updated QueryBuilder tests to expect `ArgumentError`.
-- Verified with `dart analyze lib test\query_builder_where_comparison_test.dart`.
-- Verified with `dart test test\query_builder_where_comparison_test.dart test\pg_query_qrammar_test.dart test\query_builder_cte_test.dart`.
+- Query builder: `groupBy(raw)` ignored, `whereIn([])`, `exists()` read connection, `union(Function)`,
+  `updateOrInsert`, `clone()`, `paginate` side effects, builder left without
+  orders/limit after a failed count.
+- PostgreSQL: `delete` with joins (`USING`), `update`/`delete` with `limit`
+  (`ctid`), CTEs in `update`/`delete`, update binding order.
+- MySQL: CTEs in `select`/`update`/`delete`; session settings (`set names`,
+  `time_zone`, `sql_mode`) on every pool connection.
+- Timeouts: forwarded by `get`/`insert`/`update`/`delete`/`selectOne`; session
+  timeouts on postgres_v3 and MySQL; snake_case timeout keys; per-call
+  timeouts on dargres without pool; dpgsql cancels timed-out commands and
+  replaces the connection.
+- dpgsql: affected rows of `WITH ... UPDATE/DELETE`.
+- MySQL: `exists()` was always false (`1 == true`), so `updateOrInsert`
+  always inserted.
+- `whereColumn([...])` bound the second column as a value.
+- `union` + `orderByRaw` with bindings emitted them before the union parts'
+  bindings; pagination counts of a union kept its limit.
+- MySQL `onConflict()` emitted PostgreSQL's `on conflict`; it is compiled as
+  `on duplicate key update`.
+- Lost connections: dpgsql and MySQL without pool were not detected (every
+  later query failed); detection now uses the error codes and the messages
+  of each adapter, without matching data such as a CEP.
+- Migrations: `foreign()` produced no SQL (PostgreSQL and MySQL),
+  `schema.create()` ran an empty query on MySQL, and `dropColumn()`,
+  `dropForeign()` and `rename()` produced no SQL on PostgreSQL;
+  `deferrable()`/`initiallyDeferred()` are compiled on PostgreSQL.
+- Doctrine `Table.addForeignKey()` always threw; `renameColumn()` updates
+  indexes, unique constraints and foreign keys.
+- `where`/`having` with a `List` value (`Uint8List`, PostgreSQL array, JSON)
+  spread it into several bindings for one placeholder.
+- `pretend()` returned before an async callback ran (empty log) and ran
+  `select`s for real; it now awaits the callback and restores the log.
+- `chunkById` reused the same builder between pages and did not detect a
+  missing id column.
+- PostgreSQL `whereFullText` validates the language (it is inlined in SQL).
+- dpgsql and MySQL without pool serialize concurrent callers of the single
+  connection, like the other adapters (they failed with "connection is busy").
+- postgres_fork: same duplicate-column mapping inside transactions.
+- `prepareBindings` no longer modifies the caller's list; lost-connection
+  retry loop; `getConfig()`; driver extensions lookup.
+- Empty insert SQL, `List` schema config, migration batches and rollback,
+  PostgreSQL and MySQL introspection, `ColumnDiff` comparison.
+
+### Performance
+
+- About 17% faster `toSql()` (direct dispatch and `wrap()` fast paths) and no
+  per-query column copy in `get()`.
 
 ## 3.4.3
 

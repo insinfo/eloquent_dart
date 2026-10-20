@@ -1,6 +1,28 @@
+import 'dart:typed_data';
 import 'package:eloquent/eloquent.dart';
 
 class QueryPostgresGrammar extends QueryGrammar {
+  /// PostgreSQL predicate operators for `QueryBuilder2.whereSqlOperator`.
+  /// `?`, `?|` and `?&` (JSON keys) are not here: `?` is the placeholder.
+  @override
+  Set<String> get predicateOperators => const {
+        // comparison
+        '=', '<>', '!=', '<', '>', '<=', '>=',
+        'is distinct from', 'is not distinct from',
+        // text
+        'like', 'not like', 'ilike', 'not ilike',
+        '~~', '!~~', '~~*', '!~~*',
+        'similar to', 'not similar to',
+        // regular expressions
+        '~', '~*', '!~', '!~*',
+        // arrays, ranges, JSON containment
+        '@>', '<@', '&&',
+        // full-text search
+        '@@',
+        // inet containment, range position
+        '<<', '>>', '<<=', '>>=', '-|-', '&<', '&>',
+      };
+
   ///
   ///All of the available clause operators.
   ///
@@ -110,6 +132,13 @@ class QueryPostgresGrammar extends QueryGrammar {
   String whereFullText(QueryBuilder query, Map<String, dynamic> where) {
     final options = (where['options'] as Map?) ?? const {};
     final language = (options['language'] ?? 'english').toString();
+    // The language is inlined in the SQL: only a text-search configuration
+    // name (optionally schema-qualified) is accepted.
+    if (!RegExp(r'^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)?$')
+        .hasMatch(language)) {
+      throw ArgumentError.value(
+          language, 'language', 'Invalid text search configuration name.');
+    }
     final mode = (options['mode'] ?? 'plain').toString();
 
     final columns = (where['columns'] as List)
@@ -140,6 +169,15 @@ class QueryPostgresGrammar extends QueryGrammar {
   /// @return String
   ///
   String compileLock(QueryBuilder query, dynamic value) {
+    if (value is QueryLock) {
+      final sql = StringBuffer(value.forUpdate ? 'for update' : 'for share');
+      if (value.of.isNotEmpty) {
+        sql.write(' of ${value.of.map(wrapTable).join(', ')}');
+      }
+      if (value.skipLocked) sql.write(' skip locked');
+      if (value.noWait) sql.write(' nowait');
+      return sql.toString();
+    }
     if (value is! String) {
       return value ? 'for update' : 'for share';
     }
@@ -189,14 +227,153 @@ class QueryPostgresGrammar extends QueryGrammar {
   ///
   String compileUpdate(QueryBuilder query, dynamic values) {
     var table = this.wrapTable(query.fromProp);
+    final ctes = this.compileExpressions(query);
 
     // Each one of the columns in the update statements needs to be wrapped in the
     // keyword identifiers, also a place-holder needs to be created for each of
     // the values in the list of bindings so we can make the sets statements.
     var columns = this.compileUpdateColumns(values);
-    var from = this.compileUpdateFrom(query);
+
+    // PostgreSQL has no UPDATE ... LIMIT: restrict the target rows by ctid.
+    if (query.limitProp != null) {
+      _assertNoJoinsWithLimit(query, 'update');
+      return '$ctes update $table set $columns where ctid in '
+              '(${_compileCtidSubquery(query, table)})'
+          .trim();
+    }
+
+    _assertJoinsBecomeFrom(query, 'update');
+    var from = this.compileUpdateFrom(query) ?? '';
     var where = this.compileUpdateWheres(query);
-    return 'update $table set $columns$from $where'.trim();
+    return '$ctes update $table set $columns$from $where'.trim();
+  }
+
+  ///
+  /// Compile a delete statement. Joins become `USING` (PostgreSQL has no
+  /// `DELETE ... JOIN`) and a limit restricts the rows by `ctid`.
+  ///
+  /// PostgreSQL has no per-query recursion limit for recursive CTEs.
+  @override
+  String compileRecursionLimit(QueryBuilder query) {
+    if (query.recursionLimitProp == null) return '';
+    throw UnsupportedError(
+        'recursionLimit() is not supported on PostgreSQL; add a depth column '
+        'to the recursive CTE and filter it (where depth < n).');
+  }
+
+  /// `"column"::text ilike ?` (`like` when case-sensitive), as in Laravel.
+  @override
+  String whereLike(QueryBuilder query, Map<String, dynamic> where) {
+    final not = where['not'] == true ? 'not ' : '';
+    final operator = where['caseSensitive'] == true ? 'like' : 'ilike';
+    return '${this.wrap(where['column'])}::text $not$operator '
+        '${this.parameter(where['value'])}';
+  }
+
+  @override
+  String escapeRawBool(bool value) => value ? 'true' : 'false';
+
+  @override
+  String escapeRawBinary(Uint8List value) =>
+      "'\\x${value.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}'::bytea";
+
+  @override
+  String escapeRawValue(dynamic value) {
+    // Lists are sent as PostgreSQL arrays by the drivers.
+    if (value is List && value is! Uint8List) {
+      final items = value.map((item) {
+        if (item == null) return 'NULL';
+        final text = item.toString().replaceAll('\\', '\\\\').replaceAll('"', '\\"');
+        return '"$text"';
+      }).join(',');
+      return this.quoteRawString('{$items}');
+    }
+    return super.escapeRawValue(value);
+  }
+
+  String compileDelete(QueryBuilder query) {
+    final table = this.wrapTable(query.fromProp);
+    final ctes = this.compileExpressions(query);
+
+    if (query.limitProp != null) {
+      _assertNoJoinsWithLimit(query, 'delete');
+      return '$ctes delete from $table where ctid in '
+              '(${_compileCtidSubquery(query, table)})'
+          .trim();
+    }
+
+    if (query.joinsProp.isNotEmpty) {
+      _assertJoinsBecomeFrom(query, 'delete');
+      final using = query.joinsProp.map((join) => wrapTable(join.table)).join(', ');
+      final where = this.compileUpdateWheres(query);
+      return '$ctes delete from $table using $using $where'.trim();
+    }
+
+    final where = this.compileWheres(query);
+    return '$ctes delete from $table $where'.trim();
+  }
+
+  /// `select ctid from <table> [where] [order by] limit n`.
+  String _compileCtidSubquery(QueryBuilder query, String table) {
+    final parts = <String>['select ctid from $table'];
+    final where = this.compileWheres(query);
+    if (where.isNotEmpty) parts.add(where);
+    if (query.ordersProp.isNotEmpty) {
+      parts.add(this.compileOrders(query, query.ordersProp));
+    }
+    parts.add(this.compileLimit(query, query.limitProp!));
+    return parts.join(' ');
+  }
+
+  void _assertNoJoinsWithLimit(QueryBuilder query, String statement) {
+    if (query.joinsProp.isNotEmpty) {
+      throw UnsupportedError(
+          'PostgreSQL $statement with both joins and limit is not supported.');
+    }
+  }
+
+  /// Joins of an UPDATE/DELETE become `FROM`/`USING` plus their conditions in
+  /// the WHERE, which only matches inner (and cross) join semantics.
+  void _assertJoinsBecomeFrom(QueryBuilder query, String statement) {
+    for (final join in query.joinsProp) {
+      final type = join.type.toLowerCase();
+      if (type != SqlJoin.inner && type != 'cross') {
+        throw UnsupportedError(
+            'PostgreSQL $statement supports only inner joins; got a '
+            '"${join.type}" join on ${join.table}.');
+      }
+    }
+  }
+
+  ///
+  /// Bindings of an UPDATE in SQL order:
+  /// `[with] update t set ... [from joins] where <wheres> <join conditions>`,
+  /// or with a limit `... where ctid in (select ... where ... order by ...)`.
+  ///
+  @override
+  List<dynamic> prepareBindingsForUpdate(
+      QueryBuilder query, Map<String, dynamic> values) {
+    return [
+      ...query.bindings['expressions'],
+      ...values.values,
+      ...query.bindings['where'],
+      if (query.limitProp != null) ...query.bindings['order'],
+      ...query.bindings['join'],
+    ];
+  }
+
+  ///
+  /// Bindings of a DELETE in SQL order:
+  /// `[with] delete from t [using joins] where <wheres> <join conditions>`.
+  ///
+  @override
+  List<dynamic> prepareBindingsForDelete(QueryBuilder query) {
+    return [
+      ...query.bindings['expressions'],
+      ...query.bindings['where'],
+      if (query.limitProp != null) ...query.bindings['order'],
+      ...query.bindings['join'],
+    ];
   }
 
   ///

@@ -3,7 +3,7 @@ import 'package:eloquent/eloquent.dart';
 import 'package:mysql_dart/mysql_dart.dart';
 import 'mysql_client_pdo.dart';
 
-class MySqlClientPDOTransaction extends PDOExecutionContext {
+class MySqlClientPDOTransaction extends PDOTransactionContext {
   final MySQLConnection transactionContext;
 
   Duration _timeout([int? timeoutInSeconds]) => Duration(

@@ -112,6 +112,33 @@ jobs:
       - uses: dart-lang/setup-dart@v1.3
         with:
           sdk: ${{ matrix.sdk }}
+      # dargres 4.0.1, dpgsql 1.0.3 and mysql_dart 3.0.1 are not on pub.dev
+      # yet: test against the main branches of the drivers until they are
+      # published (remove this step then).
+      - name: Use the unpublished driver versions
+        run: |
+          git clone --depth 1 https://github.com/insinfo/pg8000.git .deps/dargres
+          git clone --depth 1 https://github.com/insinfo/dpgsql.git .deps/dpgsql
+          git clone --depth 1 https://github.com/insinfo/mysql.dart.git .deps/mysql.dart
+          {
+            echo "dependency_overrides:"
+            echo "  dargres:"
+            echo "    path: .deps/dargres"
+            echo "  dpgsql:"
+            echo "    path: .deps/dpgsql"
+            echo "  mysql_dart:"
+            echo "    path: .deps/mysql.dart"
+          } > pubspec_overrides.yaml
+          {
+            echo "dependency_overrides:"
+            echo "  dargres:"
+            echo "    path: ../.deps/dargres"
+            echo "  dpgsql:"
+            echo "    path: ../.deps/dpgsql"
+            echo "  mysql_dart:"
+            echo "    path: ../.deps/mysql.dart"
+          } > example/pubspec_overrides.yaml
+          cat pubspec_overrides.yaml example/pubspec_overrides.yaml
       - name: Install dependencies
         run: dart pub get
     

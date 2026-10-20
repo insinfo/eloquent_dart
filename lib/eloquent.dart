@@ -2,10 +2,13 @@ library eloquent;
 
 export 'src/query/expression.dart';
 export 'src/query/query_builder.dart';
+export 'src/query/query_builder2.dart';
+export 'src/query/query_predicates.dart';
 export 'src/query/sql_constants.dart';
 
 export 'src/query/join_clause.dart';
 export 'src/query/on_conflict_clause.dart';
+export 'src/query/query_lock.dart';
 export 'src/driver/driver_access.dart';
 
 export 'src/grammar.dart'; //BaseGrammar
@@ -32,6 +35,7 @@ export 'src/seeds/seeder_runner.dart';
 // Lightweight ORM (data mapper, no code generation)
 export 'src/orm/entity_mapper.dart';
 export 'src/orm/repository.dart';
+export 'src/orm/active_record.dart';
 
 // Doctrine schema (introspection + diff -> ALTER)
 export 'src/doctrine/schema/abstract_schema_manager.dart';
@@ -64,6 +68,9 @@ export 'src/support/fluent.dart';
 
 export 'src/exceptions/logic_exception.dart';
 export 'src/exceptions/query_exception.dart';
+export 'src/exceptions/unsupported_nested_transaction_exception.dart';
+export 'src/exceptions/records_not_found_exception.dart';
+export 'src/events/query_executed.dart';
 
 //PDO
 
@@ -71,5 +78,7 @@ export 'src/pdo/core/pdo_execution_context.dart';
 export 'src/pdo/core/pdo_result.dart';
 export 'src/pdo/core/pdo_interface.dart';
 export 'src/pdo/core/pdo_config.dart';
+export 'src/pdo/core/pdo_notification_connection.dart';
+export 'src/notifications/postgres_notification_listener.dart';
 
 export '/src/pdo/core/constants.dart';

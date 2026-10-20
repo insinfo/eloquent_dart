@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:dpgsql/dpgsql.dart';
 import 'package:eloquent/eloquent.dart';
 
+import '../core/operation_lock.dart';
 import 'dpgsql_driver_access.dart';
 import 'dpgsql_pdo_transaction.dart';
 
@@ -40,7 +41,22 @@ class DpgsqlPDO extends PDOInterface {
   Future<T> runInTransaction<T>(
     Future<T> Function(PDOExecutionContext ctx) operation, [
     int? timeoutInSeconds,
-  ]) async {
+  ]) {
+    // A single connection runs one transaction/command at a time.
+    if (_dataSource == null) {
+      return _singleConnectionLock
+          .run(() => _runInTransactionUnlocked(operation, timeoutInSeconds));
+    }
+    return _runInTransactionUnlocked(operation, timeoutInSeconds);
+  }
+
+  /// Serializes callers of the single (non-pool) connection.
+  final OperationLock _singleConnectionLock = OperationLock();
+
+  Future<T> _runInTransactionUnlocked<T>(
+    Future<T> Function(PDOExecutionContext ctx) operation,
+    int? timeoutInSeconds,
+  ) async {
     final timeout = Duration(
       seconds: timeoutInSeconds ?? defaultTimeoutInSeconds,
     );
@@ -49,10 +65,16 @@ class DpgsqlPDO extends PDOInterface {
     try {
       transaction = await connection.beginTransaction();
       final context = DpgsqlPDOTransaction(connection, transaction, this);
-      final result = await operation(context).timeout(timeout);
+      final result =
+          await runWithTimeout(connection, () => operation(context), timeout);
       await transaction.commit();
       return result;
     } catch (e) {
+      if (e is TimeoutException) {
+        // The cancelled command leaves the protocol state unknown.
+        await _replaceAfterTimeout(connection);
+        rethrow;
+      }
       final connectionInvalid = _isConnectionFailure(e);
       if (connectionInvalid) {
         connection.markUnusable();
@@ -77,7 +99,8 @@ class DpgsqlPDO extends PDOInterface {
     );
     return _withConnection((connection) async {
       final command = connection.createCommand(statement);
-      return command.executeNonQuery().timeout(timeout);
+      return runWithTimeout(
+          connection, () => command.executeNonQuery(), timeout);
     });
   }
 
@@ -87,21 +110,71 @@ class DpgsqlPDO extends PDOInterface {
     final timeout = Duration(
       seconds: timeoutInSeconds ?? defaultTimeoutInSeconds,
     );
-    return _withConnection((connection) async {
+    return _withConnection(
+        (connection) => runQuery(connection, query, params, timeout));
+  }
+
+  /// Runs [query] on [connection] and maps the result. Shared with
+  /// [DpgsqlPDOTransaction].
+  static Future<PDOResults> runQuery(DpgsqlConnection connection,
+      String query, dynamic params, Duration timeout) {
+    return runWithTimeout(connection, () async {
+      // A CTE may wrap a SELECT or an UPDATE/DELETE without RETURNING: read
+      // the rows, and fall back to the command's affected-row count.
+      if (query.trimLeft().toLowerCase().startsWith('with')) {
+        final reader = await connection.executeReader(
+          query,
+          parameters: parametersFromBindings(params),
+        );
+        final rows = <Map<String, dynamic>>[];
+        try {
+          while (await reader.read()) {
+            rows.add(reader.toMap());
+          }
+          return PDOResults(
+              rows, rows.isNotEmpty ? rows.length : reader.recordsAffected);
+        } finally {
+          await reader.close();
+        }
+      }
       if (expectsRows(query)) {
-        final rows = await connection
-            .executeMaps(
-              query,
-              parameters: parametersFromBindings(params),
-            )
-            .timeout(timeout);
+        final rows = await connection.executeMaps(
+          query,
+          parameters: parametersFromBindings(params),
+        );
         return PDOResults(rows, rows.length);
       }
       final command = connection.createCommand(query);
       addParametersFromBindings(command, params);
-      final affected = await command.executeNonQuery().timeout(timeout);
+      final affected = await command.executeNonQuery();
       return PDOResults([], affected);
-    });
+    }, timeout);
+  }
+
+  /// Runs [operation] with [timeout]. On expiry the command is cancelled on
+  /// the server (CancelRequest) and its pending response is awaited, so the
+  /// connection's protocol state stays consistent; abandoning the read left
+  /// the next command reading a half-consumed buffer.
+  static Future<T> runWithTimeout<T>(DpgsqlConnection connection,
+      Future<T> Function() operation, Duration timeout) async {
+    final future = operation();
+    try {
+      return await future.timeout(timeout);
+    } on TimeoutException {
+      try {
+        await connection.cancel();
+      } catch (_) {}
+      try {
+        // Let the cancelled command finish ("canceling statement due to
+        // user request") before the socket is released.
+        await future.timeout(const Duration(seconds: 5));
+      } catch (_) {}
+      // Even when the response settled, the driver's read state after a
+      // CancelRequest is not reliable: never reuse this socket.
+      connection.markUnusable();
+      throw TimeoutException(
+          'PostgreSQL command exceeded $timeout and was cancelled.', timeout);
+    }
   }
 
   @override
@@ -111,7 +184,16 @@ class DpgsqlPDO extends PDOInterface {
     // Memory stays roughly constant regardless of result-set size. For pooled
     // connections the connection is held for the lifetime of the stream and
     // returned to the pool once the stream is fully drained (or on error).
-    final connection = await _openConnectionForOperation();
+    // A single connection is held (locked) for the lifetime of the stream.
+    final release =
+        _dataSource == null ? await _singleConnectionLock.acquire() : null;
+    final DpgsqlConnection connection;
+    try {
+      connection = await _openConnectionForOperation();
+    } catch (_) {
+      release?.call();
+      rethrow;
+    }
     DpgsqlDataReader? reader;
     try {
       reader = await connection.executeReader(
@@ -135,6 +217,7 @@ class DpgsqlPDO extends PDOInterface {
       if (_dataSource != null) {
         await connection.close();
       }
+      release?.call();
     }
   }
 
@@ -167,13 +250,40 @@ class DpgsqlPDO extends PDOInterface {
     return connection;
   }
 
+  @override
+  bool get supportsNotifications => true;
+
+  /// A dedicated DpgsqlConnection, outside the pool, for LISTEN.
+  @override
+  Future<PDONotificationConnection> openNotificationConnection() async {
+    final connection = await openDedicatedConnection();
+    return PDONotificationConnection(
+      notifications: connection.notifications
+          .map((e) => DriverNotification(e.channel, e.payload, e.pid)),
+      execute: (sql, timeout) =>
+          connection.createCommand(sql).executeNonQuery(),
+      close: connection.close,
+    );
+  }
+
   Future<T> _withConnection<T>(
+      Future<T> Function(DpgsqlConnection connection) operation) {
+    if (_dataSource == null) {
+      return _singleConnectionLock
+          .run(() => _withConnectionUnlocked(operation));
+    }
+    return _withConnectionUnlocked(operation);
+  }
+
+  Future<T> _withConnectionUnlocked<T>(
       Future<T> Function(DpgsqlConnection connection) operation) async {
     final connection = await _openConnectionForOperation();
     try {
       return await operation(connection);
     } catch (e) {
-      if (_isConnectionFailure(e)) {
+      if (e is TimeoutException) {
+        await _replaceAfterTimeout(connection);
+      } else if (_isConnectionFailure(e)) {
         connection.markUnusable();
       }
       rethrow;
@@ -182,6 +292,22 @@ class DpgsqlPDO extends PDOInterface {
         await connection.close();
       }
     }
+  }
+
+  /// After a cancelled (timed-out) command the driver may still deliver part
+  /// of its response to the next command, so the socket is not reused: a
+  /// pooled connection is discarded on close, the single connection reopened.
+  Future<void> _replaceAfterTimeout(DpgsqlConnection connection) async {
+    connection.markUnusable();
+    if (_dataSource != null || !identical(connection, _connection)) return;
+    try {
+      await connection.close();
+    } catch (_) {}
+    final fresh = DpgsqlConnection.fromConnectionStringBuilder(
+      _connectionSettingsFromConfig(config),
+    );
+    await fresh.open();
+    _connection = fresh;
   }
 
   Future<DpgsqlConnection> _openConnectionForOperation() async {
@@ -250,25 +376,33 @@ class DpgsqlPDO extends PDOInterface {
 
   static DpgsqlParameter _parameterFromBinding(String name, dynamic value) {
     if (value is DateTime) {
-      // Defensive fallback for direct PDO usage that bypasses
-      // Connection.prepareBindings(). Keep this as text/unknown so PostgreSQL
-      // infers timestamp/date from context instead of forcing Dpgsql's typed
-      // DateTime binary encoding and changing timestamp without time zone
-      // wall-clock values.
-      return DpgsqlParameter(name, _formatDateTimeBinding(value));
+      // A DateTime reaches the adapter with `datetime_bindings: 'native'` or
+      // through direct PDO use. dpgsql would type it as `timestamp` with its
+      // UTC fields (a local DateTime loses its wall clock, timestamptz gets
+      // the wrong instant), so it is sent as untyped ISO text with offset and
+      // microseconds, like postgres/postgres_v3/dargres: a `timestamp` column
+      // takes the fields, a `timestamptz` column the instant.
+      return DpgsqlParameter(name, formatDateTimeBinding(value));
     }
 
     return DpgsqlParameter(name, value);
   }
 
-  static String _formatDateTimeBinding(DateTime value) {
+  /// `2024-03-10 12:34:56.789123-03:00` (`+00:00` for a UTC DateTime).
+  static String formatDateTimeBinding(DateTime value) {
     String two(int n) => n.toString().padLeft(2, '0');
+    final offset = value.isUtc ? Duration.zero : value.timeZoneOffset;
+    final sign = offset.isNegative ? '-' : '+';
+    final minutes = offset.inMinutes.abs();
+    final fraction =
+        (value.millisecond * 1000 + value.microsecond).toString().padLeft(6, '0');
     return '${value.year.toString().padLeft(4, '0')}-'
         '${two(value.month)}-'
         '${two(value.day)} '
         '${two(value.hour)}:'
         '${two(value.minute)}:'
-        '${two(value.second)}';
+        '${two(value.second)}.$fraction'
+        '$sign${two(minutes ~/ 60)}:${two(minutes % 60)}';
   }
 
   static bool _containsReturningKeyword(String sql) {
@@ -338,15 +472,15 @@ class DpgsqlPDO extends PDOInterface {
     }
     final statementTimeout = config.statementTimeout;
     if (statementTimeout != null && statementTimeout.isNotEmpty) {
-      settings.statementTimeout = _pgTimeout(statementTimeout);
+      settings.statementTimeout = PDOConfig.normalizePgTimeout(statementTimeout);
     }
     final lockTimeout = config.lockTimeout;
     if (lockTimeout != null && lockTimeout.isNotEmpty) {
-      settings.lockTimeout = _pgTimeout(lockTimeout);
+      settings.lockTimeout = PDOConfig.normalizePgTimeout(lockTimeout);
     }
     final idleTimeout = config.idleInTransactionSessionTimeout;
     if (idleTimeout != null && idleTimeout.isNotEmpty) {
-      settings.idleInTransactionSessionTimeout = _pgTimeout(idleTimeout);
+      settings.idleInTransactionSessionTimeout = PDOConfig.normalizePgTimeout(idleTimeout);
     }
     if (config.pool == true) {
       settings.noResetOnClose = true;
@@ -396,20 +530,4 @@ class DpgsqlPDO extends PDOInterface {
         message.contains('socketbinaryinput');
   }
 
-  static String _pgTimeout(String raw) {
-    final s = raw.trim().toLowerCase();
-    if (s == '0' || s == '0ms' || s == '0s' || s == '0min') {
-      return '0';
-    }
-    const okUnits = ['ms', 's', 'min'];
-    if (okUnits.any((u) => s.endsWith(u))) {
-      return s;
-    }
-    if (RegExp(r'^\d+$').hasMatch(s)) {
-      return '${s}ms';
-    }
-    throw ArgumentError(
-      'Timeout invalido: "$raw". Use "250ms", "3s", "2min" ou "0".',
-    );
-  }
 }

@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'package:eloquent/src/pdo/core/pdo_config.dart';
 import 'package:eloquent/src/pdo/core/pdo_interface.dart';
+import 'package:eloquent/src/pdo/core/pdo_notification_connection.dart';
+import 'package:eloquent/src/driver/driver_access.dart' show DriverNotification;
 import 'package:eloquent/src/pdo/core/pdo_result.dart';
 import 'package:eloquent/src/utils/codecs/windows.dart';
 import 'package:postgres/postgres.dart';
@@ -89,6 +91,41 @@ class PostgresV3PDO extends PDOInterface {
     return this;
   }
 
+  @override
+  bool get supportsNotifications => true;
+
+  /// A new Connection, outside the pool, for LISTEN.
+  @override
+  Future<PDONotificationConnection> openNotificationConnection() async {
+    final conn = await Connection.open(
+        Endpoint(
+          host: config.host,
+          port: config.port,
+          database: config.database,
+          username: config.username,
+          password: config.password,
+        ),
+        settings: ConnectionSettings(
+          applicationName: config.applicationName,
+          timeZone: config.timezone,
+          onOpen: (conn) async {
+            await _onOpen(conn, config);
+          },
+          encoding: _getEncoding(config.charset ?? 'utf8'),
+          sslMode: config.sslmode?.toString() == 'require'
+              ? SslMode.require
+              : SslMode.disable,
+        ));
+    return PDONotificationConnection(
+      notifications: conn.channels.all.map(
+          (n) => DriverNotification(n.channel, n.payload, n.processId)),
+      execute: (sql, timeout) => conn.execute(sql,
+          timeout: timeout, queryMode: QueryMode.simple, ignoreRows: true),
+      close: conn.close,
+      closed: conn.closed,
+    );
+  }
+
   /// inicializa configurações ao conectar com o banco de dados
   Future<void> _onOpen(Connection conn, PDOConfig dsnParser) async {
     if (dsnParser.charset != null) {
@@ -104,6 +141,10 @@ class PostgresV3PDO extends PDOInterface {
       await conn
           .execute("SET application_name TO '${dsnParser.applicationName}'");
     }
+    // statement/lock/idle-in-transaction timeouts, as in the other adapters.
+    for (final statement in dsnParser.postgresTimeoutStatements()) {
+      await conn.execute(statement);
+    }
   }
 
   Future<T> runInTransaction<T>(
@@ -116,7 +157,9 @@ class PostgresV3PDO extends PDOInterface {
     final res = await connection.runTx((transaCtx) async {
       final pdoCtx = PostgresV3PDOTransaction(transaCtx, this);
       return operation(pdoCtx);
-    });
+    },
+        settings: TransactionSettings(
+            queryTimeout: Duration(seconds: timeoutInSeconds)));
 
     return res;
   }

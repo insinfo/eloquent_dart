@@ -185,13 +185,13 @@ void main() {
   });
 
   test('prepareBindingsForUpdate', () {
-    final bindings = ['John', 'john@example.com', 30];
-    final values = {'name': 'John', 'email': 'john@example.com', 'age': 30};
-    expect(grammar.prepareBindingsForUpdate(bindings, values), bindings);
-    final bindingsWithNull = ['John', null, 30];
-    final valuesWithNull = {'name': 'John', 'email': null, 'age': 30};
-    expect(grammar.prepareBindingsForUpdate(bindingsWithNull, valuesWithNull),
-        bindingsWithNull);
+    final qb = QueryBuilder(FakeConnection(), grammar, Processor())
+        .from('users')
+        .where('id', '=', 7);
+    final values = {'name': 'John', 'email': null, 'age': 30};
+    // SET values first, then the where bindings.
+    expect(grammar.prepareBindingsForUpdate(qb, values),
+        ['John', null, 30, 7]);
   });
 
   test('whereTime', () {
@@ -453,7 +453,8 @@ void main() {
     final qb = QueryBuilder(FakeConnection(), grammar, Processor());
     qb.select(['id']).from('users').whereIn('id', []);
     final sql = grammar.compileSelect(qb);
-    expect(sql, contains('select "id" from "users" where "id" in ()'));
+    // `in ()` is invalid SQL; an empty list matches nothing.
+    expect(sql, contains('select "id" from "users" where 0 = 1'));
   });
 
   test('compileSelect - lock for update', () {

@@ -69,6 +69,100 @@ for now it only works with PostgreSQL and MySQL
 
 ```
 
+## QueryBuilder2 (Dart 3 API)
+
+`db.table2('tabela')` returns a `QueryBuilder2`. Every argument has one
+meaning: the value is always bound (`?`), operators are enums, columns are
+identifiers, and SQL only enters through `whereRaw`/`selectRaw`/`havingRaw`.
+Results are typed. `db.table()` (the Laravel-style `QueryBuilder`) is
+unchanged.
+
+```dart
+final usuarios = await db
+    .table2('usuarios')
+    .select(['id', 'nome'])
+    .where('ativo', true)                                  // "ativo" = ?
+    .where('idade', 18, operator: ComparisonOperator.greaterThanOrEqualTo)
+    .whereLessThan('tentativas', 5)                        // descriptive form
+    .whereIn('perfil', ['administrador', 'operador'])
+    .whereNull('excluido_em')
+    .whereGroup((w) => w
+        .where('cidade', 'Rio das Ostras')
+        .orWhere('cidade', 'Macaé'))                       // and (... or ...)
+    .whenNotNull(filtro.situacao, (q, s) => q.where('situacao', s))
+    .orderBy('nome')
+    .limit(50)
+    .get();                                                // List<Map>
+
+final total = await db.table2('pedidos').where('pago', true).count();
+final nomes = await db.table2('usuarios').pluck<String>('nome');
+```
+
+| Call | SQL |
+|---|---|
+| `where('x', v)` / `whereEqualTo` | `x = ?` |
+| `where('x', v, operator: .greaterThan)` / `whereGreaterThan` | `x > ?` |
+| `where('x', null)` / `whereNotEqualTo('x', null)` | `x is null` / `x is not null` (other operators with null throw) |
+| `whereIn('x', [])` / `whereNotIn('x', [])` | always false / always true (`null` elements throw) |
+| `whereBetween('x', low, high)` | `x between ? and ?` |
+| `whereLike('nome', 'isa%')` | PostgreSQL `ilike`; `caseSensitive: true` for `like` |
+| `whereColumn('a', 'b')` | `a = b` (two columns) |
+| `whereGroup((w) => ...)` / `whereNotGroup` | `and (...)` / `and not (...)` |
+| `whereExists(sub)` / `whereInSubquery('id', sub)` | `exists (...)` / `id in (...)` |
+| `whereSqlOperator('email', '~*', '@gmail')` | dialect predicate operators, validated |
+| `whereRaw(sql, bindings)` | caller's SQL |
+
+`whereSqlOperator` accepts the dialect's predicate operators: on PostgreSQL
+the comparisons, `ilike`, `~~`, the regex operators `~ ~* !~ !~*`,
+`similar to`, `is [not] distinct from`, `@> <@ &&`, `@@` and the
+inet/range operators; on MySQL `<=>`, `like binary`, `regexp`, `rlike`,
+`sounds like`. Arithmetic operators are rejected because they are not
+conditions. `?`, `?|` and `?&` are rejected too, because `?` is the
+placeholder: use `whereRaw('jsonb_exists(dados, ?)', ['telefone'])`.
+
+Pagination, writes, unions and CTEs:
+
+```dart
+final page = await db.table2('processos').where('ativo', true)
+    .orderByDescending('data').paginate(page: 2, perPage: 20);
+return page.toMap(); // data, total, per_page, current_page, last_page, from, to
+
+// Atomic sequence (PostgreSQL; on MySQL use insert(..., onConflict: ...)).
+final rows = await db.table2('sequencias').insertReturning(
+  {'ano': 2026, 'ultimo': 1},
+  onConflict: OnConflict.doUpdate(
+      columns: ['ano'], set: {'ultimo': db.raw('sequencias.ultimo + 1')}),
+  returning: ['ultimo'],
+);
+
+await db.table2('estoque').upsert(itens, uniqueBy: ['sku'], update: ['qtd']);
+await db.table2('log').insertOrIgnore(linhas);
+final removidos = await db.table2('fila').where('status', 'feito')
+    .deleteReturning(returning: ['id']);
+
+// Recursive CTE: a sector and its descendants.
+final ids = await db.table2('arvore')
+    .withRecursiveExpression('arvore',
+        db.table2('setor').select(['id']).where('id', 1).unionAll(
+            db.table2('setor as s').select(['s.id'])
+                .join('arvore as a', 'a.id', 's.pai_id')),
+        columns: ['id'])
+    .pluck<int>('id');
+```
+
+With `union`/`unionAll`, `orderBy`/`limit`/`offset` apply to the combined
+result. A part with its own order or limit is wrapped in
+`select * from (...)`.
+
+Since Dart 3.10 you can leave out the enum name:
+`operator: .greaterThanOrEqualTo`. Joins: `join`, `leftJoin`, `rightJoin`,
+`crossJoin` and `joinOn('t', (j) => j.on(...).where(...))`. Writes:
+`insert` (returns the rows inserted; `onConflict:`), `insertReturning`,
+`insertMany`, `insertOrIgnore`, `upsert`, `insertGetId<T>`, `update`,
+`updateReturning`, `delete`, `deleteReturning`, `increment`.
+Locks: `lockForUpdate(skipLocked: true)`. `toQueryBuilder()` returns the
+equivalent `QueryBuilder` for features not exposed yet.
+
 ## whereExists subquery
 ```dart
   // whereExists receives a QueryBuilder in the callback, so use from(...)
@@ -113,6 +207,91 @@ for now it only works with PostgreSQL and MySQL
         .where('id', '=', 1).delete();
 
 ```
+
+## Transactions, nested transactions (SAVEPOINT) and transactionIfNeeded
+
+`transaction()` returns the callback's value with its type, and the callback
+receives a `Connection` bound to the transaction:
+
+```dart
+final id = await db.transaction((ctx) async {   // id is an int
+  return await ctx.table('pedidos').insertGetId({'cliente': 1});
+});
+```
+
+Calling `transaction()` **on that `ctx`** does not open a second physical
+transaction: it creates a `SAVEPOINT`. Success releases it; an error rolls back
+to it and is **rethrown**, so the outer transaction can continue if you catch
+it:
+
+```dart
+await db.transaction((ctx) async {
+  await ctx.table('pedidos').insert({'id': 1});
+  try {
+    await ctx.transaction((nested) async {        // SAVEPOINT eloquent_savepoint_2
+      await nested.table('itens').insert({'id': 10});
+      throw Exception('Falha no item');           // ROLLBACK TO SAVEPOINT
+    });
+  } catch (_) {
+    // only the item was rolled back
+  }
+  await ctx.table('auditoria').insert({'descricao': 'parcial'});
+});                                               // COMMIT: pedido + auditoria
+```
+
+`transactionIfNeeded()` joins the current transaction (no SAVEPOINT) and only
+opens one when there is none. Use it for functions that may be called on their
+own or as part of a larger transaction:
+
+```dart
+Future<int> inserirAnexo(Map<String, dynamic> dados, {Connection? connection}) {
+  return (connection ?? db).transactionIfNeeded((ctx) async =>
+      (await ctx.table('anexo').insertGetId(dados)) as int);
+}
+```
+
+| Call | Outside a transaction | Inside a transaction |
+|---|---|---|
+| `transaction()` | `BEGIN` / `COMMIT` (`ROLLBACK` on error) | `SAVEPOINT` / `RELEASE` (`ROLLBACK TO SAVEPOINT` on error, rethrown) |
+| `transactionIfNeeded()` | `BEGIN` / `COMMIT` | reuses the current transaction |
+
+`connection.isInTransaction`, `connection.transactionLevel()` (0 outside, 1 in
+the transaction, 2+ in savepoints) and `connection.supportsSavepoints` expose the
+state. It belongs to each `ctx`, never to global state, so concurrent requests
+do not interfere. A driver context without SAVEPOINT support throws
+`UnsupportedNestedTransactionException` instead of opening an independent
+transaction.
+
+> **Driver note:** with `postgres` (postgres_fork) and `postgres_v3`, an
+> *SQL error* (for example a duplicate key) inside any part of a transaction
+> makes the driver roll back the whole transaction, so a savepoint only
+> isolates Dart exceptions there. `dargres`, `dpgsql` and MySQL recover with
+> `ROLLBACK TO SAVEPOINT` and the outer transaction continues.
+
+## Row locks: FOR UPDATE / FOR SHARE, SKIP LOCKED, NOWAIT
+
+```dart
+// job queue: take the next pending job that no other worker holds
+await db.transaction((ctx) async {
+  final job = await ctx.table('jobs')
+      .where('status', '=', 'pending')
+      .orderBy('id')
+      .lockForUpdate(skipLocked: true)  // ... for update skip locked
+      .first();
+  if (job == null) return;               // every pending job is taken
+  // ... process and update the job
+});
+
+db.table('jobs').lockForUpdate();                  // for update
+db.table('jobs').sharedLock();                     // for share
+db.table('jobs').lockForUpdate(noWait: true);      // for update nowait
+db.table('jobs').lockForUpdate(of: ['jobs'], skipLocked: true); // for update of "jobs" skip locked
+db.table('jobs').skipLocked();                     // for update skip locked
+db.table('jobs').lock('for no key update');        // raw clause, verbatim
+```
+
+MySQL uses the 8.0 syntax (`for share`, `skip locked`, `nowait`) whenever a
+modifier is present; a plain `sharedLock()` keeps `lock in share mode`.
 
 ## UPSERT / ON CONFLICT / RETURNING (PostgreSQL & MySQL)
 
@@ -170,7 +349,149 @@ final stream = db.table('big_table').lazy();
 Contrast with `chunk`/`each`, which page with `LIMIT/OFFSET` and load a full
 page into memory per round-trip.
 
-## Lightweight ORM (Repository, no code generation)
+## ORM: Active Record or Data Mapper (no code generation, no reflection)
+
+Two options, both without `build_runner` or `dart:mirrors`, so they work
+with AOT and Flutter:
+
+- **Active Record** (`User extends Model`): the model has its attributes,
+  `save()`/`delete()` and relations with eager loading.
+- **Data Mapper** (`Repository<T>` + `EntityMapper<T>`, below): plain
+  classes and a repository that reads and writes them.
+
+### Active Record
+
+```dart
+class User extends Model {
+  User(super.state);
+
+  static final definition = ModelDefinition<User>(
+    table: 'users',
+    create: User.new,                 // the constructor replaces reflection
+    timestamps: true,                 // created_at / updated_at
+    casts: {'ativo': Casts.boolean},
+  );
+
+  // Relations are declared once; the related definition is a function so
+  // models can refer to each other.
+  static final latestOrder = HasOne<User, Order>('latestOrder',
+      () => Order.definition, foreignKey: 'user_id').latestOfMany();
+  static final largestOrder = HasOne<User, Order>('largestOrder',
+      () => Order.definition, foreignKey: 'user_id')
+      .ofMany('price', AggregateFunction.maximum);
+  static final orders = HasMany<User, Order>('orders',
+      () => Order.definition, foreignKey: 'user_id');
+
+  int get id => readAttribute<int>('id');
+  String get name => readAttribute<String>('name');
+  set name(String value) => writeAttribute('name', value);
+}
+
+class Order extends Model {
+  Order(super.state);
+  static final definition = ModelDefinition<Order>(
+      table: 'orders', create: Order.new, casts: {'price': Casts.decimal});
+  static final user = BelongsTo<Order, User>('user', () => User.definition,
+      foreignKey: 'user_id');
+  double? get price => readAttribute<double?>('price');
+}
+
+final user = await User.definition.query(db).findOrFail(10);
+user.name = 'Isaque';
+await user.save();                       // update ... set name = ? (only what changed)
+
+final novo = User.definition.make(db, {'name': 'Ana'});
+await novo.save();                       // insert; id and defaults read back
+
+final latest = await User.latestOrder.fetch(user);   // one user
+
+final users = await User.definition.query(db)        // many users:
+    .where('ativo', true)                            // QueryBuilder2 where API
+    .withRelation(User.latestOrder)                  // one query per relation
+    .withRelation(User.largestOrder)
+    .withRelation(User.orders)
+    .get();
+final Order? o = User.largestOrder.getLoaded(users.first);
+return users.first.toMap();              // attributes + loaded relations
+```
+
+| Relation | Picks |
+|---|---|
+| `HasOne(...).latestOfMany([column])` | highest `column` (default: primary key) |
+| `HasOne(...).oldestOfMany([column])` | lowest `column` |
+| `HasOne(...).ofMany(column, AggregateFunction.maximum/minimum)` | highest/lowest `column`; null values are not candidates; ties go to the highest primary key |
+| `HasOne(...)` | the related row (lowest primary key when several match) |
+| `HasMany(...)` | every related row, by primary key |
+| `BelongsTo(...)` | the owner |
+
+`where: (w) => w.where('status', 'pago')` filters the candidate rows of a
+relation before the choice. In batches, "one of many" uses
+`row_number() over (partition by fk order by column, pk desc)`, which needs
+PostgreSQL, MySQL 8 or MariaDB 10.2. The keys are sent in chunks of 5000.
+
+Rules:
+
+- A column that was not selected throws when read; it is not `null`.
+  `save()` writes only the changed columns, so a model read with
+  `select([...])` keeps the others.
+- `getLoaded` on a relation that was not loaded throws;
+  `isLoaded(model)` checks it.
+- A model keeps the connection it was read with. Inside `transaction` use
+  the `ctx` (`User.definition.query(ctx)`, `make(ctx, ...)`), or
+  `save(using: ctx)`.
+- Casts: `Casts.boolean` (MySQL `tinyint`), `integer`, `decimal`
+  (PostgreSQL `numeric` comes as text), `dateTime`, `json`,
+  `enumByName(values)`; implement `AttributeCast` for others.
+- `ModelQuery` also has `find`, `findMany`, `firstOrFail`, `paginate`
+  (`ModelPage.toMap()`), `count`, `exists`, `lazyById`, bulk `update`/`delete`,
+  and `configure((q) => q.join(...))` for the underlying `QueryBuilder2`.
+
+Many-to-many, scopes, soft deletes and observers:
+
+```dart
+class Member extends Model {
+  Member(super.state);
+  static final definition = ModelDefinition<Member>(
+    table: 'members',
+    create: Member.new,
+    softDeletes: true,                                   // deleted_at
+    globalScopes: {'tenant': (w) => w.where('members.tenant', tenantAtual)},
+  );
+  static final roles = BelongsToMany<Member, Role>('roles', () => Role.definition,
+      pivotTable: 'member_role', foreignPivotKey: 'member_id',
+      relatedPivotKey: 'role_id', pivotColumns: ['level']);
+
+  static void ativos(ModelQuery<Member> q) => q.where('ativo', true); // local scope
+}
+
+await Member.roles.attach(member, [10, 20], pivot: {'level': 5});
+await Member.roles.sync(member, [20, 30]);   // (attached: [30], detached: [10])
+final roles = await Member.roles.fetch(member);
+Member.roles.pivot(roles.first)['level'];
+
+await Member.definition.query(db).apply(Member.ativos).get();
+await Member.definition.query(db).withoutGlobalScope('tenant').count();
+
+await member.delete();        // sets deleted_at; trashed == true
+await member.restore();
+await member.forceDelete();   // removes the row
+await Member.definition.query(db).onlyTrashed().get();
+
+Member.definition.observe(AuditObserver());  // extends ModelObserver<Member>
+```
+
+- **Global scopes and soft deletes** apply to every query of the model,
+  relations and batch loading included. A query's own conditions are grouped
+  when they contain an `or`, so `a or b` cannot bypass the scopes.
+- **Observers** receive `saving`, `creating`/`created` or
+  `updating`/`updated` (only when something changed), `saved`,
+  `deleting`/`deleted` and `restoring`/`restored`. An exception in a
+  `...ing` callback stops the operation; a callback may also change
+  attributes before they are written. Bulk `update`/`delete` on a query do
+  not notify observers.
+- **`sync`** is not atomic by itself; pass `using: ctx` inside a transaction.
+
+### Data Mapper (Repository, no code generation)
 
 ```dart
 class User {
@@ -242,6 +563,45 @@ await db.table('events')
     .orderBy('user_id')
     .orderBy('created_at', 'desc')
     .get();
+```
+
+## PostgreSQL LISTEN / NOTIFY
+
+Works on every PostgreSQL adapter (`postgres`, `postgres_v3`, `dargres`,
+`dpgsql`). `notify` uses `pg_notify`, so inside a transaction the
+notification is delivered only on COMMIT (and dropped on rollback).
+
+```dart
+// Producer: enqueue and wake the workers in the same transaction.
+await db.transaction((ctx) async {
+  final id = await ctx.table('fila').insertGetId({'situacao': 'pendente'});
+  await ctx.notify('fila_pendente', '$id');
+});
+
+// Worker: process on notification; poll as a fallback.
+final sub = db.notifications('fila_pendente').listen((n) => processarFila());
+await db.notificationListener.ready(); // LISTEN is active
+await processarFila(); // what was queued before LISTEN
+
+// Notifications sent while the connection was down are lost: re-read.
+db.notificationListener.onReconnect.listen((_) => processarFila());
+db.notificationListener.onError.listen((e) => log.warning('LISTEN: $e'));
+
+await sub.cancel(); // UNLISTEN (the connection closes with the last channel)
+```
+
+All channels share one dedicated connection, outside the pool, that
+reconnects with exponential backoff, runs `LISTEN` again and checks itself
+with a `SELECT 1` heartbeat (30 s). `db.disconnect()` closes it. Channel names
+are case-sensitive, as in `pg_notify`; payloads must be under 8000 bytes. For
+other settings create a listener yourself:
+
+```dart
+final listener = PostgresNotificationListener(
+  db.getPdo().pdoInstance.openNotificationConnection,
+  heartbeat: Duration(seconds: 10),
+  maxReconnectDelay: Duration(seconds: 15),
+);
 ```
 
 ## Direct driver access (COPY, LISTEN/NOTIFY, raw connection)
@@ -373,27 +733,48 @@ await drv.withRawConnection((conn) async {
 
 ```
 
-## PostgreSQL DateTime bindings
+## DateTime bindings (`datetime_bindings`)
 
-Eloquent normalizes query bindings before the PDO driver receives them. For `DateTime` values, `Connection.prepareBindings()` formats the value with the PostgreSQL grammar date format (`yyyy-MM-dd HH:mm:ss`). This matches the Laravel/PDO style used by the existing PostgreSQL adapters.
+By default (`'datetime_bindings': 'string'`) `Connection.prepareBindings()`
+formats every `DateTime` binding with the grammar date format
+(`yyyy-MM-dd HH:mm:ss`) before the driver receives it, as Laravel does. The
+column type then decides how the text is read. Two things are lost: the
+microseconds, and the time zone of a UTC `DateTime`. In a `timestamptz`
+column, `DateTime.utc(2024, 3, 10, 12, 34)` is stored as `12:34` in the
+session zone (`15:34Z` with `America/Sao_Paulo`). This also happens when you
+write back a `timestamptz` value that was read as UTC
+(`forceDecodeTimestamptzAsUTC`).
 
-`lib/src/pdo/postgres/postgres_pdo.dart` does not perform this conversion itself. It receives the already prepared bindings and passes them to `postgresql-fork` as substitution values.
-
-This distinction matters for `timestamp without time zone`: application code usually expects a civil/local timestamp to round-trip as the same wall-clock time. For example, `2026-06-27 00:43:00` should not become `2026-06-27 03:43:00` just because the driver encoded a Dart `DateTime` through UTC binary timestamp semantics.
-
-When using:
+With `'datetime_bindings': 'native'` the `DateTime` goes to the driver
+unchanged:
 
 ```dart
 manager.addConnection({
   'driver': 'pgsql',
-  'driver_implementation': 'dpgsql',
   'timezone': 'America/Sao_Paulo',
+  'datetime_bindings': 'native', // 'string' (default) | 'native'
+  // ...
 });
 ```
 
-the `dpgsql` adapter preserves the same compatibility rule: untyped `DateTime` query builder bindings are sent as PostgreSQL-inferred text/unknown values, so the target column decides whether the value is `timestamp`, `timestamptz`, or `date`. This avoids timezone shifts in systems that store local timestamps in `timestamp without time zone` columns.
+| Column | `string` (default) | `native` |
+|---|---|---|
+| `timestamp` | wall-clock fields, no microseconds | wall-clock fields with microseconds |
+| `timestamptz` | the fields read in the session zone, so a UTC `DateTime` shifts | the right instant for local and UTC values |
+| `date` | the date | the date |
+| MySQL `datetime(6)` | no microseconds | microseconds kept |
 
-The `timezone` setting still configures the PostgreSQL session timezone. Decode flags such as `forceDecodeTimestampAsUTC`, `forceDecodeTimestamptzAsUTC`, and `forceDecodeDateAsUTC` control how returned values are materialized in Dart; they are separate from the query-builder binding normalization described above.
+The table was checked on postgres, postgres_v3, dargres and dpgsql with an
+`America/Sao_Paulo` session. For dpgsql the adapter sends untyped ISO text with
+offset and microseconds (`2024-03-10 12:34:56.789123-03:00`): dpgsql would
+type the value as `timestamp` with its UTC fields, which shifts both columns.
+With `native`, a value read back (for example a `timestamptz` decoded as UTC)
+can be written or compared again without moving.
+
+The `timezone` setting configures the PostgreSQL session time zone. The decode
+flags `forceDecodeTimestampAsUTC`, `forceDecodeTimestamptzAsUTC` and
+`forceDecodeDateAsUTC` control how values that are read come back as Dart
+objects.
 
 ## mysql example
 
