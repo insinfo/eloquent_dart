@@ -557,7 +557,8 @@ class SchemaMySqlGrammar extends SchemaGrammar {
   @override
   @protected
   String? modifyCollate(Blueprint blueprint, Fluent column) {
-    if (column['collation'] != null) {
+    final collation = column['collation'];
+    if (collation != null && collation.toString().isNotEmpty) {
       // Use wrapValue which uses backticks for MySQL if collation name needs quoting
       return ' collate ${wrapValue(column['collation'] as String)}';
     }

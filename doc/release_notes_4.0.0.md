@@ -438,6 +438,7 @@ Introspection bugs found by the round trip:
 | `Column.clone()` lost `autoIncrement` (`toArray` writes `autoincrement`) | cloned tables were not auto-increment |
 | MySQL `modifyIncrementing` compared the type case-sensitively | introspected `biginteger` lost `auto_increment` |
 | PostgreSQL foreign keys did not read `DEFERRABLE`/`INITIALLY DEFERRED`/`MATCH` | lost on a round trip |
+| PostgreSQL column collation read from `collcollate` (a locale string, empty for the default collation on PostgreSQL 14) | `collate ""` and a syntax error when recreating; it reads `collname`, only when not the type default |
 
 Tests: `test/doctrine_platform_test.dart` (SQL for both platforms) and
 `test/doctrine_platform_integration_test.dart`. The integration test

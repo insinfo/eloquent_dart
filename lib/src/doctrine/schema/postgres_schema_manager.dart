@@ -104,6 +104,9 @@ class PostgreSQLSchemaManager extends AbstractSchemaManager {
     final cleanTableName = schemaAndTable[1];
 
     final Map<String, Column> columns = {};
+    // The collation is its name, and only when it is not the type's default
+    // (it read collcollate, a locale string that is empty for the default
+    // collation on PostgreSQL 14 and produced collate "").
     // Query refinada para PostgreSQL, buscando mais detalhes
     final sql = '''
         SELECT
@@ -120,7 +123,8 @@ class PostgreSQLSchemaManager extends AbstractSchemaManager {
             ) AS default,
             (SELECT col_description(a.attrelid, a.attnum)) AS comment,
             a.attidentity, -- 'd' for DEFAULT (serial), 'a' for ALWAYS
-            (SELECT tc.collcollate FROM pg_catalog.pg_collation tc WHERE tc.oid = a.attcollation) AS collation,
+            (SELECT tc.collname FROM pg_catalog.pg_collation tc
+              WHERE tc.oid = a.attcollation AND a.attcollation <> t.typcollation) AS collation,
             (SELECT t1.typname FROM pg_catalog.pg_type t1 WHERE t1.oid = t.typbasetype) AS domain_type,
             (SELECT format_type(t2.typbasetype, t2.typtypmod) FROM
               pg_catalog.pg_type t2 WHERE t2.typtype = 'd' AND t2.oid = a.atttypid) AS domain_complete_type

@@ -630,7 +630,8 @@ class SchemaPostgresGrammar extends SchemaGrammar {
   @override
   @protected
   String? modifyCollate(Blueprint blueprint, Fluent column) {
-    if (column['collation'] != null) {
+    final collation = column['collation'];
+    if (collation != null && collation.toString().isNotEmpty) {
       // Usa wrapValue (aspas duplas) para o nome da collation
       return ' collate ${wrapValue(column['collation'] as String)}';
     }
