@@ -608,7 +608,11 @@ class SchemaMySqlGrammar extends SchemaGrammar {
   @override
   @protected
   String? modifyIncrementing(Blueprint blueprint, Fluent column) {
-    if (serials.contains(column['type']) && column['autoIncrement'] == true) {
+    // Case-insensitive: introspected columns use lower-case type names
+    // ('biginteger') and lost auto_increment.
+    final type = column['type']?.toString().toLowerCase();
+    if (column['autoIncrement'] == true &&
+        serials.any((serial) => serial.toLowerCase() == type)) {
       return ' auto_increment'; // PRIMARY KEY é adicionado separadamente ou via `increments()`
     }
     return null;

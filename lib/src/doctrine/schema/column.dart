@@ -89,7 +89,10 @@ class Column extends AbstractAsset {
       notnull = options['notnull'] as bool? ?? notnull;
     }
     defaultValue = options['default'] ?? defaultValue;
-    autoIncrement = options['autoIncrement'] as bool? ?? autoIncrement;
+    // toArray() writes 'autoincrement' (Doctrine's key): clone() lost it.
+    autoIncrement = options['autoIncrement'] as bool? ??
+        options['autoincrement'] as bool? ??
+        autoIncrement;
     comment = options['comment'] as String? ?? comment;
     collation = options['collation'] as String? ?? collation;
     srid = options['srid'] as int? ?? srid;

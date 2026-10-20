@@ -1,6 +1,10 @@
 import 'package:eloquent/eloquent.dart';
 
-/// TODO implement extends QueryBuilder
+/// The `on`/`where` conditions of one join of [QueryBuilder].
+///
+/// Unlike Laravel 5.3+, it does not extend the query builder, so a join
+/// cannot nest arbitrary where groups; [QueryBuilder2.joinOn] with
+/// [JoinBuilder] is the typed alternative.
 class JoinClause {
   ///
   /// The type of join being performed.

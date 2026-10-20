@@ -574,12 +574,7 @@ class SchemaPostgresGrammar extends SchemaGrammar {
   @override
   @protected
   String? modifyComment(Blueprint blueprint, Fluent column) {
-    if (column['comment'] != null) {
-      // Não retorna SQL inline, mas a gramática poderia opcionalmente
-      // gerar o comando COMMENT ON COLUMN aqui se Blueprint.toSql o coletasse.
-      print(
-          "Info: Column comment for '${column['name']}' needs separate 'COMMENT ON COLUMN ...' statement.");
-    }
+    // PostgreSQL comments are separate statements (COMMENT ON COLUMN).
     return null;
   }
 

@@ -13,6 +13,7 @@ of this release is in [PERFORMANCE_REWRITE_PLAN.md](PERFORMANCE_REWRITE_PLAN.md)
 - [Driver access and streaming](#driver-access-and-streaming)
 - [dargres adapter](#dargres-adapter)
 - [Migrations, seeders and CLI](#migrations-seeders-and-cli)
+- [Doctrine schema port](#doctrine-schema-port)
 - [Schema introspection and diff → ALTER](#schema-introspection-and-diff--alter)
 - [Active Record](#active-record)
 - [Lightweight ORM](#lightweight-orm)
@@ -399,6 +400,51 @@ set, removing a list allocation per query.
 - Working PostgreSQL schema DDL: the previously stubbed `compileCreate`
   (`CREATE TABLE`, `bigserial primary key` for `increments`), `compileAdd`
   (`ALTER TABLE ADD COLUMN`), `compileDrop` and `compileDropIfExists`.
+
+## Doctrine schema port
+
+The schema objects (`Schema`, `Table`, `Column`, `Index`,
+`UniqueConstraint`, `ForeignKeyConstraint`, `Sequence`) now produce SQL
+through platforms, and a whole schema can be compared and migrated.
+
+- **Platforms.** `AbstractPlatform` was rewritten: column types and
+  modifiers come from the dialect's schema grammar, so a column has the
+  same DDL in migrations and in `toSql()`. `PostgreSQLPlatform`,
+  `MySQLPlatform` and `MariaDBPlatform` implement types, expressions, view
+  and sequence listing, isolation levels and the reserved keywords;
+  `db.getDatabasePlatform()` picks one from the driver. The folder
+  `patforms` became `platforms`.
+- **DDL.** `getCreateTableSQL(Table)`, `getCreateTablesSQL` (foreign keys
+  after every table), `getDropTablesSQL`, indexes (partial on PostgreSQL;
+  FULLTEXT/SPATIAL on MySQL), unique constraints, foreign keys with
+  `MATCH` and `DEFERRABLE [INITIALLY DEFERRED]` on PostgreSQL, comments,
+  sequences, schemas, renames, truncate and `getAlterSchemaSQL(SchemaDiff)`.
+- **Schema.** `toSql`/`toDropSql`, namespaces from qualified names
+  (`vendas.pedido`), default table options from `SchemaConfig`, `clone`.
+  `AbstractAsset` has `getNamespaceName`, `getShortName`,
+  `isInDefaultNamespace` and `getShortestName`.
+- **Comparison.** `Comparator.compareSchemas` (namespaces, tables,
+  sequences) and `AbstractSchemaManager.introspectSchema`.
+
+Introspection bugs found by the round trip:
+
+| Bug | Effect |
+|---|---|
+| PostgreSQL `listTableNames` derived its query from `compileTableExists` with a replace that no longer matched | it never returned a table name |
+| PostgreSQL serial columns were not auto-increment (only IDENTITY was) | a serial column came back as a plain integer |
+| `Utils.map_change_key_case_sd` never changed the key case | MySQL index parsing failed and `EXTRA` (auto_increment) was never read |
+| MySQL `NON_UNIQUE` was cast to `bool` | every index was skipped |
+| MySQL column collation equal to the table's and empty comments were read as options | spurious diffs |
+| `Column.clone()` lost `autoIncrement` (`toArray` writes `autoincrement`) | cloned tables were not auto-increment |
+| MySQL `modifyIncrementing` compared the type case-sensitively | introspected `biginteger` lost `auto_increment` |
+| PostgreSQL foreign keys did not read `DEFERRABLE`/`INITIALLY DEFERRED`/`MATCH` | lost on a round trip |
+
+Tests: `test/doctrine_platform_test.dart` (SQL for both platforms) and
+`test/doctrine_platform_integration_test.dart`. The integration test
+creates a schema from memory, introspects it (A), drops it and creates it
+again from A, introspects it (B), and checks that A and B do not differ.
+It also migrates a live schema with `compareSchemas` +
+`getAlterSchemaSQL`, on PostgreSQL (postgres, dpgsql) and MariaDB.
 
 ## Schema introspection and diff → ALTER
 

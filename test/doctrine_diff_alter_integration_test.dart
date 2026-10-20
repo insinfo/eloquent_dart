@@ -52,6 +52,17 @@ void main() {
     await manager.getDatabaseManager().purge('default');
   });
 
+  test('table options include comment and unlogged', () async {
+    await db.execute('DROP TABLE IF EXISTS perf_unlogged');
+    await db.execute('CREATE UNLOGGED TABLE perf_unlogged (id int)');
+    await db.execute("COMMENT ON TABLE perf_unlogged IS 'temporaria'");
+    addTearDown(() => db.execute('DROP TABLE IF EXISTS perf_unlogged'));
+    final sm = db.getDoctrineSchemaManager();
+    expect(await sm.fetchTableOptions('perf_unlogged'),
+        {'comment': 'temporaria', 'unlogged': true});
+    expect(await sm.fetchTableOptions('perf_diff'), isNot(contains('unlogged')));
+  });
+
   test('live introspection returns columns and indexes', () async {
     final sm = db.getDoctrineSchemaManager();
     final table = await sm.listTableDetails('perf_diff');

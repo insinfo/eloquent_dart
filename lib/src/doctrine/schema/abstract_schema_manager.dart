@@ -1,6 +1,4 @@
 import 'package:eloquent/eloquent.dart';
-import 'view.dart'; // <-- Importar a classe View
-import 'sequence.dart'; // <-- Importar a classe Sequence
 
 /// Interface abstrata para introspecção de schema de banco de dados.
 /// Inspirado em Doctrine\DBAL\Schema\AbstractSchemaManager.
@@ -44,6 +42,28 @@ abstract class AbstractSchemaManager {
         options: options);
   }
 
+  /// The name of the schema the unqualified tables belong to (PostgreSQL:
+  /// the current schema; MySQL: the database).
+  Future<String> getSchemaName() async => 'public';
+
+  /// The tables and sequences of [getSchemaName] as a [Schema], e.g. to
+  /// compare with the one the application expects
+  /// (`Comparator().compareSchemas(actual, expected)`).
+  Future<Schema> introspectSchema() async {
+    final tables = <Table>[
+      for (final name in await listTableNames()) await listTableDetails(name),
+    ];
+    final sequences = <Sequence>[
+      for (final name in await listSequences())
+        await listSequenceDetails(name),
+    ];
+    return Schema(
+      tables: tables,
+      sequences: sequences,
+      schemaConfig: SchemaConfig(name: await getSchemaName()),
+    );
+  }
+
   /// Método auxiliar para buscar opções da tabela (ex: comment).
   /// Deve ser implementado pela subclasse.
   Future<Map<String, dynamic>> fetchTableOptions(String tableName);
@@ -55,9 +75,8 @@ abstract class AbstractSchemaManager {
       final existingTables = await listTableNames();
       final existingSet = existingTables.map((t) => t.toLowerCase()).toSet();
       return tableNames.every((t) => existingSet.contains(t.toLowerCase()));
-    } catch (e) {
-      print("Error checking if tables exist: $e");
-      return false; // Ou relançar?
+    } catch (_) {
+      return false;
     }
   }
 

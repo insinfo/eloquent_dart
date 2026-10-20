@@ -171,6 +171,52 @@ class Comparator {
     );
   }
 
+  /// The differences that turn [oldSchema] into [newSchema]: namespaces,
+  /// tables (created, altered, dropped) and sequences.
+  SchemaDiff compareSchemas(Schema oldSchema, Schema newSchema) {
+    return SchemaDiff(
+      createdSchemas: [
+        for (final namespace in newSchema.getNamespaces())
+          if (!oldSchema.hasNamespace(namespace)) namespace,
+      ],
+      droppedSchemas: [
+        for (final namespace in oldSchema.getNamespaces())
+          if (!newSchema.hasNamespace(namespace)) namespace,
+      ],
+      createdTables: [
+        for (final table in newSchema.getTables())
+          if (!oldSchema.hasTable(table.getName())) table,
+      ],
+      alteredTablesInput: [
+        for (final table in newSchema.getTables())
+          if (oldSchema.hasTable(table.getName()))
+            compareTables(oldSchema.getTable(table.getName()), table),
+      ],
+      droppedTables: [
+        for (final table in oldSchema.getTables())
+          if (!newSchema.hasTable(table.getName())) table,
+      ],
+      createdSequences: [
+        for (final sequence in newSchema.getSequences())
+          if (!oldSchema.hasSequence(sequence.getName())) sequence,
+      ],
+      alteredSequences: [
+        for (final sequence in newSchema.getSequences())
+          if (oldSchema.hasSequence(sequence.getName()) &&
+              _sequenceChanged(
+                  oldSchema.getSequence(sequence.getName()), sequence))
+            sequence,
+      ],
+      droppedSequences: [
+        for (final sequence in oldSchema.getSequences())
+          if (!newSchema.hasSequence(sequence.getName())) sequence,
+      ],
+    );
+  }
+
+  bool _sequenceChanged(Sequence a, Sequence b) =>
+      a.getCache() != b.getCache() || a.getInitialValue() != b.getInitialValue();
+
   dynamic diffTable(Table oldTable, Table newTable) {
     final diff = compareTables(oldTable, newTable);
     return diff.isEmpty() ? false : diff;

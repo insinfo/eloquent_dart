@@ -520,6 +520,53 @@ await for (final u in repo.cursor()) { /* streamed hydration */ }
 await repo.delete(ada);
 ```
 
+## Schema objects and platforms (Doctrine DBAL port)
+
+`Schema`, `Table`, `Column`, `Index`, `ForeignKeyConstraint` and `Sequence`
+describe a database schema in memory; a platform (`PostgreSQLPlatform`,
+`MySQLPlatform`, `MariaDBPlatform`) turns them into SQL.
+
+```dart
+final schema = Schema();
+final cliente = schema.createTable('cliente');
+cliente.addColumn('id', 'integer', options: {'autoIncrement': true});
+cliente.addColumn('nome', 'string', options: {'length': 80});
+cliente.setPrimaryKey(['id']);
+
+final pedido = schema.createTable('vendas.pedido');      // creates "vendas"
+pedido.addColumn('id', 'bigInteger', options: {'autoIncrement': true});
+pedido.addColumn('cliente_id', 'integer');
+pedido.setPrimaryKey(['id']);
+pedido.addForeignKey(
+    localColumns: ['cliente_id'],
+    foreignTableName: 'cliente',
+    foreignColumns: ['id'],
+    options: {'onDelete': 'cascade', 'deferrable': true, 'deferred': true});
+
+final platform = db.getDatabasePlatform();               // from the driver
+for (final sql in schema.toSql(platform)) {
+  await db.execute(sql);
+}
+
+// Compare what the database has with what the application expects.
+final actual = await db.getDoctrineSchemaManager().introspectSchema();
+final diff = Comparator().compareSchemas(actual, expected);
+for (final sql in platform.getAlterSchemaSQL(diff)) {
+  await db.execute(sql);
+}
+```
+
+- `toSql` creates namespaces, sequences (not the ones behind serial
+  columns), tables, and then the foreign keys, so tables may reference each
+  other in any order. `toDropSql` drops the foreign keys first.
+- PostgreSQL also writes `COMMENT ON` statements, `CREATE UNLOGGED TABLE`
+  (table option `unlogged`) and foreign keys with `MATCH` and
+  `DEFERRABLE [INITIALLY DEFERRED]`. MySQL writes column comments inline
+  and the table options `engine`, `charset`, `collation` and `comment`.
+- Column types come from the same schema grammars as migrations.
+- The platforms also give type declarations, portable expressions (dates,
+  `LOCATE`, `CONCAT`, ...), reserved keywords, isolation levels and limits.
+
 ## schema:diff CLI
 
 ```bash

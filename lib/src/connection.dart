@@ -1134,6 +1134,19 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
     return doctrineSchemaManager!;
   }
 
+  AbstractPlatform? _databasePlatform;
+
+  /// The Doctrine platform of this connection's driver: DDL for [Schema],
+  /// [Table] and [SchemaDiff], type declarations and SQL expressions.
+  AbstractPlatform getDatabasePlatform() {
+    return _databasePlatform ??= switch (getDriverName()) {
+      'pgsql' => PostgreSQLPlatform(),
+      'mysql' => MySQLPlatform(),
+      final driver => throw UnsupportedError(
+          'No database platform for driver "$driver".'),
+    };
+  }
+
   ///
   /// Get the Doctrine DBAL database connection instance.
   ///

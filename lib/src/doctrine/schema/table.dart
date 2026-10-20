@@ -543,8 +543,7 @@ class Table extends AbstractAsset {
   }
 
   /// Points the indexes, unique constraints and foreign keys that use the
-  /// renamed column at its new name (they kept the old one, and the foreign
-  /// keys printed "Error/TODO").
+  /// renamed column at its new name (they used to keep the old one).
   void _updateColumnInIndexesAndFKs(
       String oldNameCanonical, String newNameCanonical) {
     final originalNewName = _columns[newNameCanonical]!.getOriginalName();

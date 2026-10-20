@@ -127,11 +127,20 @@ class SchemaSqlServerGrammar extends SchemaGrammar {
     return statements;
   }
 
+  /// The schema (`dbo` unless the table is written `schema.table`) and the
+  /// unqualified table name, as the extended-property procedures take them.
+  (String, String) _schemaAndTable(Blueprint blueprint) {
+    final name = blueprint.getTable();
+    final dot = name.lastIndexOf('.');
+    return dot < 0
+        ? ('dbo', name)
+        : (name.substring(0, dot), name.substring(dot + 1));
+  }
+
   /// Compile adding/updating an extended property for table comment.
   String compileAddTableComment(Blueprint blueprint, String comment) {
-    final table = blueprint.getTable(); // Unquoted name for procedure
+    final (schema, table) = _schemaAndTable(blueprint);
     final escapedComment = getDefaultValue(comment); // Escapes quotes
-    final schema = 'dbo'; // TODO: Get actual schema if not default
 
     // Check if property exists, update if so, add if not
     return """
@@ -145,10 +154,9 @@ class SchemaSqlServerGrammar extends SchemaGrammar {
   /// Compile adding/updating an extended property for column comment.
   String _compileAddColumnComment(
       Blueprint blueprint, Fluent column, String comment) {
-    final table = blueprint.getTable();
+    final (schema, table) = _schemaAndTable(blueprint);
     final columnName = column['name'] as String;
     final escapedComment = getDefaultValue(comment);
-    final schema = 'dbo'; // TODO: Get actual schema
 
     return """
        IF EXISTS (SELECT 1 FROM sys.extended_properties WHERE major_id = OBJECT_ID('${schema}.${table}') AND name = N'MS_Description' AND minor_id = COLUMNPROPERTY(OBJECT_ID('${schema}.${table}'), '$columnName', 'ColumnId'))

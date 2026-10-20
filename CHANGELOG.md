@@ -52,6 +52,11 @@ Details and migration notes: [doc/release_notes_4.0.0.md](doc/release_notes_4.0.
 - Migrations, seeders and CLI (`make:migration`, `make:seeder`,
   `schema:diff`); transactional migrations.
 - Working schema introspection and diff → `ALTER TABLE` for PostgreSQL.
+- Doctrine schema port completed: `Schema.toSql()`/`toDropSql()`,
+  `PostgreSQLPlatform`, `MySQLPlatform`, `MariaDBPlatform`
+  (`db.getDatabasePlatform()`), `Comparator.compareSchemas()` +
+  `getAlterSchemaSQL()`, `introspectSchema()`, namespaces, MATCH/DEFERRABLE
+  foreign keys, UNLOGGED tables.
 - ORM without code generation or reflection, in two styles: Active Record
   (`Model`, `ModelDefinition`, `ModelQuery`, casts, `save()` of the changed
   columns, `HasOne`/`HasMany`/`BelongsTo`/`BelongsToMany`,

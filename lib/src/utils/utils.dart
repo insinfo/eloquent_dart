@@ -222,21 +222,21 @@ class Utils {
 }
 
   /// change all keys to case defined
+  /// Changes the case of the keys of [map] in place (nested maps too) and
+  /// returns it. It used to keep every key as it was.
   static Map<String, dynamic> map_change_key_case_sd(Map<String, dynamic> map,
       [StringCase typeCase = StringCase.CASE_LOWER]) {
-    var clone = <String, dynamic>{}..addAll(map);
-    var length = clone.entries.length;
-    var entries = clone.entries.toList();
-    for (var i = 0; i < length; i++) {
-      var entry = entries[i];
-      if (entry.value is Map) {
-        map_change_key_case_sd(map[entry.key], typeCase);
-      } else {
-        var key = entry.key;
-        var val = map[key];
-        map.remove(key);
-        map[key] = val;
+    final entries = map.entries.toList();
+    map.clear();
+    for (final entry in entries) {
+      final value = entry.value;
+      if (value is Map<String, dynamic>) {
+        map_change_key_case_sd(value, typeCase);
       }
+      final key = typeCase == StringCase.CASE_LOWER
+          ? entry.key.toLowerCase()
+          : entry.key.toUpperCase();
+      map[key] = value;
     }
     return map;
   }

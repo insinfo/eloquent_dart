@@ -22,11 +22,6 @@ class Sequence extends AbstractAsset {
       throw ArgumentError(
           'Sequence cache/allocation size must be greater than 0.');
     }
-    if (initialValue < 1 && cache > 1) {
-      // Alguns bancos podem ter restrições sobre initial value e cache > 1
-      print(
-          "Warning: Using initial value < 1 with cache > 1 might not be supported by all databases for sequence '$name'.");
-    }
     setName(name); // Método da classe base
   }
 
@@ -54,9 +49,9 @@ class Sequence extends AbstractAsset {
     return this;
   }
 
-  /// Define o valor inicial.
+  /// Define o valor inicial. Sem validação, como no Doctrine: o PostgreSQL
+  /// aceita valores negativos com um MINVALUE compatível e é ele quem valida.
   Sequence setInitialValue(int initialValue) {
-    // TODO: Adicionar validação se necessário (ex: >= min value se houver)
     _initialValue = initialValue;
     return this;
   }

@@ -1,7 +1,5 @@
 import 'package:eloquent/eloquent.dart';
 import 'package:eloquent/src/schema/grammars/schema_mysql_grammar.dart';
-import 'view.dart';
-import 'sequence.dart';
 //import 'schema_config.dart';
 import 'package:meta/meta.dart';
 import 'dart:async';
@@ -16,6 +14,9 @@ class MySqlSchemaManager extends AbstractSchemaManager {
 
   /// Helper to get the current database name, caching the result.
   @protected
+  @override
+  Future<String> getSchemaName() => _getCurrentDatabase();
+
   Future<String> _getCurrentDatabase() async {
     _currentDatabase ??= connection.getDatabaseName();
     // Fallback if connection doesn't provide it directly
@@ -71,11 +72,22 @@ class MySqlSchemaManager extends AbstractSchemaManager {
     ''';
 
     final results = await connection.select(sql, [dbName, tableName]);
+    // A column collation equal to the table's is the default, not an option
+    // of the column (as in Doctrine).
+    final table = await connection.selectOne(
+        'SELECT TABLE_COLLATION AS collation FROM information_schema.TABLES '
+        'WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?',
+        [dbName, tableName]);
+    final tableCollation = table?['collation'];
     final Map<String, Column> columns = {};
     for (final row in results) {
       // Convert keys to lowercase for consistency like the PHP version
       final lowerCaseRow =
           Utils.map_change_key_case_sd(Map<String, dynamic>.from(row));
+      if (lowerCaseRow['collation'] == tableCollation) {
+        lowerCaseRow['collation'] = null;
+      }
+      if (lowerCaseRow['comment'] == '') lowerCaseRow['comment'] = null;
       final column = parsePortableTableColumnDefinition(lowerCaseRow);
       columns[column.getCanonicalName()] = column;
     }
@@ -541,8 +553,10 @@ class MySqlSchemaManager extends AbstractSchemaManager {
     // Assume indexRows contains all rows for THIS specific index
     final indexName = indexRow['key_name'] as String;
     final isPrimary = indexName == 'PRIMARY';
+    // NON_UNIQUE is 0/1 (it was cast to bool and the index was skipped).
+    final nonUnique = indexRow['non_unique'];
     final isUnique =
-        !(indexRow['non_unique'] as bool? ?? true); // 0 means unique
+        !(nonUnique == true || nonUnique == 1 || nonUnique.toString() == '1');
     final indexType = (indexRow['index_type'] as String? ?? '').toUpperCase();
 
     // Extract columns from all rows for this index
@@ -670,10 +684,7 @@ class MySqlSchemaManager extends AbstractSchemaManager {
 
   @override
   Future<List<String>> listSequences() async {
-    // MySQL/MariaDB do not have sequences in the same way as PostgreSQL or Oracle.
-    // AUTO_INCREMENT handles this. Return empty list.
-    print(
-        "Warning: MySQL/MariaDB do not support sequences directly. Use AUTO_INCREMENT columns.");
+    // MySQL has no sequences (AUTO_INCREMENT columns instead).
     return [];
   }
 

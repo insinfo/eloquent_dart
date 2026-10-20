@@ -58,7 +58,6 @@ abstract class AbstractAsset {
   /// Remove as aspas delimitadoras (", `, []) de um identificador.
   /// Se não estiver cotado, retorna o identificador original.
   String trimQuotes(String identifier) {
-    // <-- MÉTODO ADICIONADO/CORRIGIDO
     if (isIdentifierQuoted(identifier)) {
       // Remove o primeiro e o último caractere
       return identifier.substring(1, identifier.length - 1);
@@ -80,5 +79,37 @@ abstract class AbstractAsset {
   /// Obtém o nome original como foi fornecido (pode incluir aspas).
   String getOriginalName() {
     return name;
+  }
+
+  /// The namespace (schema) of a qualified name (`vendas.pedido` -> `vendas`),
+  /// or `null` when the name is not qualified.
+  String? getNamespaceName() {
+    final unquoted = getName();
+    final dot = unquoted.indexOf('.');
+    return dot < 0 ? null : unquoted.substring(0, dot);
+  }
+
+  /// The name without its namespace (`vendas.pedido` -> `pedido`).
+  String getShortName() {
+    final unquoted = getName();
+    final dot = unquoted.indexOf('.');
+    return dot < 0 ? unquoted : unquoted.substring(dot + 1);
+  }
+
+  /// Whether the asset belongs to [defaultNamespace] (an unqualified name
+  /// does).
+  bool isInDefaultNamespace(String defaultNamespace) {
+    final namespace = getNamespaceName();
+    return namespace == null ||
+        namespace.toLowerCase() == defaultNamespace.toLowerCase();
+  }
+
+  /// The shortest name that identifies the asset from [defaultNamespace]:
+  /// unqualified when it is in that namespace.
+  String getShortestName(String? defaultNamespace) {
+    if (defaultNamespace != null && isInDefaultNamespace(defaultNamespace)) {
+      return getShortName();
+    }
+    return getName();
   }
 }

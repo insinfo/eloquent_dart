@@ -1,9 +1,6 @@
 import 'package:eloquent/eloquent.dart';
 // <-- Certifique-se de que este caminho esteja correto
 
-import 'view.dart';
-import 'sequence.dart'; // <-- Importar Sequence
-import 'schema_config.dart';
 import 'package:meta/meta.dart';
 import 'dart:async';
 
@@ -16,6 +13,9 @@ class PostgreSQLSchemaManager extends AbstractSchemaManager {
   PostgreSQLSchemaManager(ConnectionInterface connection)
       // Passa a gramática específica do Postgres para a classe base
       : super(connection, SchemaPostgresGrammar());
+
+  @override
+  Future<String> getSchemaName() => getCurrentSchema();
 
   /// Retorna o nome do schema atual conectado.
   /// Tenta buscar do banco ou usa 'public' como fallback.
@@ -61,7 +61,6 @@ class PostgreSQLSchemaManager extends AbstractSchemaManager {
   /// Remove as aspas delimitadoras (", `, []) de um identificador.
   /// Se não estiver cotado, retorna o identificador original.
   String trimQuotes(String identifier) {
-    // <-- MÉTODO ADICIONADO/CORRIGIDO
     if (isIdentifierQuoted(identifier)) {
       // Remove o primeiro e o último caractere
       return identifier.substring(1, identifier.length - 1);
@@ -87,17 +86,13 @@ class PostgreSQLSchemaManager extends AbstractSchemaManager {
   @override
   Future<List<String>> listTableNames() async {
     final currentSchema = await getCurrentSchema();
-    // Usa a query da gramática base que já inclui schema
-    final sql = grammar.compileTableExists();
-    //final dbName = connection.getDatabaseName();
-    // Os parâmetros agora são [table_schema, table_name], adaptamos para listar todas as tabelas do schema
+    // It derived the query from compileTableExists() with a replace that no
+    // longer matched ('select 1 ...'), so table_name was never selected.
     final results = await connection.select(
-        sql
-            .replaceFirst('select *', 'select table_name') // Pega só o nome
-            .replaceFirst(
-                'table_name = ?', '1 = 1'), // Remove filtro por nome específico
-        [currentSchema] // Filtra apenas pelo schema atual
-        );
+        "select table_name from information_schema.tables "
+        "where table_schema = ? and table_type = 'BASE TABLE' "
+        'order by table_name',
+        [currentSchema]);
     return results.map((row) => row['table_name'] as String).toList();
   }
 
@@ -285,7 +280,7 @@ class PostgreSQLSchemaManager extends AbstractSchemaManager {
     return foreignKeys;
   }
 
-  /// Busca opções da tabela (atualmente só comentário).
+  /// Busca opções da tabela: comentário e `unlogged`.
   @override
   Future<Map<String, dynamic>> fetchTableOptions(String tableName) async {
     final schemaAndTable = await _parseSchemaAndTable(tableName);
@@ -293,7 +288,8 @@ class PostgreSQLSchemaManager extends AbstractSchemaManager {
     final cleanTableName = schemaAndTable[1];
 
     const sql = '''
-          SELECT obj_description(c.oid, 'pg_class') AS comment
+          SELECT obj_description(c.oid, 'pg_class') AS comment,
+                 c.relpersistence = 'u' AS unlogged
           FROM pg_class c
           JOIN pg_namespace n ON n.oid = c.relnamespace
           WHERE c.relname = ? AND n.nspname = ? AND c.relkind IN ('r', 'p'); -- 'r' for table, 'p' for partitioned table
@@ -304,7 +300,9 @@ class PostgreSQLSchemaManager extends AbstractSchemaManager {
     if (result != null && result['comment'] != null) {
       options['comment'] = result['comment'];
     }
-    // TODO: Buscar outras opções como UNLOGGED?
+    if (result != null && result['unlogged'] == true) {
+      options['unlogged'] = true;
+    }
     return options;
   }
 
@@ -430,7 +428,11 @@ class PostgreSQLSchemaManager extends AbstractSchemaManager {
         : completeType;
 
     String dartType = _mapPgTypeToDartType(finalPgType, finalCompleteType);
-    bool autoIncrement = pgIdentity == 'd' || pgIdentity == 'a';
+    // IDENTITY columns, and serial columns (default nextval(...)); serial
+    // columns used to come back as plain integers.
+    final bool autoIncrement = pgIdentity == 'd' ||
+        pgIdentity == 'a' ||
+        (defaultValue?.toLowerCase().startsWith('nextval(') ?? false);
 
     int? length;
     int? precision;
@@ -573,6 +575,12 @@ class PostgreSQLSchemaManager extends AbstractSchemaManager {
     final onUpdateMatch = RegExp(r'ON UPDATE (' + actionRegex.pattern + r')').firstMatch(definition);
     if (onUpdateMatch != null) onUpdate = onUpdateMatch.group(1)?.toUpperCase();
 
+    // pg_get_constraintdef: "... MATCH FULL ... DEFERRABLE INITIALLY DEFERRED".
+    final upper = definition.toUpperCase();
+    final deferrable =
+        upper.contains('DEFERRABLE') && !upper.contains('NOT DEFERRABLE');
+    final match = RegExp(r'MATCH (FULL|PARTIAL)').firstMatch(upper)?.group(1);
+
     return ForeignKeyConstraint(
         name: name,
         localColumns: localColumns,
@@ -581,6 +589,10 @@ class PostgreSQLSchemaManager extends AbstractSchemaManager {
         options: {
           if (onDelete != null) 'ondelete': onDelete,
           if (onUpdate != null) 'onupdate': onUpdate,
+          if (deferrable) 'deferrable': true,
+          if (deferrable && upper.contains('INITIALLY DEFERRED'))
+            'deferred': true,
+          if (match != null) 'match': match,
         });
   }
 
