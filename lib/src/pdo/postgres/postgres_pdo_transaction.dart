@@ -1,6 +1,7 @@
 import 'package:eloquent/eloquent.dart';
 import 'package:postgres_fork/postgres.dart';
 
+import 'dependencies/postgres_pool/postgres_pool.dart';
 import 'postgres_pdo.dart';
 
 class PostgresPDOTransaction extends PDOTransactionContext {
@@ -14,6 +15,16 @@ class PostgresPDOTransaction extends PDOTransactionContext {
   PostgresPDOTransaction(this.transactionContext, PDOInterface pdo) {
     super.pdoInstance = pdo;
   }
+
+  /// postgres_fork's own savepoint: the driver rolls back its whole
+  /// transaction after any SQL error unless the error happens inside a
+  /// savepoint it knows about, so a plain `SAVEPOINT` statement could not
+  /// keep the transaction usable. [name] is not used (the driver names its
+  /// savepoints).
+  @override
+  Future<T> runInSavepoint<T>(String name, Future<T> Function() body,
+          [int? timeoutInSeconds]) =>
+      pgSavepoint(transactionContext, body);
 
   Future<int> execute(String statement, [int? timeoutInSeconds]) {
     if (timeoutInSeconds == null) {

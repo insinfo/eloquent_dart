@@ -182,6 +182,12 @@ Details and migration notes: [doc/release_notes_4.0.0.md](doc/release_notes_4.0.
 
 ### Fixed
 
+- postgres (postgres_fork): an SQL error inside a nested `transaction()`
+  (SAVEPOINT) rolled back the whole transaction, as the driver did not know
+  a savepoint was active; nested transactions use the driver's own
+  `savepoint()` (also through the pool), so the error rolls back to the
+  savepoint and the outer transaction goes on, as on dargres, dpgsql and
+  MySQL. New `PDOExecutionContext.runInSavepoint` for such drivers.
 - `unprepared()` in `pretend()` threw a `TypeError` (it returned `true` as
   the affected rows); it returns 0.
 - MySQL `increments()` in a create or add failed with error 1075 (the

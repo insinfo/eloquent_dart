@@ -150,11 +150,10 @@ void main() {
         });
         expect(await ids(), [1, 2]);
       },
-          skip: driver == 'postgres' || driver == 'postgres_v3'
-              ? '$driver rolls back the whole transaction after any SQL '
-                  'error (postgres_fork _onQueryError / postgres 3.x '
-                  'runTx _transactionException), so ROLLBACK TO SAVEPOINT '
-                  'cannot recover it'
+          skip: driver == 'postgres_v3'
+              ? 'postgres 3.x rolls back the whole transaction after any SQL '
+                  'error (runTx _transactionException), so ROLLBACK TO '
+                  'SAVEPOINT cannot recover it'
               : null);
 
       test('transactionIfNeeded reuses the current transaction', () async {

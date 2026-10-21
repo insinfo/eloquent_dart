@@ -57,6 +57,32 @@ abstract class PDOExecutionContext {
 
   Future<void> releaseSavepoint(String name, [int? timeoutInSeconds]) =>
       Future<void>.error(UnsupportedNestedTransactionException());
+
+  /// Runs [body] in the SAVEPOINT [name] of this transaction: released when
+  /// [body] completes; when it throws, rolled back to and the error
+  /// rethrown, so the transaction goes on.
+  ///
+  /// A driver that fails its whole transaction on an SQL error unless it
+  /// knows a savepoint is active (postgres_fork) overrides it with its own
+  /// savepoint API.
+  Future<T> runInSavepoint<T>(String name, Future<T> Function() body,
+      [int? timeoutInSeconds]) async {
+    await createSavepoint(name, timeoutInSeconds);
+    final T result;
+    try {
+      result = await body();
+    } catch (error, stackTrace) {
+      try {
+        await rollbackToSavepoint(name, timeoutInSeconds);
+      } catch (_) {
+        // Keep the body's error; the outer transaction reports its own
+        // state if it cannot continue.
+      }
+      Error.throwWithStackTrace(error, stackTrace);
+    }
+    await releaseSavepoint(name, timeoutInSeconds);
+    return result;
+  }
 }
 
 final RegExp _savepointName = RegExp(r'^[A-Za-z_][A-Za-z0-9_]*$');
@@ -154,4 +180,9 @@ class NestedPDOTransaction extends PDOExecutionContext {
   @override
   Future<void> releaseSavepoint(String name, [int? timeoutInSeconds]) =>
       parent.releaseSavepoint(name, timeoutInSeconds);
+
+  @override
+  Future<T> runInSavepoint<T>(String name, Future<T> Function() body,
+          [int? timeoutInSeconds]) =>
+      parent.runInSavepoint(name, body, timeoutInSeconds);
 }

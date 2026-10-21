@@ -926,3 +926,16 @@ class _PgExecutionContextWrapper implements PostgreSQLExecutionContext {
   @override
   int get queueSize => _delegate.queueSize;
 }
+
+/// postgres_fork's savepoint ([PgSavepointExecutionContext.savepoint]) on
+/// the context of a transaction: one handed by [PgPool.runTx] (whose wrapper
+/// is unwrapped, as the driver only knows its own transaction context) or by
+/// [PostgreSQLConnection.transaction]. An SQL error inside [block] rolls back
+/// to the savepoint instead of failing the whole transaction.
+Future<T> pgSavepoint<T>(
+    PostgreSQLExecutionContext transaction, Future<T> Function() block) {
+  final target = transaction is _PgExecutionContextWrapper
+      ? transaction._delegate
+      : transaction;
+  return target.savepoint((_) => block());
+}

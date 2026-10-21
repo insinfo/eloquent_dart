@@ -134,8 +134,8 @@ void main() {
         });
         expect(await db.table(_table).count(), 2);
       },
-          skip: driver == 'postgres' || driver == 'postgres_v3'
-              ? '$driver ends the whole transaction after any SQL error '
+          skip: driver == 'postgres_v3'
+              ? 'postgres 3.x ends the whole transaction after any SQL error '
                   '(see transaction_savepoint_integration_test)'
               : null);
 

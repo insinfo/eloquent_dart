@@ -826,24 +826,10 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
       throw UnsupportedNestedTransactionException();
     }
     final level = parent.transactionLevel + 1;
-    final name = savepointName(level);
-    await parent.createSavepoint(name, timeoutInSeconds);
-
-    final T result;
-    try {
-      result =
-          await callback(_childConnection(NestedPDOTransaction(parent, level)));
-    } catch (error, stackTrace) {
-      try {
-        await parent.rollbackToSavepoint(name, timeoutInSeconds);
-      } catch (_) {
-        // Keep the callback error; the outer transaction will report its own
-        // state if it cannot continue.
-      }
-      Error.throwWithStackTrace(error, stackTrace);
-    }
-    await parent.releaseSavepoint(name, timeoutInSeconds);
-    return result;
+    return parent.runInSavepoint(
+        savepointName(level),
+        () => callback(_childConnection(NestedPDOTransaction(parent, level))),
+        timeoutInSeconds);
   }
 
   /// SAVEPOINT name of a nested transaction at [level] (2 for the first).

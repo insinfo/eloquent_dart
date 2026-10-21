@@ -210,12 +210,15 @@ as on postgres and dargres.
     it works for any driver without knowing its classes.
 - Driver behaviour after an **SQL error** inside a savepoint (verified by
   `test/transaction_savepoint_integration_test.dart`):
-  - `dargres`, `dpgsql`, MySQL: `ROLLBACK TO SAVEPOINT` recovers and the outer
-    transaction continues.
-  - `postgres` (postgres_fork) and `postgres_v3`: the driver itself rolls back
-    the whole transaction after any SQL error (postgres_fork `_onQueryError`,
-    postgres 3.x `runTx` `_transactionException`), so a savepoint only isolates
-    Dart exceptions there.
+  - `postgres`, `dargres`, `dpgsql`, MySQL: `ROLLBACK TO SAVEPOINT` recovers
+    and the outer transaction continues. postgres_fork rolls back its whole
+    transaction after an SQL error (`_onQueryError`) unless the error happens
+    inside a savepoint it knows about, so its adapter opens nested
+    transactions with the driver's `savepoint()`
+    (`PDOExecutionContext.runInSavepoint`), also through the pool.
+  - `postgres_v3`: the driver itself rolls back the whole transaction after
+    any SQL error (postgres 3.x `runTx` `_transactionException`), so a
+    savepoint only isolates Dart exceptions there.
 
 See the README section "Transactions, nested transactions (SAVEPOINT) and
 transactionIfNeeded" for examples.
@@ -992,8 +995,8 @@ await db.transactionScope((ctx) async {
   row as a `Map`): insert, or return the row of `attributes` when a unique
   index refuses it, with no lock and no race. On PostgreSQL the insert is
   `insert ... on conflict do nothing returning *`, so a conflict is not an
-  error and a surrounding transaction stays usable on every adapter (postgres
-  and postgres_v3 end the transaction on any SQL error, even in a SAVEPOINT);
+  error and a surrounding transaction stays usable on every adapter
+  (postgres_v3 ends the transaction on any SQL error, even in a SAVEPOINT);
   on MySQL it runs in a SAVEPOINT inside a transaction. If the row of
   `attributes` is not found after a conflict (another unique index refused
   it), the `UniqueConstraintViolationException` is thrown.

@@ -299,11 +299,12 @@ do not interfere. A driver context without SAVEPOINT support throws
 `UnsupportedNestedTransactionException` instead of opening an independent
 transaction.
 
-> **Driver note:** with `postgres` (postgres_fork) and `postgres_v3`, an
-> *SQL error* (for example a duplicate key) inside any part of a transaction
-> makes the driver roll back the whole transaction, so a savepoint only
-> isolates Dart exceptions there. `dargres`, `dpgsql` and MySQL recover with
-> `ROLLBACK TO SAVEPOINT` and the outer transaction continues.
+> **Driver note:** with `postgres_v3`, an *SQL error* (for example a
+> duplicate key) inside any part of a transaction makes the driver roll back
+> the whole transaction, so a savepoint only isolates Dart exceptions there.
+> `postgres` (postgres_fork, through its own `savepoint()`), `dargres`,
+> `dpgsql` and MySQL recover with `ROLLBACK TO SAVEPOINT` and the outer
+> transaction continues.
 
 ## Running a SQL script (unprepared)
 

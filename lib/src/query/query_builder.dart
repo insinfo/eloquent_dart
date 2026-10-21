@@ -4339,8 +4339,8 @@ class QueryBuilder {
   ///
   /// On PostgreSQL the insert is `insert ... on conflict do nothing
   /// returning *`: a conflict is not an error, so a surrounding transaction
-  /// stays usable on every adapter (postgres and postgres_v3 end the
-  /// transaction on any SQL error, even inside a SAVEPOINT). When no row
+  /// stays usable on every adapter (postgres_v3 ends the transaction on any
+  /// SQL error, even inside a SAVEPOINT). When no row
   /// matches [attributes] after a conflict (another unique index refused the
   /// row), a plain insert is run to throw the
   /// [UniqueConstraintViolationException].
