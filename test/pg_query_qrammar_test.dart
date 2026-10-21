@@ -190,8 +190,7 @@ void main() {
         .where('id', '=', 7);
     final values = {'name': 'John', 'email': null, 'age': 30};
     // SET values first, then the where bindings.
-    expect(grammar.prepareBindingsForUpdate(qb, values),
-        ['John', null, 30, 7]);
+    expect(grammar.prepareBindingsForUpdate(qb, values), ['John', null, 30, 7]);
   });
 
   test('whereTime', () {

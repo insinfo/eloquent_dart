@@ -33,16 +33,17 @@ void main() {
       expect(QueryBuilder.likePattern('ana', SearchMatch.startsWith), 'ana%');
       expect(QueryBuilder.likePattern('ana', SearchMatch.endsWith), '%ana');
       expect(QueryBuilder.likePattern('a%', SearchMatch.exact), r'a\%');
-      expect(QueryBuilder.likePattern(' maria   da_x ', SearchMatch.wordsInOrder),
+      expect(
+          QueryBuilder.likePattern(' maria   da_x ', SearchMatch.wordsInOrder),
           r'%maria%da\_x%');
     });
   });
 
   group('whereSearch', () {
     test('any column, escaped term, unaccent on PostgreSQL', () {
-      final q = pg().where('ativo', true).whereSearch(
-          ['c.nom_cgm', 'c.cpf'], ' José 10% ',
-          unaccent: true);
+      final q = pg()
+          .where('ativo', true)
+          .whereSearch(['c.nom_cgm', 'c.cpf'], ' José 10% ', unaccent: true);
       expect(
           q.toSql(),
           'select * from "t" where "ativo" = ? and '
@@ -69,10 +70,9 @@ void main() {
     });
 
     test('case sensitive, raw expression column, orWhereSearch', () {
-      final q = pg()
-          .where('a', 1)
-          .orWhereSearch([QueryExpression('coalesce(x, y)')], 'Ab',
-              caseSensitive: true);
+      final q = pg().where('a', 1).orWhereSearch(
+          [QueryExpression('coalesce(x, y)')], 'Ab',
+          caseSensitive: true);
       expect(q.toSql(),
           'select * from "t" where "a" = ? or (coalesce(x, y)::text like ?)');
     });
@@ -106,7 +106,8 @@ void main() {
           'select * from "t" where (lower("c"."nom_cgm"::text) like lower(?))');
       expect(q.getBindings(), ['Ana%']);
       expect(
-          pg().whereSearch(['nome'], 'jose', lower: true, unaccent: true).toSql(),
+          pg().whereSearch(['nome'], 'jose',
+              lower: true, unaccent: true).toSql(),
           'select * from "t" where (lower(unaccent("nome"::text)) like '
           'lower(unaccent(?)))');
       expect(pg().whereNotLike('a', 'x', lower: true).toSql(),
@@ -117,7 +118,8 @@ void main() {
           'select * from `t` where lower(`nome`) not like lower(?)');
       expect(pg2().whereSearch(['nome'], 'ana', lower: true).toSql(),
           'select * from "t" where (lower("nome"::text) like lower(?))');
-      expect(pg2().whereAnyLike(['a', 'b'], 'x%', lower: true).toSql(),
+      expect(
+          pg2().whereAnyLike(['a', 'b'], 'x%', lower: true).toSql(),
           'select * from "t" where (lower("a"::text) like lower(?) or '
           'lower("b"::text) like lower(?))');
       expect(() => pg().whereLike('a', 'x', lower: true, caseSensitive: true),
@@ -127,7 +129,8 @@ void main() {
     });
 
     test('a custom unaccent function', () {
-      final grammar = QueryPostgresGrammar()..unaccentFunction = 'public.f_unaccent';
+      final grammar = QueryPostgresGrammar()
+        ..unaccentFunction = 'public.f_unaccent';
       final q = QueryBuilder(conn, grammar, PostgresProcessor())
           .from('t')
           .whereSearch(['a'], 'b', unaccent: true);
@@ -162,7 +165,8 @@ void main() {
     test('a known field, client direction', () {
       expect(pg().orderByInput('nome', 'DESC', allowed: allowed).toSql(),
           'select * from "t" order by "c"."nom_cgm" desc');
-      expect(pg().orderByInput('numero', 'descending', allowed: allowed).toSql(),
+      expect(
+          pg().orderByInput('numero', 'descending', allowed: allowed).toSql(),
           'select * from "t" order by "p"."ano_exercicio" desc, "p"."cod_processo" desc');
       expect(pg().orderByInput('idade', 'x', allowed: allowed).toSql(),
           'select * from "t" order by age(c.dt_nascimento) asc');
@@ -197,8 +201,7 @@ void main() {
               .toSql(),
           'select * from "t" order by "id" asc');
       // QueryBuilder2 takes columns only, never SQL.
-      expect(
-          () => pg2().orderByInput('idade', 'asc', allowed: allowed),
+      expect(() => pg2().orderByInput('idade', 'asc', allowed: allowed),
           throwsArgumentError);
     });
   });
@@ -217,9 +220,14 @@ void main() {
           'select * from "t" where ("cod_processo", "ano_exercicio") in '
           '((?, ?), (?, ?))');
       expect(q.getBindings(), [10, '2024', 11, '2025']);
-      expect(my().whereNotInTuple(['a', 'b'], [
-        [1, 2]
-      ]).toSql(), 'select * from `t` where (`a`, `b`) not in ((?, ?))');
+      expect(
+          my().whereNotInTuple([
+            'a',
+            'b'
+          ], [
+            [1, 2]
+          ]).toSql(),
+          'select * from `t` where (`a`, `b`) not in ((?, ?))');
     });
 
     test('empty lists and wrong sizes', () {
@@ -228,7 +236,10 @@ void main() {
       expect(pg().whereNotInTuple(['a', 'b'], []).toSql(),
           'select * from "t" where 1 = 1');
       expect(
-          () => pg().whereInTuple(['a', 'b'], [
+          () => pg().whereInTuple([
+                'a',
+                'b'
+              ], [
                 [1]
               ]),
           throwsArgumentError);
@@ -238,13 +249,17 @@ void main() {
       final q = pg().whereRowValues(['ano', 'numero'], '>', [2024, 150]);
       expect(q.toSql(), 'select * from "t" where ("ano", "numero") > (?, ?)');
       expect(q.getBindings(), [2024, 150]);
-      expect(() => pg().whereRowValues(['a'], 'like', [1]), throwsArgumentError);
-      expect(() => pg().whereRowValues(['a', 'b'], '=', [1]),
-          throwsArgumentError);
+      expect(
+          () => pg().whereRowValues(['a'], 'like', [1]), throwsArgumentError);
+      expect(
+          () => pg().whereRowValues(['a', 'b'], '=', [1]), throwsArgumentError);
     });
 
     test('QueryBuilder2', () {
-      final q = pg2().where('x', 1).orWhereInTuple(['a', 'b'], [
+      final q = pg2().where('x', 1).orWhereInTuple([
+        'a',
+        'b'
+      ], [
         [1, 2]
       ]).whereRowValues(['a', 'b'], [3, 4],
           operator: ComparisonOperator.lessThan);
@@ -268,9 +283,7 @@ void main() {
       expect(pg().whereNotAnyArray('id', [1]).toSql(),
           'select * from "t" where "id" <> all(?)');
       expect(
-          pg()
-              .whereAnyArray('v', [1], elementType: 'numeric(10, 2)')
-              .toSql(),
+          pg().whereAnyArray('v', [1], elementType: 'numeric(10, 2)').toSql(),
           'select * from "t" where "v" = any(?::numeric(10, 2)[])');
     });
 
@@ -299,11 +312,10 @@ void main() {
     test('QueryBuilder', () {
       expect(pg().whereBetweenColumns('valor', ['minimo', 'maximo']).toSql(),
           'select * from "t" where "valor" between "minimo" and "maximo"');
-      expect(
-          pg().whereNotBetweenColumns('valor', ['a', 'b']).toSql(),
+      expect(pg().whereNotBetweenColumns('valor', ['a', 'b']).toSql(),
           'select * from "t" where "valor" not between "a" and "b"');
-      final q = pg().whereValueBetween(
-          DateTime(2026, 1, 2), ['data_inicio', 'data_fim']);
+      final q = pg()
+          .whereValueBetween(DateTime(2026, 1, 2), ['data_inicio', 'data_fim']);
       expect(q.toSql(),
           'select * from "t" where ? between "data_inicio" and "data_fim"');
       expect(q.getBindings(), [DateTime(2026, 1, 2)]);
@@ -329,10 +341,8 @@ void main() {
       expect(pg2().whereAny(['a', 'b'], 1).toSql(),
           'select * from "t" where ("a" = ? or "b" = ?)');
       expect(
-          pg2()
-              .whereAll(['a', 'b'], 1,
-                  operator: ComparisonOperator.greaterThan)
-              .toSql(),
+          pg2().whereAll(['a', 'b'], 1,
+              operator: ComparisonOperator.greaterThan).toSql(),
           'select * from "t" where ("a" > ? and "b" > ?)');
       expect(pg2().whereNone(['a', 'b'], 1).toSql(),
           'select * from "t" where not ("a" = ? or "b" = ?)');
@@ -355,8 +365,7 @@ void main() {
       final q = pg2()
           .distinctOn(['grupo'])
           .whereJsonContains('dados', {'a': 1})
-          .whereJsonLength('lista', 2,
-              operator: ComparisonOperator.greaterThan)
+          .whereJsonLength('lista', 2, operator: ComparisonOperator.greaterThan)
           .whereArrayContains('tags', ['x'])
           .whereFullText(['titulo'], 'casa', language: 'portuguese')
           .orderBy('grupo');
@@ -460,8 +469,8 @@ void main() {
       conn.mockSelectResult = [
         {'id': 3, 'nome': 'c'},
       ];
-      final second = await query.cursorPaginate(
-          perPage: 2, cursor: first.nextCursor);
+      final second =
+          await query.cursorPaginate(perPage: 2, cursor: first.nextCursor);
       expect(
           conn.lastSelectSql,
           'select * from "t" where ("nome" > ? or ("nome" = ? and ("t"."id" > ?))) '
@@ -474,8 +483,8 @@ void main() {
         {'id': 2, 'nome': 'b'},
         {'id': 1, 'nome': 'a'},
       ];
-      final back = await query.cursorPaginate(
-          perPage: 2, cursor: second.previousCursor);
+      final back =
+          await query.cursorPaginate(perPage: 2, cursor: second.previousCursor);
       expect(
           conn.lastSelectSql,
           'select * from "t" where ("nome" < ? or ("nome" = ? and ("t"."id" < ?))) '
@@ -492,8 +501,10 @@ void main() {
               .encode();
       expect(PageCursor.decode(cursor).values['criado'], when);
       conn.mockSelectResult = [];
-      await pg().orderByDesc('criado').orderBy('id').cursorPaginate(
-          cursor: cursor);
+      await pg()
+          .orderByDesc('criado')
+          .orderBy('id')
+          .cursorPaginate(cursor: cursor);
       expect(
           conn.lastSelectSql,
           'select * from "t" where ("criado" < ? or ("criado" = ? and ("id" > ?))) '
@@ -507,8 +518,7 @@ void main() {
           throwsArgumentError);
       expect(() => pg().orderBy('id').cursorPaginate(cursor: 'lixo'),
           throwsFormatException);
-      final other =
-          PageCursor({'x': 1}, pointsToNextItems: true).encode();
+      final other = PageCursor({'x': 1}, pointsToNextItems: true).encode();
       expect(() => pg().orderBy('id').cursorPaginate(cursor: other),
           throwsFormatException);
       conn.mockSelectResult = [
@@ -541,8 +551,7 @@ void main() {
         {'id': 2}
       ]);
       final p2 = await pg2()
-          .select(['id'])
-          .paginateWithWindowCount(page: 1, perPage: 2);
+          .select(['id']).paginateWithWindowCount(page: 1, perPage: 2);
       expect(conn.lastSelectSql,
           'select "id", count(*) over () as eloquent_window_total from "t" limit 2 offset 0');
       expect(p2.total, 42);

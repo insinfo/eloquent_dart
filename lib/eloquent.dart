@@ -61,7 +61,13 @@ export 'src/doctrine/platforms/exception/platform_exceptions.dart';
 export 'src/doctrine/platforms/keywords/keyword_list.dart';
 export 'src/doctrine/lock_mode.dart';
 export 'src/doctrine/transaction_isolation_level.dart';
-export 'src/doctrine/exceptions/doctrine_exceptions.dart' show DoctrineDbalException, SchemaException, InvalidColumnTypeException, ColumnLengthRequiredException, ColumnValuesRequiredException;
+export 'src/doctrine/exceptions/doctrine_exceptions.dart'
+    show
+        DoctrineDbalException,
+        SchemaException,
+        InvalidColumnTypeException,
+        ColumnLengthRequiredException,
+        ColumnValuesRequiredException;
 
 export 'src/connection_interface.dart';
 export 'src/connection_resolver_interface.dart';

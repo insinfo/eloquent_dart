@@ -3,6 +3,7 @@
 /// Base exception class for all Doctrine DBAL related errors in this package.
 class DoctrineDbalException implements Exception {
   final String message;
+
   /// Optional original error from the underlying driver or system.
   final dynamic cause; // Reverted to dynamic (can hold null)
   /// Optional stack trace associated with the original error.
@@ -31,6 +32,7 @@ class DoctrineDbalException implements Exception {
 class DriverException extends DoctrineDbalException {
   /// SQLSTATE error code, if available.
   final String? sqlState;
+
   /// Vendor-specific error code, if available.
   final int? vendorCode;
 
@@ -43,13 +45,13 @@ class DriverException extends DoctrineDbalException {
     this.vendorCode,
   ]) : super(message, cause, stackTrace); // Pass values explicitly
 
-   @override
+  @override
   String toString() {
-     String base = 'DriverException: $message';
-     if (sqlState != null) base += ' (SQLSTATE[$sqlState])';
-     if (vendorCode != null) base += ' (Vendor Code[$vendorCode])';
-     if (cause != null) base += '\nCause: $cause';
-     return base;
+    String base = 'DriverException: $message';
+    if (sqlState != null) base += ' (SQLSTATE[$sqlState])';
+    if (vendorCode != null) base += ' (Vendor Code[$vendorCode])';
+    if (cause != null) base += '\nCause: $cause';
+    return base;
   }
 }
 
@@ -64,41 +66,44 @@ class ConnectionException extends DriverException {
     int? vendorCode,
   ]) : super(message, cause, stackTrace, sqlState, vendorCode); // Pass values
 
-   @override String toString() => 'ConnectionException: $message';
+  @override
+  String toString() => 'ConnectionException: $message';
 }
 
 /// Exception for when a connection is lost. Might be retryable.
 class ConnectionLost extends ConnectionException implements RetryableException {
-   // Corrected Super Call
-   ConnectionLost(
-       String message, [
-       dynamic cause, // dynamic is fine here
-       StackTrace? stackTrace,
-       String? sqlState,
-       int? vendorCode,
-     ]) : super(message, cause, stackTrace, sqlState, vendorCode);
+  // Corrected Super Call
+  ConnectionLost(
+    String message, [
+    dynamic cause, // dynamic is fine here
+    StackTrace? stackTrace,
+    String? sqlState,
+    int? vendorCode,
+  ]) : super(message, cause, stackTrace, sqlState, vendorCode);
 
   factory ConnectionLost.fromCause(dynamic cause, [StackTrace? trace]) {
     // Ensure factory passes required message
     return ConnectionLost('Connection lost', cause, trace);
   }
-   @override String toString() => 'ConnectionLost: $message';
+  @override
+  String toString() => 'ConnectionLost: $message';
 }
 
 /// Exception thrown when attempting a commit that will fail due to prior rollback-only marking.
 class CommitFailedRollbackOnly extends ConnectionException {
-   // Corrected Super Call
-   CommitFailedRollbackOnly(
-       String message, [
-       dynamic cause, // dynamic is fine here
-       StackTrace? stackTrace,
-       String? sqlState,
-       int? vendorCode,
-     ]) : super(message, cause, stackTrace, sqlState, vendorCode);
+  // Corrected Super Call
+  CommitFailedRollbackOnly(
+    String message, [
+    dynamic cause, // dynamic is fine here
+    StackTrace? stackTrace,
+    String? sqlState,
+    int? vendorCode,
+  ]) : super(message, cause, stackTrace, sqlState, vendorCode);
 
   // Renamed factory from .new to .create
   factory CommitFailedRollbackOnly.create() {
-    return CommitFailedRollbackOnly('Commit failed: Transaction is marked rollback-only.');
+    return CommitFailedRollbackOnly(
+        'Commit failed: Transaction is marked rollback-only.');
   }
 }
 
@@ -109,58 +114,69 @@ class SavepointsNotSupported extends ConnectionException {
 
   // Renamed factory from .new to .create
   factory SavepointsNotSupported.create() {
-    return SavepointsNotSupported('Savepoints are not supported by this driver.');
+    return SavepointsNotSupported(
+        'Savepoints are not supported by this driver.');
   }
 }
 
 /// Exception for when a required database is not specified or does not exist upon connection.
 class DatabaseRequired extends ConnectionException {
-   // Corrected Super Call
-   DatabaseRequired(String message) : super(message);
-   factory DatabaseRequired.forConnection() {
-       return DatabaseRequired('Database name is required for this connection.');
-   }
+  // Corrected Super Call
+  DatabaseRequired(String message) : super(message);
+  factory DatabaseRequired.forConnection() {
+    return DatabaseRequired('Database name is required for this connection.');
+  }
 }
 
 /// Exception for when the specified database does not exist.
 class DatabaseDoesNotExist extends ConnectionException {
-   // Corrected Super Call
-   DatabaseDoesNotExist(String message, [dynamic cause, StackTrace? stackTrace, String? sqlState, int? vendorCode])
-       : super(message, cause, stackTrace, sqlState, vendorCode);
+  // Corrected Super Call
+  DatabaseDoesNotExist(String message,
+      [dynamic cause,
+      StackTrace? stackTrace,
+      String? sqlState,
+      int? vendorCode])
+      : super(message, cause, stackTrace, sqlState, vendorCode);
 
-   factory DatabaseDoesNotExist.forDatabase(String dbName) {
-       return DatabaseDoesNotExist('Database "$dbName" does not exist.');
-   }
+  factory DatabaseDoesNotExist.forDatabase(String dbName) {
+    return DatabaseDoesNotExist('Database "$dbName" does not exist.');
+  }
 }
 
 /// Exception for when an operation requires an active transaction, but none exists.
 class NoActiveTransaction extends ConnectionException {
-   // Corrected Super Call
-   NoActiveTransaction(String message) : super(message);
-   // Renamed factory from .new to .create
-   factory NoActiveTransaction.create() {
-       return NoActiveTransaction('There is no active transaction.');
-   }
+  // Corrected Super Call
+  NoActiveTransaction(String message) : super(message);
+  // Renamed factory from .new to .create
+  factory NoActiveTransaction.create() {
+    return NoActiveTransaction('There is no active transaction.');
+  }
 }
 
 /// Exception for when a transaction is rolled back unexpectedly.
 class TransactionRolledBack extends ConnectionException {
-   // Corrected Super Call
-   TransactionRolledBack(String message, [dynamic cause, StackTrace? stackTrace, String? sqlState, int? vendorCode])
-       : super(message, cause, stackTrace, sqlState, vendorCode);
-   factory TransactionRolledBack.duringCommit() {
-       return TransactionRolledBack('Transaction rolled back during commit attempt.');
-   }
+  // Corrected Super Call
+  TransactionRolledBack(String message,
+      [dynamic cause,
+      StackTrace? stackTrace,
+      String? sqlState,
+      int? vendorCode])
+      : super(message, cause, stackTrace, sqlState, vendorCode);
+  factory TransactionRolledBack.duringCommit() {
+    return TransactionRolledBack(
+        'Transaction rolled back during commit attempt.');
+  }
 }
 
 /// Exception for when attempting to modify data on a read-only connection.
 class ReadOnlyException extends ConnectionException {
-   // Corrected Super Call
-   ReadOnlyException(String message) : super(message);
-   // Renamed factory from .new to .create
-   factory ReadOnlyException.create() {
-       return ReadOnlyException('Cannot execute write operation on a read-only connection.');
-   }
+  // Corrected Super Call
+  ReadOnlyException(String message) : super(message);
+  // Renamed factory from .new to .create
+  factory ReadOnlyException.create() {
+    return ReadOnlyException(
+        'Cannot execute write operation on a read-only connection.');
+  }
 }
 
 // --- Server Level Exceptions ---
@@ -176,82 +192,128 @@ class ServerException extends DriverException {
     int? vendorCode,
   ]) : super(message, cause, stackTrace, sqlState, vendorCode);
 
-  @override String toString() => 'ServerException: $message';
+  @override
+  String toString() => 'ServerException: $message';
 }
 
 /// Exception for a deadlock error during a transaction. Often retryable.
 class DeadlockException extends ServerException implements RetryableException {
   // Corrected Super Call
-  DeadlockException(String message, [dynamic cause, StackTrace? stackTrace, String? sqlState, int? vendorCode])
+  DeadlockException(String message,
+      [dynamic cause,
+      StackTrace? stackTrace,
+      String? sqlState,
+      int? vendorCode])
       : super(message, cause, stackTrace, sqlState, vendorCode);
 
   factory DeadlockException.fromCause(dynamic cause, [StackTrace? trace]) {
     return DeadlockException('Deadlock detected', cause, trace);
   }
-   @override String toString() => 'DeadlockException: $message';
+  @override
+  String toString() => 'DeadlockException: $message';
 }
 
 /// Exception for a lock wait timeout error during a transaction. Often retryable.
-class LockWaitTimeoutException extends ServerException implements RetryableException {
+class LockWaitTimeoutException extends ServerException
+    implements RetryableException {
   // Corrected Super Call
-  LockWaitTimeoutException(String message, [dynamic cause, StackTrace? stackTrace, String? sqlState, int? vendorCode])
+  LockWaitTimeoutException(String message,
+      [dynamic cause,
+      StackTrace? stackTrace,
+      String? sqlState,
+      int? vendorCode])
       : super(message, cause, stackTrace, sqlState, vendorCode);
-   factory LockWaitTimeoutException.fromCause(dynamic cause, [StackTrace? trace]) {
-     return LockWaitTimeoutException('Lock wait timeout exceeded', cause, trace);
-   }
-    @override String toString() => 'LockWaitTimeoutException: $message';
+  factory LockWaitTimeoutException.fromCause(dynamic cause,
+      [StackTrace? trace]) {
+    return LockWaitTimeoutException('Lock wait timeout exceeded', cause, trace);
+  }
+  @override
+  String toString() => 'LockWaitTimeoutException: $message';
 }
 
 /// Base class for constraint violation errors.
 class ConstraintViolationException extends ServerException {
   // Corrected Super Call
-  ConstraintViolationException(String message, [dynamic cause, StackTrace? stackTrace, String? sqlState, int? vendorCode])
+  ConstraintViolationException(String message,
+      [dynamic cause,
+      StackTrace? stackTrace,
+      String? sqlState,
+      int? vendorCode])
       : super(message, cause, stackTrace, sqlState, vendorCode);
-   @override String toString() => 'ConstraintViolationException: $message';
+  @override
+  String toString() => 'ConstraintViolationException: $message';
 }
 
 /// Exception for foreign key constraint violations.
-class ForeignKeyConstraintViolationException extends ConstraintViolationException {
+class ForeignKeyConstraintViolationException
+    extends ConstraintViolationException {
   // Corrected Super Call
-  ForeignKeyConstraintViolationException(String message, [dynamic cause, StackTrace? stackTrace, String? sqlState, int? vendorCode])
+  ForeignKeyConstraintViolationException(String message,
+      [dynamic cause,
+      StackTrace? stackTrace,
+      String? sqlState,
+      int? vendorCode])
       : super(message, cause, stackTrace, sqlState, vendorCode);
-   factory ForeignKeyConstraintViolationException.fromCause(dynamic cause, [StackTrace? trace]) {
-     return ForeignKeyConstraintViolationException('Foreign key constraint violation', cause, trace);
-   }
-   @override String toString() => 'ForeignKeyConstraintViolationException: $message';
+  factory ForeignKeyConstraintViolationException.fromCause(dynamic cause,
+      [StackTrace? trace]) {
+    return ForeignKeyConstraintViolationException(
+        'Foreign key constraint violation', cause, trace);
+  }
+  @override
+  String toString() => 'ForeignKeyConstraintViolationException: $message';
 }
 
 /// Exception for NOT NULL constraint violations.
 class NotNullConstraintViolationException extends ConstraintViolationException {
   // Corrected Super Call
-  NotNullConstraintViolationException(String message, [dynamic cause, StackTrace? stackTrace, String? sqlState, int? vendorCode])
+  NotNullConstraintViolationException(String message,
+      [dynamic cause,
+      StackTrace? stackTrace,
+      String? sqlState,
+      int? vendorCode])
       : super(message, cause, stackTrace, sqlState, vendorCode);
-   factory NotNullConstraintViolationException.fromCause(dynamic cause, [StackTrace? trace]) {
-     return NotNullConstraintViolationException('NOT NULL constraint violation', cause, trace);
-   }
-   @override String toString() => 'NotNullConstraintViolationException: $message';
+  factory NotNullConstraintViolationException.fromCause(dynamic cause,
+      [StackTrace? trace]) {
+    return NotNullConstraintViolationException(
+        'NOT NULL constraint violation', cause, trace);
+  }
+  @override
+  String toString() => 'NotNullConstraintViolationException: $message';
 }
 
 /// Exception for unique constraint violations.
 class UniqueConstraintViolationException extends ConstraintViolationException {
   // Corrected Super Call
-  UniqueConstraintViolationException(String message, [dynamic cause, StackTrace? stackTrace, String? sqlState, int? vendorCode])
+  UniqueConstraintViolationException(String message,
+      [dynamic cause,
+      StackTrace? stackTrace,
+      String? sqlState,
+      int? vendorCode])
       : super(message, cause, stackTrace, sqlState, vendorCode);
-   factory UniqueConstraintViolationException.fromCause(dynamic cause, [StackTrace? trace]) {
-     return UniqueConstraintViolationException('Unique constraint violation', cause, trace);
-   }
-   @override String toString() => 'UniqueConstraintViolationException: $message';
+  factory UniqueConstraintViolationException.fromCause(dynamic cause,
+      [StackTrace? trace]) {
+    return UniqueConstraintViolationException(
+        'Unique constraint violation', cause, trace);
+  }
+  @override
+  String toString() => 'UniqueConstraintViolationException: $message';
 }
 
 /// Exception for syntax errors in SQL execution.
 class SyntaxErrorException extends ServerException {
   // Corrected Super Call
-  SyntaxErrorException(String message, [dynamic cause, StackTrace? stackTrace, String? sqlState, int? vendorCode])
+  SyntaxErrorException(String message,
+      [dynamic cause,
+      StackTrace? stackTrace,
+      String? sqlState,
+      int? vendorCode])
       : super(message, cause, stackTrace, sqlState, vendorCode);
-   factory SyntaxErrorException.fromCause(dynamic cause, [StackTrace? trace]) {
-     return SyntaxErrorException('Syntax error or access violation', cause, trace);
-   }
-    @override String toString() => 'SyntaxErrorException: $message';
+  factory SyntaxErrorException.fromCause(dynamic cause, [StackTrace? trace]) {
+    return SyntaxErrorException(
+        'Syntax error or access violation', cause, trace);
+  }
+  @override
+  String toString() => 'SyntaxErrorException: $message';
 }
 
 // --- Schema Level Exceptions ---
@@ -261,13 +323,14 @@ class SchemaException extends DoctrineDbalException {
   // Corrected Super Call
   SchemaException(String message, [dynamic cause, StackTrace? stackTrace])
       : super(message, cause, stackTrace);
-   @override String toString() => 'SchemaException: $message';
+  @override
+  String toString() => 'SchemaException: $message';
 }
 
 /// Base class for errors related to database object existence.
 abstract class DatabaseObjectException extends SchemaException {
-   // Corrected Super Call
-   DatabaseObjectException(super.message) : super();
+  // Corrected Super Call
+  DatabaseObjectException(super.message) : super();
 }
 
 /// Exception for when a database object (table, sequence, etc.) already exists.
@@ -284,38 +347,44 @@ class DatabaseObjectNotFoundException extends DatabaseObjectException {
 
 /// Exception for when a table already exists.
 class TableExistsException extends DatabaseObjectExistsException {
-  TableExistsException(String tableName) : super('Table "$tableName" already exists.');
+  TableExistsException(String tableName)
+      : super('Table "$tableName" already exists.');
 }
 
 /// Exception for when a table is not found.
 class TableNotFoundException extends DatabaseObjectNotFoundException {
-  TableNotFoundException(String tableName) : super('Table "$tableName" does not exist.');
+  TableNotFoundException(String tableName)
+      : super('Table "$tableName" does not exist.');
 }
 
 /// Exception for when a schema does not exist.
 class SchemaDoesNotExist extends DatabaseObjectNotFoundException {
-   SchemaDoesNotExist(String schemaName) : super('Schema "$schemaName" does not exist.');
+  SchemaDoesNotExist(String schemaName)
+      : super('Schema "$schemaName" does not exist.');
 }
 
 /// Exception for invalid field name usage.
 class InvalidFieldNameException extends SchemaException {
-  InvalidFieldNameException(String fieldName) : super('Invalid field name "$fieldName".');
+  InvalidFieldNameException(String fieldName)
+      : super('Invalid field name "$fieldName".');
 }
 
 /// Exception for when a field name is not unique where required.
 class NonUniqueFieldNameException extends SchemaException {
-   NonUniqueFieldNameException(String fieldName) : super('Field name "$fieldName" is not unique.');
+  NonUniqueFieldNameException(String fieldName)
+      : super('Field name "$fieldName" is not unique.');
 }
 
 /// Exception for invalid column index usage.
 class InvalidColumnIndex extends SchemaException {
-   InvalidColumnIndex(int index) : super('Invalid column index "$index".');
+  InvalidColumnIndex(int index) : super('Invalid column index "$index".');
 }
 
 /// Base class for exceptions related to invalid column type definitions.
 class InvalidColumnTypeException extends SchemaException {
   InvalidColumnTypeException(String typeName, String? reason)
-      : super('Invalid definition for column type "$typeName"${reason != null ? ": $reason" : "."}');
+      : super(
+            'Invalid definition for column type "$typeName"${reason != null ? ": $reason" : "."}');
 }
 
 /// Exception for when a required column length is missing.
@@ -345,12 +414,15 @@ class ColumnValuesRequiredException extends InvalidColumnTypeException {
 /// Exception for general invalid column declaration issues.
 class InvalidColumnDeclarationException extends SchemaException {
   // Corrected Super Call
-  InvalidColumnDeclarationException(String message, [dynamic cause, StackTrace? stackTrace])
+  InvalidColumnDeclarationException(String message,
+      [dynamic cause, StackTrace? stackTrace])
       : super(message, cause, stackTrace);
 
-  factory InvalidColumnDeclarationException.fromInvalidColumnType(String columnName, InvalidColumnTypeException cause) {
+  factory InvalidColumnDeclarationException.fromInvalidColumnType(
+      String columnName, InvalidColumnTypeException cause) {
     return InvalidColumnDeclarationException(
-      'Invalid declaration for column "$columnName": ${cause.message}', cause);
+        'Invalid declaration for column "$columnName": ${cause.message}',
+        cause);
   }
 }
 
@@ -364,32 +436,36 @@ class InvalidArgumentException extends DoctrineDbalException {
 
 /// Exception for when a required driver option is missing.
 class DriverRequired extends InvalidArgumentException {
-   DriverRequired() : super('Driver option is required.');
+  DriverRequired() : super('Driver option is required.');
 }
 
 /// Exception for when an unknown driver alias is provided.
 class UnknownDriver extends InvalidArgumentException {
-   UnknownDriver(String alias, List<String> knownAliases)
-       : super('Unknown driver alias "$alias". Known aliases: ${knownAliases.join(", ")}');
+  UnknownDriver(String alias, List<String> knownAliases)
+      : super(
+            'Unknown driver alias "$alias". Known aliases: ${knownAliases.join(", ")}');
 }
 
 /// Exception for when an invalid driver class is provided.
 class InvalidDriverClass extends InvalidArgumentException {
-   InvalidDriverClass(String className) : super('Invalid driver class "$className".');
+  InvalidDriverClass(String className)
+      : super('Invalid driver class "$className".');
 }
 
 /// Exception for when an invalid wrapper class is provided.
 class InvalidWrapperClass extends InvalidArgumentException {
-   InvalidWrapperClass(String className) : super('Invalid wrapper class "$className".');
+  InvalidWrapperClass(String className)
+      : super('Invalid wrapper class "$className".');
 }
 
 /// Exception for malformed DSN strings.
 class MalformedDsnException extends InvalidArgumentException {
-   MalformedDsnException(String dsn, String reason) : super('Malformed DSN "$dsn": $reason');
+  MalformedDsnException(String dsn, String reason)
+      : super('Malformed DSN "$dsn": $reason');
 
-   factory MalformedDsnException.missingPart(String dsn, String missingPart) {
-       return MalformedDsnException(dsn, 'Missing "$missingPart" part.');
-   }
+  factory MalformedDsnException.missingPart(String dsn, String missingPart) {
+    return MalformedDsnException(dsn, 'Missing "$missingPart" part.');
+  }
 }
 
 // --- Other Exceptions ---

@@ -17,8 +17,7 @@ class PostgresPDOTransaction extends PDOTransactionContext {
 
   Future<int> execute(String statement, [int? timeoutInSeconds]) {
     if (timeoutInSeconds == null) {
-      timeoutInSeconds =
-          (pdoInstance as PostgresV2PDO).queryTimeoutInSeconds;
+      timeoutInSeconds = (pdoInstance as PostgresV2PDO).queryTimeoutInSeconds;
     }
     return transactionContext.execute(
       statement,
@@ -31,8 +30,7 @@ class PostgresPDOTransaction extends PDOTransactionContext {
   Future<PDOResults> query(String query,
       [dynamic params, int? timeoutInSeconds]) async {
     if (timeoutInSeconds == null) {
-      timeoutInSeconds =
-          (pdoInstance as PostgresV2PDO).queryTimeoutInSeconds;
+      timeoutInSeconds = (pdoInstance as PostgresV2PDO).queryTimeoutInSeconds;
     }
     // final rows = await connection.mappedResultsQuery(
     //   query,
@@ -56,6 +54,4 @@ class PostgresPDOTransaction extends PDOTransactionContext {
     final pdoResult = PDOResults(maps, rs.affectedRowCount);
     return pdoResult;
   }
-  
-  
 }

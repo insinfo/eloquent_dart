@@ -260,8 +260,12 @@ void main() {
     builder
         .from('sw_processo as p') // Tabela principal SEM schema explícito
         .withRecursiveExpression(cteName, cteDefinition)
-        .join('public.organograma_historico as oh', 'oh.id', '=', // Join usa schema explícito
-            'p.id_organograma_historico_origem', 'left')
+        .join(
+            'public.organograma_historico as oh',
+            'oh.id',
+            '=', // Join usa schema explícito
+            'p.id_organograma_historico_origem',
+            'left')
         .whereIn('oh.id_organograma', (QueryBuilder subQuery) {
       subQuery.select('id').from(cteName);
     }).where('p.cod_situacao', '=', 2);
@@ -288,50 +292,59 @@ with recursive "$cteName" as (select "og"."id" from "public"."organograma" as "o
             'Captured bindings for COUNT did not match or were in wrong order');
   });
 
-   test('get with recursive CTE includes CTE bindings correctly', () async {
-     final builder = QueryBuilder(connection, grammar, processor);
-     final db = MockDatabaseManager(connection, grammar, processor);
-     final int idInicial = 555;
-     final String cteName = 'organograma_arvore_get';
+  test('get with recursive CTE includes CTE bindings correctly', () async {
+    final builder = QueryBuilder(connection, grammar, processor);
+    final db = MockDatabaseManager(connection, grammar, processor);
+    final int idInicial = 555;
+    final String cteName = 'organograma_arvore_get';
 
-     final cteDefinition = db.query()
-         .select('og.id')
-         .from('public.organograma as og') // CTE usa schema explícito
-         .where('og.id', '=', idInicial)
-         .unionAll(db.query()
-             .select('filho.id')
-             .from('public.organograma as filho') // CTE usa schema explícito
-             .join('$cteName as pai', 'filho.id_pai', '=', 'pai.id'));
+    final cteDefinition = db
+        .query()
+        .select('og.id')
+        .from('public.organograma as og') // CTE usa schema explícito
+        .where('og.id', '=', idInicial)
+        .unionAll(db
+            .query()
+            .select('filho.id')
+            .from('public.organograma as filho') // CTE usa schema explícito
+            .join('$cteName as pai', 'filho.id_pai', '=', 'pai.id'));
 
-     builder
-         .from('sw_processo as p') // Tabela principal SEM schema explícito
-         .withRecursiveExpression(cteName, cteDefinition)
-         .join('public.organograma_historico as oh', 'oh.id', '=', // Join usa schema explícito
-              'p.id_organograma_historico_origem', 'left')
-         .whereIn('oh.id_organograma', (QueryBuilder subQuery) {
-           subQuery.select('id').from(cteName);
-         })
-         .where('p.cod_situacao', '=', 3)
-         .select('p.*');
+    builder
+        .from('sw_processo as p') // Tabela principal SEM schema explícito
+        .withRecursiveExpression(cteName, cteDefinition)
+        .join(
+            'public.organograma_historico as oh',
+            'oh.id',
+            '=', // Join usa schema explícito
+            'p.id_organograma_historico_origem',
+            'left')
+        .whereIn('oh.id_organograma', (QueryBuilder subQuery) {
+          subQuery.select('id').from(cteName);
+        })
+        .where('p.cod_situacao', '=', 3)
+        .select('p.*');
 
-     await builder.get();
+    await builder.get();
 
-     expect(connection.selectCallCount, 1);
+    expect(connection.selectCallCount, 1);
 
-     final capturedSql = connection.lastSelectSql;
-     final capturedBindings = connection.lastSelectBindings;
+    final capturedSql = connection.lastSelectSql;
+    final capturedBindings = connection.lastSelectBindings;
 
-     // *** CORRIGIDO: Remove 'public.' da tabela principal na string esperada ***
-      final expectedGetSql = '''
+    // *** CORRIGIDO: Remove 'public.' da tabela principal na string esperada ***
+    final expectedGetSql = '''
  with recursive "$cteName" as (select "og"."id" from "public"."organograma" as "og" where "og"."id" = ? union all select "filho"."id" from "public"."organograma" as "filho" inner join "$cteName" as "pai" on "filho"."id_pai" = "pai"."id") select "p".* from "sw_processo" as "p" left join "public"."organograma_historico" as "oh" on "oh"."id" = "p"."id_organograma_historico_origem" where "oh"."id_organograma" in (select "id" from "$cteName") and "p"."cod_situacao" = ?'''
-         .replaceAll(RegExp(r'\s+'), ' ')
-         .trim();
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
 
-     expect(capturedSql, equals(expectedGetSql), reason: 'Compiled GET SQL with CTE did not match');
+    expect(capturedSql, equals(expectedGetSql),
+        reason: 'Compiled GET SQL with CTE did not match');
 
-     final expectedBindings = [idInicial, 3];
-     expect(capturedBindings, orderedEquals(expectedBindings), reason: 'Captured bindings for GET did not match or were in wrong order');
-   });
+    final expectedBindings = [idInicial, 3];
+    expect(capturedBindings, orderedEquals(expectedBindings),
+        reason:
+            'Captured bindings for GET did not match or were in wrong order');
+  });
 }
 
 // Helper DatabaseManager (simulado ou real, dependendo do setup do teste)

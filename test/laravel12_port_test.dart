@@ -26,8 +26,8 @@ void main() {
 
   group('when / unless / tap', () {
     test('truthiness and the value argument', () {
-      expect(pg().when('', (q) => q.where('a', 1)).toSql(),
-          'select * from "t"');
+      expect(
+          pg().when('', (q) => q.where('a', 1)).toSql(), 'select * from "t"');
       expect(pg().when(<int>[], (q) => q.where('a', 1)).toSql(),
           'select * from "t"');
       final q = pg().when('ana', (QueryBuilder q, String nome) {
@@ -67,7 +67,8 @@ void main() {
     });
 
     test('whereNot negates a clause or a group', () {
-      expect(pg().whereNot('a', 1).toSql(), 'select * from "t" where not "a" = ?');
+      expect(
+          pg().whereNot('a', 1).toSql(), 'select * from "t" where not "a" = ?');
       expect(
           pg()
               .where('x', 0)
@@ -85,7 +86,8 @@ void main() {
           'select * from "t" where "nome"::text ilike ?');
       expect(pg().whereLike('nome', '%ana%', caseSensitive: true).toSql(),
           'select * from "t" where "nome"::text like ?');
-      expect(pg().whereNotLike('nome', 'a%').orWhereLike('email', '%@x').toSql(),
+      expect(
+          pg().whereNotLike('nome', 'a%').orWhereLike('email', '%@x').toSql(),
           'select * from "t" where "nome"::text not ilike ? or "email"::text ilike ?');
     });
 
@@ -110,8 +112,8 @@ void main() {
     });
 
     test('orderBy a subquery binds after the wheres', () {
-      final q = pg('users').where('ativo', true).orderByDesc(
-          (QueryBuilder s) => s
+      final q = pg('users').where('ativo', true).orderByDesc((QueryBuilder s) =>
+          s
               .from('logins')
               .selectRaw('max(created_at)')
               .whereColumn('logins.user_id', 'users.id')
@@ -135,9 +137,8 @@ void main() {
     });
 
     test('select map with aliases and subqueries resets select bindings', () {
-      final q = pg('users')
-          .selectRaw('? as x', [1])
-          .select({'n': 'nome', 'c': pg('logins').selectRaw('count(*)')});
+      final q = pg('users').selectRaw('? as x', [1]).select(
+          {'n': 'nome', 'c': pg('logins').selectRaw('count(*)')});
       expect(q.toSql(),
           'select "nome" as "n", (select count(*) from "logins") as "c" from "users"');
       expect(q.getBindings(), isEmpty);
@@ -149,7 +150,8 @@ void main() {
           'select * from (select "cliente_id" from "vendas" where "ano" = ?) as "v"');
       expect(pg().from((QueryBuilder q) => q.from('a'), 'x').toSql(),
           'select * from (select * from "a") as "x"');
-      expect(() => pg().from((QueryBuilder q) => q.from('a')), throwsArgumentError);
+      expect(() => pg().from((QueryBuilder q) => q.from('a')),
+          throwsArgumentError);
       final j = pg('clientes')
           .leftJoinSub(sub, 'v', 'v.cliente_id', '=', 'clientes.id')
           .where('ativo', true);
@@ -209,10 +211,7 @@ void main() {
           .where('n', '>', 1.5)
           .whereRaw("obs <> '?'")
           .where('b', Uint8List.fromList([0, 255]))
-          .where('tags', '@>', [
-        'a',
-        'b"c'
-      ]);
+          .where('tags', '@>', ['a', 'b"c']);
       expect(q.toRawSql(),
           "select * from \"t\" where \"nome\" = 'D''Ávila' and \"ativo\" = true and \"x\" is null and \"n\" > 1.5 and obs <> '?' and \"b\" = '\\x00ff'::bytea and \"tags\" @> '{\"a\",\"b\\\"c\"}'");
     });
@@ -274,7 +273,8 @@ void main() {
 
       final rows = await pg().lazyByIdDesc(5).toList();
       expect(rows, hasLength(2)); // fewer than chunkSize: a single page
-      expect(conn.lastSelectSql, 'select * from "t" order by "id" desc limit 5');
+      expect(
+          conn.lastSelectSql, 'select * from "t" order by "id" desc limit 5');
     });
 
     test('a missing id column fails clearly', () async {
@@ -282,8 +282,7 @@ void main() {
         {'nome': 'a'},
         {'nome': 'b'}
       ];
-      await expectLater(
-          pg().chunkById(2, (rows) => true), throwsStateError);
+      await expectLater(pg().chunkById(2, (rows) => true), throwsStateError);
     });
   });
 }

@@ -1,6 +1,6 @@
 /// Array Map Utils
 class ArrUtils {
-  /// Flatten a multi-dimensional map into a single level.  
+  /// Flatten a multi-dimensional map into a single level.
   static List<dynamic> flattenMap(Map<dynamic, dynamic> map, [int depth = -1]) {
     List<dynamic> result = [];
 
@@ -25,7 +25,7 @@ class ArrUtils {
     return result;
   }
 
-  /// Flatten a multi-dimensional List into a single level. 
+  /// Flatten a multi-dimensional List into a single level.
   /// Example usage:
   /// ```dart
   /// List<dynamic> multiDimensionalArray = [

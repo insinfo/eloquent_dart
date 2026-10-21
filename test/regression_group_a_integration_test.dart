@@ -39,8 +39,8 @@ Map<String, dynamic> _mysql(
       ...extra,
     };
 
-Future<Connection> _open(Manager manager, String name,
-    Map<String, dynamic> config) async {
+Future<Connection> _open(
+    Manager manager, String name, Map<String, dynamic> config) async {
   manager.addConnection(config, name);
   return manager.getConnection(name);
 }
@@ -94,12 +94,10 @@ void main() {
         await db.execute('DROP TABLE IF EXISTS ga_a');
       });
 
-      Future<List<int>> ids() async => (await db
-              .table('ga_a')
-              .orderBy('id')
-              .get())
-          .map((r) => r['id'] as int)
-          .toList();
+      Future<List<int>> ids() async =>
+          (await db.table('ga_a').orderBy('id').get())
+              .map((r) => r['id'] as int)
+              .toList();
 
       test('count and pagination with groupBy and distinct', () async {
         expect(await db.table('ga_a').groupBy('status').count(), 2);
@@ -220,12 +218,16 @@ void main() {
   group('PostgreSQL session timeouts', () {
     for (final driver in ['postgres', 'postgres_v3', 'dargres', 'dpgsql']) {
       test('$driver applies statement_timeout (snake_case key too)', () async {
-        final db = await open('pgto_$driver',
-            _pg(driver, extra: {'statement_timeout': '1500ms', 'lockTimeout': '700ms'}));
+        final db = await open(
+            'pgto_$driver',
+            _pg(driver, extra: {
+              'statement_timeout': '1500ms',
+              'lockTimeout': '700ms'
+            }));
         expect((await db.select('SHOW statement_timeout')).first.values.first,
             '1500ms');
-        expect((await db.select('SHOW lock_timeout')).first.values.first,
-            '700ms');
+        expect(
+            (await db.select('SHOW lock_timeout')).first.values.first, '700ms');
       });
     }
   });
@@ -281,9 +283,7 @@ void main() {
       expect(await db.table('ga_m').where('id', 99).exists(), isFalse);
       // An existing row is updated, not inserted again.
       expect(
-          await db
-              .table('ga_m')
-              .updateOrInsert({'id': 1}, {'status': 'upd'}),
+          await db.table('ga_m').updateOrInsert({'id': 1}, {'status': 'upd'}),
           isTrue);
       expect(await db.table('ga_m').count(), 3);
       expect(await db.table('ga_m').where('id', 1).value('status'), 'upd');
@@ -303,10 +303,10 @@ void main() {
           }));
       final results = await Future.wait(List.generate(
           4,
-          (_) => pool.transaction((ctx) => ctx.select(
-              'select @@session.time_zone as tz, '
-              '@@session.lock_wait_timeout as lw, connection_id() as id, '
-              'sleep(0.2) as s'))));
+          (_) => pool.transaction(
+              (ctx) => ctx.select('select @@session.time_zone as tz, '
+                  '@@session.lock_wait_timeout as lw, connection_id() as id, '
+                  'sleep(0.2) as s'))));
       final rows = results.map((r) => r.first).toList();
       expect(rows.map((r) => r['id']).toSet(), hasLength(2));
       expect(rows.map((r) => '${r['tz']}').toSet(), {'-03:00'});

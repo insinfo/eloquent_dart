@@ -351,7 +351,8 @@ class PostgreSQLSchemaManager extends AbstractSchemaManager {
     //   FROM information_schema.views
     //   WHERE table_schema = ? AND table_name = ?
     // ''';
-    final results = await connection.select(sql, [currentSchema, cleanViewName]);
+    final results =
+        await connection.select(sql, [currentSchema, cleanViewName]);
 
     if (results.isEmpty) {
       throw Exception('View "$viewName" not found in schema "$currentSchema".');
@@ -389,10 +390,12 @@ class PostgreSQLSchemaManager extends AbstractSchemaManager {
       FROM information_schema.sequences
       WHERE sequence_schema = ? AND sequence_name = ?
     ''';
-    final results = await connection.select(sql, [currentSchema, cleanSequenceName]);
+    final results =
+        await connection.select(sql, [currentSchema, cleanSequenceName]);
 
     if (results.isEmpty) {
-      throw Exception('Sequence "$sequenceName" not found in schema "$currentSchema".');
+      throw Exception(
+          'Sequence "$sequenceName" not found in schema "$currentSchema".');
     }
 
     final sequenceData = Map<String, dynamic>.from(results.first);
@@ -448,9 +451,8 @@ class PostgreSQLSchemaManager extends AbstractSchemaManager {
       length = int.tryParse(match?.namedGroup('len') ?? '');
       if (pgType == 'bpchar' || dartType == 'char') fixed = true;
     } else if (['decimal', 'numeric', 'money'].contains(dartType)) {
-      final match =
-          RegExp(r'\((?<prec>\d+)(?:,(?<scale>\d+))?\)')
-              .firstMatch(finalCompleteType);
+      final match = RegExp(r'\((?<prec>\d+)(?:,(?<scale>\d+))?\)')
+          .firstMatch(finalCompleteType);
       precision = int.tryParse(match?.namedGroup('prec') ?? '');
       scale = int.tryParse(match?.namedGroup('scale') ?? '');
     } else if (['timestamp', 'timestamptz', 'time', 'timetz']
@@ -475,47 +477,79 @@ class PostgreSQLSchemaManager extends AbstractSchemaManager {
   }
 
   bool _platformHasTypeMapping(String pgTypeName) {
-     // (Implementação mantida como estava)
+    // (Implementação mantida como estava)
     return _mapPgTypeToDartType(pgTypeName, '') != 'string';
   }
 
   String _mapPgTypeToDartType(String pgType, String completeType) {
     // (Implementação mantida como estava)
-     switch (pgType.toLowerCase()) {
-      case 'int2': return 'smallinteger';
-      case 'int4': return 'integer';
-      case 'int8': return 'biginteger';
-      case 'serial2': return 'smallinteger';
-      case 'serial4': return 'integer';
-      case 'serial8': return 'biginteger';
-      case 'bpchar': return 'char';
-      case 'varchar': return 'string';
-      case 'text': return 'text';
-      case 'numeric': return 'decimal';
-      case 'float4': return 'float';
-      case 'float8': return 'double';
-      case 'bool': return 'boolean';
-      case 'date': return 'date';
-      case 'time': return 'time';
-      case 'timetz': return 'timetz';
-      case 'timestamp': return 'timestamp';
-      case 'timestamptz': return 'timestamptz';
-      case 'bytea': return 'binary';
-      case 'uuid': return 'uuid';
-      case 'json': return 'json';
-      case 'jsonb': return 'jsonb';
-      case 'inet': return 'ipaddress';
-      case 'macaddr': return 'macaddress';
-      case '_int2': return 'array';
-      case '_int4': return 'array';
-      case '_int8': return 'array';
-      case '_text': return 'array';
-      case '_varchar': return 'array';
-      case '_float4': return 'array';
-      case '_float8': return 'array';
+    switch (pgType.toLowerCase()) {
+      case 'int2':
+        return 'smallinteger';
+      case 'int4':
+        return 'integer';
+      case 'int8':
+        return 'biginteger';
+      case 'serial2':
+        return 'smallinteger';
+      case 'serial4':
+        return 'integer';
+      case 'serial8':
+        return 'biginteger';
+      case 'bpchar':
+        return 'char';
+      case 'varchar':
+        return 'string';
+      case 'text':
+        return 'text';
+      case 'numeric':
+        return 'decimal';
+      case 'float4':
+        return 'float';
+      case 'float8':
+        return 'double';
+      case 'bool':
+        return 'boolean';
+      case 'date':
+        return 'date';
+      case 'time':
+        return 'time';
+      case 'timetz':
+        return 'timetz';
+      case 'timestamp':
+        return 'timestamp';
+      case 'timestamptz':
+        return 'timestamptz';
+      case 'bytea':
+        return 'binary';
+      case 'uuid':
+        return 'uuid';
+      case 'json':
+        return 'json';
+      case 'jsonb':
+        return 'jsonb';
+      case 'inet':
+        return 'ipaddress';
+      case 'macaddr':
+        return 'macaddress';
+      case '_int2':
+        return 'array';
+      case '_int4':
+        return 'array';
+      case '_int8':
+        return 'array';
+      case '_text':
+        return 'array';
+      case '_varchar':
+        return 'array';
+      case '_float4':
+        return 'array';
+      case '_float8':
+        return 'array';
       default:
         if (pgType.endsWith('_enum')) return 'enum';
-        print("Warning: Unmapped PostgreSQL type '$pgType' ($completeType). Falling back to 'string'.");
+        print(
+            "Warning: Unmapped PostgreSQL type '$pgType' ($completeType). Falling back to 'string'.");
         return 'string';
     }
   }
@@ -526,7 +560,8 @@ class PostgreSQLSchemaManager extends AbstractSchemaManager {
     pgDefault = pgDefault.replaceAllMapped(
         RegExp(r'^(.+)::[a-zA-Z_"\s]+(\(.+\))?$'), (m) => m.group(1) ?? '');
     if (pgDefault.toLowerCase().startsWith('nextval(')) return null;
-    if (pgDefault.startsWith("'") && pgDefault.endsWith("'")) return pgDefault.substring(1, pgDefault.length - 1).replaceAll("''", "'");
+    if (pgDefault.startsWith("'") && pgDefault.endsWith("'"))
+      return pgDefault.substring(1, pgDefault.length - 1).replaceAll("''", "'");
     if (dartType == 'boolean') {
       if (pgDefault.toLowerCase() == 'true') return true;
       if (pgDefault.toLowerCase() == 'false') return false;
@@ -540,25 +575,32 @@ class PostgreSQLSchemaManager extends AbstractSchemaManager {
   @override
   @protected
   Index parsePortableTableIndexDefinition(Map<String, dynamic> tableIndex) {
-     // (Implementação mantida como estava)
-    throw UnimplementedError('parsePortableTableIndexDefinition needs the calling method (listTableIndexes) to provide grouped data with column names.');
+    // (Implementação mantida como estava)
+    throw UnimplementedError(
+        'parsePortableTableIndexDefinition needs the calling method (listTableIndexes) to provide grouped data with column names.');
   }
 
   @override
   @protected
   ForeignKeyConstraint parsePortableTableForeignKeyDefinition(
       Map<String, dynamic> tableForeignKey) {
-     // (Implementação mantida como estava)
+    // (Implementação mantida como estava)
     final name = tableForeignKey['name'] as String;
     final definition = tableForeignKey['definition'] as String;
 
-    final fkMatch = RegExp(r'FOREIGN KEY\s*\((.+)\)\s*REFERENCES\s*"?([^"]+)"?(?:\."?([^"]+)"?)?\s*\((.+)\)', caseSensitive: false).firstMatch(definition);
-    if (fkMatch == null) throw FormatException("Could not parse FK definition: $definition");
+    final fkMatch = RegExp(
+            r'FOREIGN KEY\s*\((.+)\)\s*REFERENCES\s*"?([^"]+)"?(?:\."?([^"]+)"?)?\s*\((.+)\)',
+            caseSensitive: false)
+        .firstMatch(definition);
+    if (fkMatch == null)
+      throw FormatException("Could not parse FK definition: $definition");
 
-    final localColumns = fkMatch.group(1)!.split(',').map((s) => trimQuotes(s.trim())).toList();
+    final localColumns =
+        fkMatch.group(1)!.split(',').map((s) => trimQuotes(s.trim())).toList();
     final group2 = fkMatch.group(2);
     final group3 = fkMatch.group(3);
-    final foreignColumns = fkMatch.group(4)!.split(',').map((s) => trimQuotes(s.trim())).toList();
+    final foreignColumns =
+        fkMatch.group(4)!.split(',').map((s) => trimQuotes(s.trim())).toList();
 
     String foreignTable;
     String? foreignSchema;
@@ -569,14 +611,22 @@ class PostgreSQLSchemaManager extends AbstractSchemaManager {
       foreignSchema = trimQuotes(group2!);
       foreignTable = trimQuotes(group3);
     }
-    final fullForeignTable = (foreignSchema != null && foreignSchema.isNotEmpty && foreignSchema != 'public') ? '$foreignSchema.$foreignTable' : foreignTable;
+    final fullForeignTable = (foreignSchema != null &&
+            foreignSchema.isNotEmpty &&
+            foreignSchema != 'public')
+        ? '$foreignSchema.$foreignTable'
+        : foreignTable;
 
     String? onDelete;
     String? onUpdate;
-    final actionRegex = RegExp(r'(CASCADE|SET NULL|SET DEFAULT|RESTRICT|NO ACTION)', caseSensitive: false);
-    final onDeleteMatch = RegExp(r'ON DELETE (' + actionRegex.pattern + r')').firstMatch(definition);
+    final actionRegex = RegExp(
+        r'(CASCADE|SET NULL|SET DEFAULT|RESTRICT|NO ACTION)',
+        caseSensitive: false);
+    final onDeleteMatch = RegExp(r'ON DELETE (' + actionRegex.pattern + r')')
+        .firstMatch(definition);
     if (onDeleteMatch != null) onDelete = onDeleteMatch.group(1)?.toUpperCase();
-    final onUpdateMatch = RegExp(r'ON UPDATE (' + actionRegex.pattern + r')').firstMatch(definition);
+    final onUpdateMatch = RegExp(r'ON UPDATE (' + actionRegex.pattern + r')')
+        .firstMatch(definition);
     if (onUpdateMatch != null) onUpdate = onUpdateMatch.group(1)?.toUpperCase();
 
     // pg_get_constraintdef: "... MATCH FULL ... DEFERRABLE INITIALLY DEFERRED".
@@ -615,9 +665,11 @@ class PostgreSQLSchemaManager extends AbstractSchemaManager {
     // Extrai o nome (passado de listSequenceDetails) e os detalhes
     final name = sequenceData['sequence_name'] as String;
     // Valores do information_schema geralmente são strings, converte para int
-    final initialValue = int.tryParse(sequenceData['start_value']?.toString() ?? '1') ?? 1;
+    final initialValue =
+        int.tryParse(sequenceData['start_value']?.toString() ?? '1') ?? 1;
     // Mapeia 'increment' do DB para 'cache' na nossa classe Sequence
-    final cache = int.tryParse(sequenceData['increment']?.toString() ?? '1') ?? 1;
+    final cache =
+        int.tryParse(sequenceData['increment']?.toString() ?? '1') ?? 1;
 
     // Nota: Nossa classe Sequence atual só armazena initialValue e cache.
     // Se precisar de min/max/cycle, precisaria buscar e adicionar à classe Sequence.
@@ -628,33 +680,41 @@ class PostgreSQLSchemaManager extends AbstractSchemaManager {
     );
   }
 
-
   // --- Helpers Internos ---
 
   /// Parseia um nome de tabela/view/sequence potencialmente qualificado por schema.
   /// Retorna [schema, nome]. Usa o schema atual se não for especificado.
   Future<List<String>> _parseSchemaAndTable(String name) async {
-     // (Implementação mantida como estava)
+    // (Implementação mantida como estava)
     final currentSchema = await getCurrentSchema();
     if (name.contains('.')) {
       final parts = name.split('.');
       if (parts.length == 2) {
         return [parts[0], parts[1]];
       } else {
-        print("Warning: Invalid qualified name '$name'. Using default schema '$currentSchema'.");
+        print(
+            "Warning: Invalid qualified name '$name'. Using default schema '$currentSchema'.");
         return [currentSchema, name];
       }
     }
     return [currentSchema, name];
   }
 
-
   /// Método auxiliar para verificar se um tipo é numérico (baseado nos nomes mapeados).
   bool isNumericType(String dartTypeName) {
-     // (Implementação mantida como estava)
+    // (Implementação mantida como estava)
     final numericTypes = {
-      'integer', 'tinyinteger', 'smallinteger', 'mediuminteger', 'biginteger',
-      'decimal', 'float', 'double', 'real', 'numeric', 'money'
+      'integer',
+      'tinyinteger',
+      'smallinteger',
+      'mediuminteger',
+      'biginteger',
+      'decimal',
+      'float',
+      'double',
+      'real',
+      'numeric',
+      'money'
     };
     return numericTypes.contains(dartTypeName.toLowerCase());
   }

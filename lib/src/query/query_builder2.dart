@@ -53,9 +53,8 @@ mixin WhereConditions<Self> {
 
   Self whereGreaterThanOrEqualTo(String column, Object value) =>
       where(column, value, operator: ComparisonOperator.greaterThanOrEqualTo);
-  Self orWhereGreaterThanOrEqualTo(String column, Object value) => orWhere(
-      column, value,
-      operator: ComparisonOperator.greaterThanOrEqualTo);
+  Self orWhereGreaterThanOrEqualTo(String column, Object value) =>
+      orWhere(column, value, operator: ComparisonOperator.greaterThanOrEqualTo);
 
   Self whereLessThan(String column, Object value) =>
       where(column, value, operator: ComparisonOperator.lessThan);
@@ -120,12 +119,12 @@ mixin WhereConditions<Self> {
   // --------------------------------------------------------------- between
 
   /// `column between low and high` (both limits included).
-  Self whereBetween(String column, Object low, Object high) => _add(
-      LogicalConnector.and, _between(column, low, high, negated: false));
-  Self orWhereBetween(String column, Object low, Object high) => _add(
-      LogicalConnector.or, _between(column, low, high, negated: false));
-  Self whereNotBetween(String column, Object low, Object high) => _add(
-      LogicalConnector.and, _between(column, low, high, negated: true));
+  Self whereBetween(String column, Object low, Object high) =>
+      _add(LogicalConnector.and, _between(column, low, high, negated: false));
+  Self orWhereBetween(String column, Object low, Object high) =>
+      _add(LogicalConnector.or, _between(column, low, high, negated: false));
+  Self whereNotBetween(String column, Object low, Object high) =>
+      _add(LogicalConnector.and, _between(column, low, high, negated: true));
   Self orWhereNotBetween(String column, Object low, Object high) =>
       _add(LogicalConnector.or, _between(column, low, high, negated: true));
 
@@ -140,31 +139,31 @@ mixin WhereConditions<Self> {
   /// `lower(...)` can serve; see QueryBuilder.whereLike).
   Self whereLike(String column, String pattern,
           {bool caseSensitive = false,
-         bool unaccent = false,
-         bool lower = false}) =>
+          bool unaccent = false,
+          bool lower = false}) =>
       _add(LogicalConnector.and,
           _like(column, pattern, caseSensitive, unaccent, lower, false));
   Self orWhereLike(String column, String pattern,
           {bool caseSensitive = false,
-         bool unaccent = false,
-         bool lower = false}) =>
+          bool unaccent = false,
+          bool lower = false}) =>
       _add(LogicalConnector.or,
           _like(column, pattern, caseSensitive, unaccent, lower, false));
   Self whereNotLike(String column, String pattern,
           {bool caseSensitive = false,
-         bool unaccent = false,
-         bool lower = false}) =>
+          bool unaccent = false,
+          bool lower = false}) =>
       _add(LogicalConnector.and,
           _like(column, pattern, caseSensitive, unaccent, lower, true));
   Self orWhereNotLike(String column, String pattern,
           {bool caseSensitive = false,
-         bool unaccent = false,
-         bool lower = false}) =>
+          bool unaccent = false,
+          bool lower = false}) =>
       _add(LogicalConnector.or,
           _like(column, pattern, caseSensitive, unaccent, lower, true));
 
-  static LikePredicate _like(String column, String pattern,
-      bool caseSensitive, bool unaccent, bool lower, bool negated) {
+  static LikePredicate _like(String column, String pattern, bool caseSensitive,
+      bool unaccent, bool lower, bool negated) {
     if (lower && caseSensitive) {
       throw ArgumentError('lower: true is case-insensitive; it cannot be '
           'combined with caseSensitive: true.');
@@ -187,8 +186,8 @@ mixin WhereConditions<Self> {
       bool lower = false,
       bool caseSensitive = false,
       bool everyWord = false}) {
-    final predicate =
-        _search(columns, term, match, unaccent, lower, caseSensitive, everyWord);
+    final predicate = _search(
+        columns, term, match, unaccent, lower, caseSensitive, everyWord);
     return predicate == null
         ? whereSelf
         : _add(LogicalConnector.and, predicate);
@@ -200,8 +199,8 @@ mixin WhereConditions<Self> {
       bool lower = false,
       bool caseSensitive = false,
       bool everyWord = false}) {
-    final predicate =
-        _search(columns, term, match, unaccent, lower, caseSensitive, everyWord);
+    final predicate = _search(
+        columns, term, match, unaccent, lower, caseSensitive, everyWord);
     return predicate == null ? whereSelf : _add(LogicalConnector.or, predicate);
   }
 
@@ -220,8 +219,14 @@ mixin WhereConditions<Self> {
       _add(LogicalConnector.or,
           _likeGroup(columns, pattern, caseSensitive, unaccent, lower));
 
-  static Predicate? _search(List<String> columns, String? term,
-      SearchMatch match, bool unaccent, bool lower, bool caseSensitive, bool everyWord) {
+  static Predicate? _search(
+      List<String> columns,
+      String? term,
+      SearchMatch match,
+      bool unaccent,
+      bool lower,
+      bool caseSensitive,
+      bool everyWord) {
     final text = term?.trim() ?? '';
     if (text.isEmpty) return null;
     final words = everyWord ? text.split(RegExp(r'\s+')) : [text];
@@ -231,8 +236,9 @@ mixin WhereConditions<Self> {
             caseSensitive, unaccent, lower)
     ];
     if (groups.length == 1) return groups.first;
-    return GroupPredicate(List.unmodifiable(
-        [for (final group in groups) WhereClause(LogicalConnector.and, group)]));
+    return GroupPredicate(List.unmodifiable([
+      for (final group in groups) WhereClause(LogicalConnector.and, group)
+    ]));
   }
 
   static GroupPredicate _likeGroup(List<String> columns, String pattern,
@@ -242,8 +248,7 @@ mixin WhereConditions<Self> {
     }
     return GroupPredicate(List.unmodifiable([
       for (final column in columns)
-        WhereClause(
-            LogicalConnector.or,
+        WhereClause(LogicalConnector.or,
             _like(column, pattern, caseSensitive, unaccent, lower, false))
     ]));
   }
@@ -351,7 +356,8 @@ mixin WhereConditions<Self> {
 
   static Predicate _datePart(String column, DatePart part,
           ComparisonOperator operator, Object value) =>
-      DatePartPredicate(_column(column), part, operator, _value(value, 'value'));
+      DatePartPredicate(
+          _column(column), part, operator, _value(value, 'value'));
 
   // ------------------------------------------------ tuples, rows, arrays
 
@@ -399,14 +405,18 @@ mixin WhereConditions<Self> {
 
   /// PostgreSQL array column operators: [ArrayOperator.contains] (`@>`),
   /// [ArrayOperator.containedBy] (`<@`), [ArrayOperator.overlaps] (`&&`).
-  Self whereArray(String column, ArrayOperator operator,
-          Iterable<Object?> values) =>
-      _add(LogicalConnector.and,
-          ArrayOperatorPredicate(_column(column), operator, List.unmodifiable(values)));
-  Self orWhereArray(String column, ArrayOperator operator,
-          Iterable<Object?> values) =>
-      _add(LogicalConnector.or,
-          ArrayOperatorPredicate(_column(column), operator, List.unmodifiable(values)));
+  Self whereArray(
+          String column, ArrayOperator operator, Iterable<Object?> values) =>
+      _add(
+          LogicalConnector.and,
+          ArrayOperatorPredicate(
+              _column(column), operator, List.unmodifiable(values)));
+  Self orWhereArray(
+          String column, ArrayOperator operator, Iterable<Object?> values) =>
+      _add(
+          LogicalConnector.or,
+          ArrayOperatorPredicate(
+              _column(column), operator, List.unmodifiable(values)));
 
   Self whereArrayContains(String column, Iterable<Object?> values) =>
       whereArray(column, ArrayOperator.contains, values);
@@ -441,17 +451,23 @@ mixin WhereConditions<Self> {
           'whereRowValues needs as many values as columns (${columns.length}).');
     }
     columns.forEach(_column);
-    return RowValuesPredicate(List.unmodifiable(columns), operator,
-        List.unmodifiable([for (final v in values) v == null ? null : _value(v, 'values')]));
+    return RowValuesPredicate(
+        List.unmodifiable(columns),
+        operator,
+        List.unmodifiable(
+            [for (final v in values) v == null ? null : _value(v, 'values')]));
   }
 
   static Predicate _anyArray(
       String column, Iterable<Object?> values, String? elementType,
       {required bool negated}) {
     _column(column);
-    return AnyArrayPredicate(column,
-        List.unmodifiable([for (final v in values) v == null ? null : _value(v, 'values')]),
-        elementType: elementType, negated: negated);
+    return AnyArrayPredicate(
+        column,
+        List.unmodifiable(
+            [for (final v in values) v == null ? null : _value(v, 'values')]),
+        elementType: elementType,
+        negated: negated);
   }
 
   // --------------------------------------------- between columns / value
@@ -467,20 +483,21 @@ mixin WhereConditions<Self> {
       LogicalConnector.and,
       BetweenColumnsPredicate(_column(column), _column(low), _column(high),
           negated: true));
-  Self orWhereNotBetweenColumns(String column, String low, String high) =>
-      _add(
-          LogicalConnector.or,
-          BetweenColumnsPredicate(_column(column), _column(low), _column(high),
-              negated: true));
+  Self orWhereNotBetweenColumns(String column, String low, String high) => _add(
+      LogicalConnector.or,
+      BetweenColumnsPredicate(_column(column), _column(low), _column(high),
+          negated: true));
 
   /// `? between low and high`: [value] inside the range of two columns, e.g.
   /// `whereValueBetween(hoje, 'data_inicio', 'data_fim')`.
   Self whereValueBetween(Object value, String low, String high) => _add(
       LogicalConnector.and,
-      ValueBetweenPredicate(_value(value, 'value'), _column(low), _column(high)));
+      ValueBetweenPredicate(
+          _value(value, 'value'), _column(low), _column(high)));
   Self orWhereValueBetween(Object value, String low, String high) => _add(
       LogicalConnector.or,
-      ValueBetweenPredicate(_value(value, 'value'), _column(low), _column(high)));
+      ValueBetweenPredicate(
+          _value(value, 'value'), _column(low), _column(high)));
   Self whereValueNotBetween(Object value, String low, String high) => _add(
       LogicalConnector.and,
       ValueBetweenPredicate(_value(value, 'value'), _column(low), _column(high),
@@ -494,10 +511,10 @@ mixin WhereConditions<Self> {
 
   /// `(column)::jsonb @> ?` (PostgreSQL) / `json_contains(column, ?)`
   /// (MySQL); [value] is encoded as JSON.
-  Self whereJsonContains(String column, Object? value) => _add(
-      LogicalConnector.and, JsonContainsPredicate(_column(column), value));
-  Self orWhereJsonContains(String column, Object? value) => _add(
-      LogicalConnector.or, JsonContainsPredicate(_column(column), value));
+  Self whereJsonContains(String column, Object? value) =>
+      _add(LogicalConnector.and, JsonContainsPredicate(_column(column), value));
+  Self orWhereJsonContains(String column, Object? value) =>
+      _add(LogicalConnector.or, JsonContainsPredicate(_column(column), value));
   Self whereJsonDoesntContain(String column, Object? value) => _add(
       LogicalConnector.and,
       JsonContainsPredicate(_column(column), value, negated: true));
@@ -569,8 +586,10 @@ mixin WhereConditions<Self> {
     final group = WhereBuilder();
     build(group);
     if (group.whereClauseList.isEmpty) return whereSelf;
-    return _add(connector,
-        GroupPredicate(List.unmodifiable(group.whereClauseList), negated: negated));
+    return _add(
+        connector,
+        GroupPredicate(List.unmodifiable(group.whereClauseList),
+            negated: negated));
   }
 
   // ---------------------------------------------------------------- exists
@@ -588,8 +607,8 @@ mixin WhereConditions<Self> {
   // ------------------------------------------------------------------- raw
 
   /// SQL written by the caller; `?` placeholders take [bindings].
-  Self whereRaw(String sql, [List<Object?> bindings = const []]) =>
-      _add(LogicalConnector.and, RawPredicate(sql, List.unmodifiable(bindings)));
+  Self whereRaw(String sql, [List<Object?> bindings = const []]) => _add(
+      LogicalConnector.and, RawPredicate(sql, List.unmodifiable(bindings)));
   Self orWhereRaw(String sql, [List<Object?> bindings = const []]) =>
       _add(LogicalConnector.or, RawPredicate(sql, List.unmodifiable(bindings)));
 
@@ -611,7 +630,7 @@ mixin WhereConditions<Self> {
           value,
           name,
           'Not a value. Use whereInSubquery/whereExists for subqueries, '
-              'whereGroup for callbacks and whereRaw for SQL.');
+          'whereGroup for callbacks and whereRaw for SQL.');
     }
     return value;
   }
@@ -641,8 +660,8 @@ mixin WhereConditions<Self> {
     if (operator.trim().isEmpty) {
       throw ArgumentError.value(operator, 'operator', 'Must not be empty.');
     }
-    return SqlOperatorPredicate(column, operator.trim(),
-        value == null ? null : _value(value, 'value'));
+    return SqlOperatorPredicate(
+        column, operator.trim(), value == null ? null : _value(value, 'value'));
   }
 
   static Predicate _in(String column, Iterable<Object?> values,
@@ -689,7 +708,8 @@ final class JoinBuilder {
   /// `on first = second` (two columns).
   JoinBuilder on(String first, String second,
       {ComparisonOperator operator = ComparisonOperator.equalTo}) {
-    _conditions.add(_JoinColumns(LogicalConnector.and, first, operator, second));
+    _conditions
+        .add(_JoinColumns(LogicalConnector.and, first, operator, second));
     return this;
   }
 
@@ -737,9 +757,19 @@ final class JoinBuilder {
   void _applyTo(JoinClause join) {
     for (final condition in _conditions) {
       switch (condition) {
-        case _JoinColumns(:final connector, :final first, :final operator, :final second):
+        case _JoinColumns(
+            :final connector,
+            :final first,
+            :final operator,
+            :final second
+          ):
           join.on(first, operator.sql, second, connector.sql);
-        case _JoinValue(:final connector, :final column, :final operator, :final value):
+        case _JoinValue(
+            :final connector,
+            :final column,
+            :final operator,
+            :final value
+          ):
           join.where(column, operator.sql, value, connector.sql);
         case _JoinNull(:final connector, :final column, :final isNull):
           isNull
@@ -794,8 +824,8 @@ sealed class _Join {
 }
 
 final class _SimpleJoin extends _Join {
-  const _SimpleJoin(super.table, this.type, this.first, this.operator,
-      this.second);
+  const _SimpleJoin(
+      super.table, this.type, this.first, this.operator, this.second);
   final JoinType type;
   final String first;
   final ComparisonOperator operator;
@@ -913,7 +943,8 @@ final class OnConflict {
 
   OnConflictClause _toClause() {
     if (columns.isNotEmpty && constraint != null) {
-      throw ArgumentError('OnConflict takes columns or a constraint, not both.');
+      throw ArgumentError(
+          'OnConflict takes columns or a constraint, not both.');
     }
     final update = set;
     if (update != null) {
@@ -1119,7 +1150,8 @@ final class QueryBuilder2 with WhereConditions<QueryBuilder2> {
   }
 
   QueryBuilder2 addSelect(List<String> columns) {
-    _columns.addAll(columns.map((c) => _SelectColumn(WhereConditions._column(c))));
+    _columns
+        .addAll(columns.map((c) => _SelectColumn(WhereConditions._column(c))));
     return this;
   }
 
@@ -1157,8 +1189,12 @@ final class QueryBuilder2 with WhereConditions<QueryBuilder2> {
   QueryBuilder2 join(String table, String first, String second,
       {ComparisonOperator operator = ComparisonOperator.equalTo,
       JoinType type = JoinType.inner}) {
-    _joins.add(_SimpleJoin(WhereConditions._column(table), type,
-        WhereConditions._column(first), operator, WhereConditions._column(second)));
+    _joins.add(_SimpleJoin(
+        WhereConditions._column(table),
+        type,
+        WhereConditions._column(first),
+        operator,
+        WhereConditions._column(second)));
     return this;
   }
 
@@ -1182,7 +1218,8 @@ final class QueryBuilder2 with WhereConditions<QueryBuilder2> {
     return this;
   }
 
-  QueryBuilder2 leftJoinOn(String table, void Function(JoinBuilder join) build) =>
+  QueryBuilder2 leftJoinOn(
+          String table, void Function(JoinBuilder join) build) =>
       joinOn(table, build, type: JoinType.left);
 
   QueryBuilder2 crossJoin(String table) {
@@ -1195,8 +1232,13 @@ final class QueryBuilder2 with WhereConditions<QueryBuilder2> {
       QueryBuilder2 subquery, String alias, String first, String second,
       {ComparisonOperator operator = ComparisonOperator.equalTo,
       JoinType type = JoinType.inner}) {
-    _joins.add(_SubJoin(subquery.clone(), WhereConditions._column(alias), type,
-        WhereConditions._column(first), operator, WhereConditions._column(second)));
+    _joins.add(_SubJoin(
+        subquery.clone(),
+        WhereConditions._column(alias),
+        type,
+        WhereConditions._column(first),
+        operator,
+        WhereConditions._column(second)));
     return this;
   }
 
@@ -1221,7 +1263,8 @@ final class QueryBuilder2 with WhereConditions<QueryBuilder2> {
   QueryBuilder2 joinLateral(QueryBuilder2 subquery, String alias,
       {void Function(JoinBuilder join)? on, JoinType type = JoinType.inner}) {
     if (type == JoinType.right) {
-      throw ArgumentError.value(type, 'type', 'LATERAL joins are inner or left.');
+      throw ArgumentError.value(
+          type, 'type', 'LATERAL joins are inner or left.');
     }
     JoinBuilder? builder;
     if (on != null) {
@@ -1255,21 +1298,25 @@ final class QueryBuilder2 with WhereConditions<QueryBuilder2> {
   /// (PostgreSQL does not accept select aliases in HAVING).
   QueryBuilder2 having(String column, Object value,
       {ComparisonOperator operator = ComparisonOperator.equalTo}) {
-    _havings.add(WhereClause(LogicalConnector.and,
-        ComparisonPredicate(column, operator, WhereConditions._value(value, 'value'))));
+    _havings.add(WhereClause(
+        LogicalConnector.and,
+        ComparisonPredicate(
+            column, operator, WhereConditions._value(value, 'value'))));
     return this;
   }
 
   QueryBuilder2 orHaving(String column, Object value,
       {ComparisonOperator operator = ComparisonOperator.equalTo}) {
-    _havings.add(WhereClause(LogicalConnector.or,
-        ComparisonPredicate(column, operator, WhereConditions._value(value, 'value'))));
+    _havings.add(WhereClause(
+        LogicalConnector.or,
+        ComparisonPredicate(
+            column, operator, WhereConditions._value(value, 'value'))));
     return this;
   }
 
   QueryBuilder2 havingBetween(String column, Object low, Object high) {
-    _havings.add(WhereClause(LogicalConnector.and,
-        BetweenPredicate(column, low, high)));
+    _havings.add(
+        WhereClause(LogicalConnector.and, BetweenPredicate(column, low, high)));
     return this;
   }
 
@@ -1379,7 +1426,8 @@ final class QueryBuilder2 with WhereConditions<QueryBuilder2> {
   /// `for update [of ...] [skip locked | nowait]`.
   QueryBuilder2 lockForUpdate(
       {bool skipLocked = false, bool noWait = false, List<String>? of}) {
-    _lock = _Lock(forUpdate: true, skipLocked: skipLocked, noWait: noWait, of: of);
+    _lock =
+        _Lock(forUpdate: true, skipLocked: skipLocked, noWait: noWait, of: of);
     return this;
   }
 
@@ -1652,8 +1700,10 @@ final class QueryBuilder2 with WhereConditions<QueryBuilder2> {
     final query = toQueryBuilder();
     final columns = _checkRows(rows);
     final sql = query.grammar.compileInsertRows(query, rows);
-    return query.connection.affectingStatement(
-        sql, [for (final row in rows) for (final c in columns) row[c]]);
+    return query.connection.affectingStatement(sql, [
+      for (final row in rows)
+        for (final c in columns) row[c]
+    ]);
   }
 
   /// Inserts the rows, skipping those that violate a unique key
@@ -1683,7 +1733,8 @@ final class QueryBuilder2 with WhereConditions<QueryBuilder2> {
           throw ArgumentError.value(
               column, 'update', 'Not a column of the rows.');
         }
-        set[column] = QueryExpression(query.grammar.upsertInsertedValue(column));
+        set[column] =
+            QueryExpression(query.grammar.upsertInsertedValue(column));
       }
     }
     return query.upsert(rows, uniqueBy, set);
@@ -1828,17 +1879,35 @@ final class QueryBuilder2 with WhereConditions<QueryBuilder2> {
 
     for (final join in _joins) {
       switch (join) {
-        case _SimpleJoin(:final table, :final type, :final first, :final operator, :final second):
+        case _SimpleJoin(
+            :final table,
+            :final type,
+            :final first,
+            :final operator,
+            :final second
+          ):
           query.join(table, first, operator.sql, second, type.sql);
         case _BuiltJoin(:final table, :final type, :final builder):
           query.join(table, (JoinClause clause) => builder._applyTo(clause),
               null, null, type.sql);
         case _CrossJoin(:final table):
           query.crossJoin(table);
-        case _SubJoin(query: final subquery, table: final alias, :final type, :final first, :final operator, :final second):
+        case _SubJoin(
+            query: final subquery,
+            table: final alias,
+            :final type,
+            :final first,
+            :final operator,
+            :final second
+          ):
           query.joinSub(subquery.toQueryBuilder(), alias, first, operator.sql,
               second, type.sql);
-        case _LateralJoin(query: final subquery, table: final alias, :final type, :final builder):
+        case _LateralJoin(
+            query: final subquery,
+            table: final alias,
+            :final type,
+            :final builder
+          ):
           void on(JoinClause clause) => builder?._applyTo(clause);
           type == JoinType.left
               ? query.leftJoinLateral(subquery.toQueryBuilder(), alias, on)
@@ -1899,43 +1968,87 @@ final class QueryBuilder2 with WhereConditions<QueryBuilder2> {
         case SqlOperatorPredicate(:final column, :final operator, :final value):
           _basic(query, column, _checkSqlOperator(query, operator), value,
               boolean);
-        case ColumnComparisonPredicate(:final first, :final operator, :final second):
+        case ColumnComparisonPredicate(
+            :final first,
+            :final operator,
+            :final second
+          ):
           query.whereColumn(first, operator.sql, second, boolean);
         case NullPredicate(:final column, :final isNull):
           query.whereNull(column, boolean, !isNull);
         case InPredicate(:final column, :final values, :final negated):
           query.whereIn(column, List<Object>.of(values), boolean, negated);
-        case InSubqueryPredicate(:final column, :final subquery, :final negated):
+        case InSubqueryPredicate(
+            :final column,
+            :final subquery,
+            :final negated
+          ):
           query.whereInExistingQuery(
               column, subquery.toQueryBuilder(), boolean, negated);
-        case BetweenPredicate(:final column, :final low, :final high, :final negated):
+        case BetweenPredicate(
+            :final column,
+            :final low,
+            :final high,
+            :final negated
+          ):
           query.whereBetween(column, [low, high], boolean, negated);
-        case LikePredicate(:final column, :final pattern, :final caseSensitive, :final negated, :final unaccent, :final lower):
+        case LikePredicate(
+            :final column,
+            :final pattern,
+            :final caseSensitive,
+            :final negated,
+            :final unaccent,
+            :final lower
+          ):
           query.whereLike(column, pattern,
               caseSensitive: caseSensitive,
               unaccent: unaccent,
               lower: lower,
               boolean: boolean,
               not: negated);
-        case DatePartPredicate(:final column, :final part, :final operator, :final value):
+        case DatePartPredicate(
+            :final column,
+            :final part,
+            :final operator,
+            :final value
+          ):
           query.addDateBasedWhere(
               part.whereType, column, operator.sql, value, boolean);
         case TupleInPredicate(:final columns, :final tuples, :final negated):
           query.whereInTuple(columns, tuples, boolean, negated);
         case RowValuesPredicate(:final columns, :final operator, :final values):
           query.whereRowValues(columns, operator.sql, values, boolean);
-        case AnyArrayPredicate(:final column, :final values, :final elementType, :final negated):
+        case AnyArrayPredicate(
+            :final column,
+            :final values,
+            :final elementType,
+            :final negated
+          ):
           query.whereAnyArray(column, values,
               elementType: elementType, boolean: boolean, not: negated);
-        case BetweenColumnsPredicate(:final column, :final low, :final high, :final negated):
+        case BetweenColumnsPredicate(
+            :final column,
+            :final low,
+            :final high,
+            :final negated
+          ):
           query.whereBetweenColumns(column, [low, high], boolean, negated);
-        case ValueBetweenPredicate(:final value, :final low, :final high, :final negated):
+        case ValueBetweenPredicate(
+            :final value,
+            :final low,
+            :final high,
+            :final negated
+          ):
           query.whereValueBetween(value, [low, high], boolean, negated);
         case JsonContainsPredicate(:final column, :final value, :final negated):
           query.whereJsonContains(column, value, boolean, negated);
         case JsonLengthPredicate(:final column, :final operator, :final length):
           query.whereJsonLength(column, operator.sql, length, boolean);
-        case ArrayOperatorPredicate(:final column, :final operator, :final values):
+        case ArrayOperatorPredicate(
+            :final column,
+            :final operator,
+            :final values
+          ):
           query.wheresProp.add({
             'type': 'ArrayOp',
             'column': column,
@@ -1948,7 +2061,8 @@ final class QueryBuilder2 with WhereConditions<QueryBuilder2> {
           query.whereFullText(List<String>.of(columns), value,
               Map<String, dynamic>.of(options), boolean);
         case GroupPredicate(clauses: final inner, :final negated):
-          query.whereNested((QueryBuilder nested) => _applyWheres(nested, inner),
+          query.whereNested(
+              (QueryBuilder nested) => _applyWheres(nested, inner),
               negated ? '$boolean not' : boolean);
         case ExistsPredicate(:final subquery, :final negated):
           final sub = subquery.toQueryBuilder();
@@ -1975,8 +2089,8 @@ final class QueryBuilder2 with WhereConditions<QueryBuilder2> {
               "whereRaw('jsonb_exists(column, ?)', [key]).");
     }
     if (!query.grammar.predicateOperators.contains(normalized)) {
-      throw ArgumentError.value(operator, 'operator',
-          'Not a predicate operator of this grammar.');
+      throw ArgumentError.value(
+          operator, 'operator', 'Not a predicate operator of this grammar.');
     }
     return normalized;
   }
@@ -2001,7 +2115,12 @@ final class QueryBuilder2 with WhereConditions<QueryBuilder2> {
       switch (clause.predicate) {
         case ComparisonPredicate(:final column, :final operator, :final value):
           query.having(column, operator.sql, value, boolean);
-        case BetweenPredicate(:final column, :final low, :final high, :final negated):
+        case BetweenPredicate(
+            :final column,
+            :final low,
+            :final high,
+            :final negated
+          ):
           query.havingBetween(column, [low, high], boolean, negated);
         case RawPredicate(:final sql, :final bindings):
           query.havingRaw(sql, List<Object?>.of(bindings), boolean);

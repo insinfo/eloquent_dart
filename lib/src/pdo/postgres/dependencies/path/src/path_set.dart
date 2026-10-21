@@ -1,5 +1,3 @@
-
-
 import 'dart:collection';
 
 import '../path.dart' as p;

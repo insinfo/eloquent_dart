@@ -43,8 +43,7 @@ void main() {
         old_col text
       )
     ''');
-    await db.execute(
-        'CREATE INDEX perf_diff_name_idx ON perf_diff (name)');
+    await db.execute('CREATE INDEX perf_diff_name_idx ON perf_diff (name)');
   });
 
   tearDown(() async {
@@ -60,7 +59,8 @@ void main() {
     final sm = db.getDoctrineSchemaManager();
     expect(await sm.fetchTableOptions('perf_unlogged'),
         {'comment': 'temporaria', 'unlogged': true});
-    expect(await sm.fetchTableOptions('perf_diff'), isNot(contains('unlogged')));
+    expect(
+        await sm.fetchTableOptions('perf_diff'), isNot(contains('unlogged')));
   });
 
   test('live introspection returns columns and indexes', () async {
@@ -119,8 +119,7 @@ void main() {
     }
 
     final after = {
-      for (final c
-          in (await sm.listTableDetails('perf_diff')).getColumns())
+      for (final c in (await sm.listTableDetails('perf_diff')).getColumns())
         c.getName(): c
     };
     expect(after['name']!.type, equals('text'));

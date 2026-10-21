@@ -49,7 +49,8 @@ class Index extends AbstractAsset {
   /// Replaces the column list (used by `Table.renameColumn`).
   void replaceColumns(List<String> columns) {
     if (columns.isEmpty) {
-      throw ArgumentError('Index "${getName()}" must span at least one column.');
+      throw ArgumentError(
+          'Index "${getName()}" must span at least one column.');
     }
     _columns = List.from(columns);
   }

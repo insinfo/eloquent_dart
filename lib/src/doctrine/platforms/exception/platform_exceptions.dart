@@ -5,7 +5,6 @@
 // Assuming a base exception exists like this:
 import '../../exceptions/doctrine_exceptions.dart';
 
-
 /// Base marker interface or class for platform-related exceptions.
 /// Allows catching all platform-specific logical errors.
 /// Using an abstract class allows it to potentially extend DoctrineDbalException later if needed.
@@ -17,7 +16,8 @@ abstract class PlatformException implements DoctrineDbalException {
 
 /// Exception thrown when an invalid platform version string is specified.
 /// Corresponds to Doctrine\DBAL\Platforms\Exception\InvalidPlatformVersion
-class InvalidPlatformVersion extends DoctrineDbalException implements PlatformException {
+class InvalidPlatformVersion extends DoctrineDbalException
+    implements PlatformException {
   /// Creates a new instance for an invalid specified platform version.
   ///
   /// [version] The invalid platform version string provided.
@@ -32,14 +32,15 @@ class InvalidPlatformVersion extends DoctrineDbalException implements PlatformEx
 
 /// Exception thrown when attempting to create a table without specifying any columns.
 /// Corresponds to Doctrine\DBAL\Platforms\Exception\NoColumnsSpecifiedForTable
-class NoColumnsSpecifiedForTable extends DoctrineDbalException implements PlatformException {
+class NoColumnsSpecifiedForTable extends DoctrineDbalException
+    implements PlatformException {
   /// Creates a new instance for a table missing column specifications.
   ///
   /// [tableName] The name of the table for which no columns were specified.
   NoColumnsSpecifiedForTable(String tableName)
       : super('No columns specified for table "$tableName".');
 
-   @override
+  @override
   String toString() => 'NoColumnsSpecifiedForTable: $message';
 }
 

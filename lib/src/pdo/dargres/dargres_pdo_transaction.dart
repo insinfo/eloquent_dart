@@ -3,7 +3,7 @@ import 'package:eloquent/eloquent.dart';
 
 class DargresPDOTransaction extends PDOTransactionContext {
   final TransactionContext transactionContext;
-  
+
   @override
   PDOConfig getConfig() {
     return super.pdoInstance.config;

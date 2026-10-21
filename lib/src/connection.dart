@@ -453,8 +453,8 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   ///
   Future<void> notify(String channel, [String payload = '']) async {
     _assertNotifications('notify');
-    await this.select('select 1 from pg_notify(?::text, ?::text)',
-        [channel, payload], false);
+    await this.select(
+        'select 1 from pg_notify(?::text, ?::text)', [channel, payload], false);
   }
 
   ///
@@ -756,8 +756,8 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
 
     final T result;
     try {
-      result = await callback(
-          _childConnection(NestedPDOTransaction(parent, level)));
+      result =
+          await callback(_childConnection(NestedPDOTransaction(parent, level)));
     } catch (error, stackTrace) {
       try {
         await parent.rollbackToSavepoint(name, timeoutInSeconds);
@@ -878,7 +878,6 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
       _openScopes--;
     }
   }
-
 
   /// Creates a connection of this same kind (grammar, processor, config) over
   /// another PDO context, such as a transaction context.
@@ -1113,7 +1112,8 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
               Connection, String, dynamic, int? timeoutInSeconds)
           callback,
       int? timeoutInSeconds,
-      {int delay = 1000, StackTrace? stackTrace}) async {
+      {int delay = 1000,
+      StackTrace? stackTrace}) async {
     // Inside a transaction the lost connection took the transaction with it:
     // re-running only this statement on a new connection would be wrong.
     if (!this.causedByLostConnection(e) ||
@@ -1338,8 +1338,8 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
     return _databasePlatform ??= switch (getDriverName()) {
       'pgsql' => PostgreSQLPlatform(),
       'mysql' => MySQLPlatform(),
-      final driver => throw UnsupportedError(
-          'No database platform for driver "$driver".'),
+      final driver =>
+        throw UnsupportedError('No database platform for driver "$driver".'),
     };
   }
 

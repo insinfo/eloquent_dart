@@ -1,5 +1,3 @@
-
-
 /// A comprehensive, cross-platform path manipulation library.
 ///
 /// The path library was designed to be imported with a prefix, though you don't

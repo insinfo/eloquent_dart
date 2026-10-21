@@ -1,5 +1,3 @@
-
-
 import 'dart:math' as math;
 
 import 'chain.dart';
@@ -157,7 +155,6 @@ class Trace implements StackTrace {
 
     var frames = lines.take(lines.length - 1).map(Frame.parseVM).toList();
 
-  
     if (!lines.last.endsWith('.da')) {
       frames.add(Frame.parseVM(lines.last));
     }
@@ -290,7 +287,7 @@ class Trace implements StackTrace {
         // internal frames. They only ever show up in stack chains and are
         // always surrounded by other traces that are actually useful, so we can
         // just get rid of them.
-        // 
+        //
         // fixed.
         if (!frame.member!.contains('<async>')) return false;
         return frame.line == null;

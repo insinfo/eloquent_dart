@@ -92,20 +92,20 @@ void main() {
         expect(second['ativo'], anyOf(true, 1));
         final third = await db.table(_table).where('id', 3).first();
         expect(third!['valor'], isNull);
-        final criado = (await db.table(_table).where('id', 1).first())!['criado']
-            as DateTime;
+        final criado = (await db
+            .table(_table)
+            .where('id', 1)
+            .first())!['criado'] as DateTime;
         expect([criado.year, criado.month, criado.day, criado.hour],
             [2026, 2, 3, 4]);
         expect(await db.table2(_table).copyInto(rows(3, 5000)), 3);
         expect(await db.table(_table).copyInto([]), 0);
         // Inside a transaction (COPY on the transaction's connection).
-        await expectLater(
-            db.transaction((ctx) async {
-              await ctx.table(_table).copyInto(rows(10, 6000));
-              expect(await ctx.table(_table).where('id', '>=', 6000).count(), 10);
-              throw StateError('rollback');
-            }),
-            throwsStateError);
+        await expectLater(db.transaction((ctx) async {
+          await ctx.table(_table).copyInto(rows(10, 6000));
+          expect(await ctx.table(_table).where('id', '>=', 6000).count(), 10);
+          throw StateError('rollback');
+        }), throwsStateError);
         expect(await db.table(_table).where('id', '>=', 6000).count(), 0);
       });
 
@@ -123,8 +123,8 @@ void main() {
         expect(await db.table(_table).count(), 1200);
         final second = await db.table(_table).where('id', 2).first();
         expect(second!['nome'], 'tab\there "aspas" \\ e\nlinha');
-        expect((await db.table(_table).where('id', 3).first())!['valor'],
-            isNull);
+        expect(
+            (await db.table(_table).where('id', 3).first())!['valor'], isNull);
         expect(
             await db.table2(_table).insertUnnest(rows(2, 9000), types: types),
             2);
@@ -174,8 +174,8 @@ void main() {
       test('cursor streams every row', () async {
         await db.table(_table).copyInto(rows(2345));
         if (!isPg) {
-          expect(() => db.table(_table).cursor().toList(),
-              throwsUnsupportedError);
+          expect(
+              () => db.table(_table).cursor().toList(), throwsUnsupportedError);
           return;
         }
         var count = 0;
@@ -192,7 +192,11 @@ void main() {
         expect(sum, 2345 * 2346 ~/ 2);
 
         // Stopping early closes the cursor and its transaction.
-        final firsts = await db.table(_table).orderBy('id').cursor(100).take(3)
+        final firsts = await db
+            .table(_table)
+            .orderBy('id')
+            .cursor(100)
+            .take(3)
             .map((r) => r['id'])
             .toList();
         expect(firsts, [1, 2, 3]);
@@ -201,7 +205,11 @@ void main() {
         // Inside a transaction it uses the transaction's connection.
         final inTx = await db.transaction((ctx) async {
           await ctx.table(_table).where('id', 1).delete();
-          return ctx.table(_table).where('id', '<', 5).orderBy('id').cursor()
+          return ctx
+              .table(_table)
+              .where('id', '<', 5)
+              .orderBy('id')
+              .cursor()
               .map((r) => r['id'])
               .toList();
         });
@@ -209,7 +217,11 @@ void main() {
 
         // QueryBuilder2 and an error in the query.
         expect(
-            await db.table2(_table).where('id', 2).cursor().map((r) => r['id'])
+            await db
+                .table2(_table)
+                .where('id', 2)
+                .cursor()
+                .map((r) => r['id'])
                 .toList(),
             [2]);
         await expectLater(

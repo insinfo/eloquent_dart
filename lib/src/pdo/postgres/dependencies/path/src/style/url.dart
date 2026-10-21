@@ -1,5 +1,3 @@
-
-
 import '../characters.dart' as chars;
 import '../internal_style.dart';
 import '../utils.dart';

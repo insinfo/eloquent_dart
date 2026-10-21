@@ -112,7 +112,8 @@ class PostgresV2PDO extends PDOInterface {
         settings.idleTestThreshold = idleTestThreshold;
       }
       final maxConnectionAge = options.duration('maxConnectionAge');
-      if (maxConnectionAge != null) settings.maxConnectionAge = maxConnectionAge;
+      if (maxConnectionAge != null)
+        settings.maxConnectionAge = maxConnectionAge;
       final maxSessionUse = options.duration('maxSessionUse');
       if (maxSessionUse != null) settings.maxSessionUse = maxSessionUse;
       final maxErrorCount = options.integer('maxErrorCount');
@@ -134,8 +135,7 @@ class PostgresV2PDO extends PDOInterface {
         queryTimeoutInSeconds: queryTimeoutInSeconds =
             options.integer('queryTimeoutInSeconds') ?? queryTimeoutInSeconds,
         useSSL: options.flag('useSSL') ?? false,
-        allowClearTextPassword:
-            options.flag('allowClearTextPassword') ?? false,
+        allowClearTextPassword: options.flag('allowClearTextPassword') ?? false,
         isUnixSocket: options.flag('isUnixSocket') ?? false,
         cancelQueryOnTimeout: options.flag('cancelQueryOnTimeout') ?? false,
       );
@@ -177,10 +177,10 @@ class PostgresV2PDO extends PDOInterface {
       rethrow;
     }
     return PDONotificationConnection(
-      notifications: conn.notifications.map(
-          (n) => DriverNotification(n.channel, n.payload, n.processID)),
-      execute: (sql, timeout) => conn.execute(sql,
-          timeoutInSeconds: math.max(1, timeout.inSeconds)),
+      notifications: conn.notifications
+          .map((n) => DriverNotification(n.channel, n.payload, n.processID)),
+      execute: (sql, timeout) =>
+          conn.execute(sql, timeoutInSeconds: math.max(1, timeout.inSeconds)),
       close: conn.close,
     );
   }

@@ -68,10 +68,10 @@ class DargresPDO extends PDOInterface {
       timeZone: timeZone,
       commandTimeout: _commandTimeout =
           options.duration('commandTimeout') ?? defaultTimeout,
-      connectionTimeout: options.duration('connectionTimeout') ??
-          const Duration(seconds: 180),
-      cancelGracePeriod: options.duration('cancelGracePeriod') ??
-          const Duration(seconds: 5),
+      connectionTimeout:
+          options.duration('connectionTimeout') ?? const Duration(seconds: 180),
+      cancelGracePeriod:
+          options.duration('cancelGracePeriod') ?? const Duration(seconds: 5),
       tcpKeepalive: options.flag('tcpKeepalive') ?? false,
       statementCacheCapacity: options.integer('statementCacheCapacity') ?? 64,
       queueConcurrentCalls: options.flag('queueConcurrentCalls') ?? true,
@@ -150,7 +150,8 @@ class DargresPDO extends PDOInterface {
   /// one, the connection's 30 s command timeout applies.
   Future<R> _onCore<R>(Future<R> Function(dargres.CoreConnection core) action,
           int? timeoutInSeconds) =>
-      _singleConnectionLock.run(() => _onCoreUnlocked(action, timeoutInSeconds));
+      _singleConnectionLock
+          .run(() => _onCoreUnlocked(action, timeoutInSeconds));
 
   Future<R> _onCoreUnlocked<R>(
       Future<R> Function(dargres.CoreConnection core) action,

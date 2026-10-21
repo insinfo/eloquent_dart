@@ -86,6 +86,7 @@ class ForeignKeyConstraint extends AbstractAsset {
     _localColumnNames = LinkedHashMap.fromEntries(
         columns.map((c) => MapEntry(c, Identifier(c))));
   }
+
   List<String> getQuotedLocalColumns(SchemaGrammar grammar) =>
       List.unmodifiable(
           _localColumnNames.values.map((id) => id.getQuotedName(grammar)));

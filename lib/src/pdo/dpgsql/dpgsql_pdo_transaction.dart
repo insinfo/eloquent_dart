@@ -18,8 +18,7 @@ class DpgsqlPDOTransaction extends PDOTransactionContext {
   }
 
   @override
-  DriverAccess driverAccess() =>
-      DpgsqlDriverAccess.forConnection(connection);
+  DriverAccess driverAccess() => DpgsqlDriverAccess.forConnection(connection);
 
   @override
   Future<int> execute(String statement, [int? timeoutInSeconds]) async {

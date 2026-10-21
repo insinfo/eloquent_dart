@@ -112,8 +112,7 @@ final class InPredicate extends Predicate {
 
 /// `column [not] in (select ...)`
 final class InSubqueryPredicate extends Predicate {
-  const InSubqueryPredicate(this.column, this.subquery,
-      {this.negated = false});
+  const InSubqueryPredicate(this.column, this.subquery, {this.negated = false});
 
   final String column;
   final QueryBuilder2 subquery;

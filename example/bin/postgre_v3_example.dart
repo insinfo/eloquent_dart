@@ -23,7 +23,7 @@ void main(List<String> args) async {
   manager.setAsGlobal();
 
   final db = await manager.connection();
- 
+
   await db.execute('DROP TABLE public.test_table');
   await db.execute(
       '''CREATE TABLE public.test_table ( id int4 NOT NULL, name char(255) );''');

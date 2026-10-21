@@ -53,8 +53,8 @@ void main() {
   group('driver() capability probe', () {
     test('FakeConnection.driver() returns null (no driver access)', () {
       final conn = FakeConnection();
-      final qb = QueryBuilder(conn, QueryPostgresGrammar(), Processor())
-          .from('t');
+      final qb =
+          QueryBuilder(conn, QueryPostgresGrammar(), Processor()).from('t');
       expect(conn.driver(), isNull);
       expect(qb.driver(), isNull);
     });

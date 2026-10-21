@@ -59,7 +59,8 @@ final class PageCursor {
       final values = (map as Map)['v'] as Map;
       final next = map['n'] as bool;
       return PageCursor(
-          values.map((key, value) => MapEntry(key as String, _decodeValue(value))),
+          values.map(
+              (key, value) => MapEntry(key as String, _decodeValue(value))),
           pointsToNextItems: next);
     } catch (_) {
       throw FormatException('Invalid pagination cursor.', cursor);

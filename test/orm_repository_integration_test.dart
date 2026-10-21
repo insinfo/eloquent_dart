@@ -106,8 +106,11 @@ void main() {
       await repo.insert(User(name: 'u$i', age: i));
     }
     final ages = <int>[];
-    await for (final u in repo.query().orderBy('age').cursor().map(
-        (r) => userMapper.fromRow(r))) {
+    await for (final u in repo
+        .query()
+        .orderBy('age')
+        .cursor()
+        .map((r) => userMapper.fromRow(r))) {
       ages.add(u.age);
     }
     expect(ages, equals([0, 1, 2, 3, 4]));

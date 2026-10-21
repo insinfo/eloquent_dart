@@ -9,8 +9,8 @@
 import 'package:eloquent/eloquent.dart';
 import 'package:eloquent/src/query/processors/postgres_processor.dart';
 
-QueryBuilder _newBuilder() =>
-    QueryBuilder(_NoopConnection(), QueryPostgresGrammar(), PostgresProcessor());
+QueryBuilder _newBuilder() => QueryBuilder(
+    _NoopConnection(), QueryPostgresGrammar(), PostgresProcessor());
 
 /// A representative "medium complexity" query rebuilt fresh each iteration so
 /// we measure builder construction + compilation, not cached state.

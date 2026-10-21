@@ -174,7 +174,7 @@ void main() {
         // A segunda chave será 'ID'?? Vamos checar se é o Map inteiro:
         var secondKey = result.keys.last;
         // secondKey provavelmente vai ser {ID:2, name:John}
-       
+
         expect(secondKey, equals({'ID': 2, 'name': 'John'}));
       });
     });

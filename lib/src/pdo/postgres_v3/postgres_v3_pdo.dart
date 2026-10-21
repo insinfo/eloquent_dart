@@ -85,8 +85,7 @@ class PostgresV3PDO extends PDOInterface {
     final queryTimeout = options.duration('queryTimeout');
     if (queryTimeout != null) {
       queryTimeoutInSeconds =
-          (queryTimeout.inMicroseconds / Duration.microsecondsPerSecond)
-              .ceil();
+          (queryTimeout.inMicroseconds / Duration.microsecondsPerSecond).ceil();
     }
 
     if (config.pool == true) {
@@ -170,8 +169,8 @@ class PostgresV3PDO extends PDOInterface {
           typeRegistry: postgresV3TypeRegistry(config),
         ));
     return PDONotificationConnection(
-      notifications: conn.channels.all.map(
-          (n) => DriverNotification(n.channel, n.payload, n.processId)),
+      notifications: conn.channels.all
+          .map((n) => DriverNotification(n.channel, n.payload, n.processId)),
       execute: (sql, timeout) => conn.execute(sql,
           timeout: timeout, queryMode: QueryMode.simple, ignoreRows: true),
       close: conn.close,

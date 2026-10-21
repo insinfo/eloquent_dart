@@ -73,12 +73,10 @@ void main() {
             db.notifications('tx_$driver').listen((n) => events.add(n.payload));
         await db.notificationListener.ready();
 
-        await expectLater(
-            other.transaction((ctx) async {
-              await ctx.notify('tx_$driver', 'rollback');
-              throw StateError('rollback');
-            }),
-            throwsStateError);
+        await expectLater(other.transaction((ctx) async {
+          await ctx.notify('tx_$driver', 'rollback');
+          throw StateError('rollback');
+        }), throwsStateError);
 
         final committed = Completer<void>();
         await other.transaction((ctx) async {
@@ -94,8 +92,7 @@ void main() {
         await sub.cancel();
       });
 
-      test('the last cancel runs UNLISTEN and closes the connection',
-          () async {
+      test('the last cancel runs UNLISTEN and closes the connection', () async {
         final listener = db.notificationListener;
         final a = db.notifications('a_$driver').listen((_) {});
         final b = db.notifications('b_$driver').listen((_) {});
@@ -136,7 +133,8 @@ void main() {
             [appName]);
         expect(pids, isNotEmpty, reason: appName);
         for (final row in pids) {
-          await other.select('select pg_terminate_backend(?::int)', [row['pid']]);
+          await other
+              .select('select pg_terminate_backend(?::int)', [row['pid']]);
         }
 
         await reconnected.timeout(const Duration(seconds: 10));

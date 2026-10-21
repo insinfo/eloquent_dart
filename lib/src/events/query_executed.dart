@@ -33,8 +33,9 @@ class QueryExecuted {
 
   /// The SQL with the bindings inlined, for logs and debugging only. Never
   /// execute it: escaping is best-effort.
-  String toRawSql() => connection.getQueryGrammar().substituteBindingsIntoRawSql(
-      sql, connection.prepareBindings(List<dynamic>.of(bindings)));
+  String toRawSql() =>
+      connection.getQueryGrammar().substituteBindingsIntoRawSql(
+          sql, connection.prepareBindings(List<dynamic>.of(bindings)));
 
   @override
   String toString() =>

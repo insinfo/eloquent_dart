@@ -513,7 +513,8 @@ void main() {
 
     test('select whereExists with subquery builder', () async {
       await db.execute('CREATE SCHEMA IF NOT EXISTS administracao;');
-      await db.execute('DROP TABLE IF EXISTS administracao.usuario_organograma;');
+      await db
+          .execute('DROP TABLE IF EXISTS administracao.usuario_organograma;');
       await db.execute('DROP TABLE IF EXISTS usuario;');
 
       await db.execute('''
@@ -544,7 +545,8 @@ void main() {
           .table('usuario as usuario')
           .select(['numcgm'])
           .whereExists((q) {
-            q.selectRaw('1')
+            q
+                .selectRaw('1')
                 .from('administracao.usuario_organograma as uo_filtro')
                 .whereColumn('uo_filtro.numcgm', '=', 'usuario.numcgm')
                 .where('uo_filtro.id_organograma', '=', 10);

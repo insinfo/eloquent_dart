@@ -25,7 +25,11 @@ void main() {
       conn.lastSelectSql,
       equals('select * from "docs" where ("tags")::jsonb @> ?'),
     );
-    expect(conn.lastSelectBindings, equals([json.encode(['urgent', 'new'])]));
+    expect(
+        conn.lastSelectBindings,
+        equals([
+          json.encode(['urgent', 'new'])
+        ]));
   });
 
   test('whereJsonDoesntContain -> not ... @>', () async {
@@ -66,11 +70,13 @@ void main() {
   });
 
   test('whereFullText multi-column + websearch mode + language', () async {
-    await qb().whereFullText(
-      ['title', 'body'],
-      'cats OR dogs',
-      {'language': 'simple', 'mode': 'websearch'},
-    ).get();
+    await qb()
+        .whereFullText(
+          ['title', 'body'],
+          'cats OR dogs',
+          {'language': 'simple', 'mode': 'websearch'},
+        )
+        .get();
     expect(
       conn.lastSelectSql,
       equals('select * from "docs" where '
@@ -81,19 +87,27 @@ void main() {
 
   test('array operators -> @> / <@ / &&', () async {
     await qb().whereArrayContains('tags', ['a', 'b']).get();
-    expect(conn.lastSelectSql,
-        equals('select * from "docs" where "tags" @> ?'));
-    expect(conn.lastSelectBindings, equals([['a', 'b']]));
+    expect(
+        conn.lastSelectSql, equals('select * from "docs" where "tags" @> ?'));
+    expect(
+        conn.lastSelectBindings,
+        equals([
+          ['a', 'b']
+        ]));
 
     await qb().whereArrayContainedBy('tags', ['a']).get();
-    expect(conn.lastSelectSql,
-        equals('select * from "docs" where "tags" <@ ?'));
+    expect(
+        conn.lastSelectSql, equals('select * from "docs" where "tags" <@ ?'));
 
     await qb().whereArrayOverlaps('tags', ['x', 'y']).get();
-    expect(conn.lastSelectSql,
-        equals('select * from "docs" where "tags" && ?'));
+    expect(
+        conn.lastSelectSql, equals('select * from "docs" where "tags" && ?'));
     // The list is bound as a single parameter, not spread.
-    expect(conn.lastSelectBindings, equals([['x', 'y']]));
+    expect(
+        conn.lastSelectBindings,
+        equals([
+          ['x', 'y']
+        ]));
   });
 
   test('distinctOn -> select distinct on (...)', () async {
@@ -124,7 +138,11 @@ void main() {
     final b = QueryBuilder(conn, g, Processor()).from('t');
     expect(() => g.whereJsonContains(b, {'column': 'x', 'value': 1}),
         throwsA(isA<UnsupportedError>()));
-    expect(() => g.whereFullText(b, {'columns': ['x'], 'value': 'y'}),
+    expect(
+        () => g.whereFullText(b, {
+              'columns': ['x'],
+              'value': 'y'
+            }),
         throwsA(isA<UnsupportedError>()));
   });
 }

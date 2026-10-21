@@ -58,7 +58,9 @@ List<Map<String, dynamic>> postgresV3Rows(PDOConfig config, Result result) {
     final map = <String, dynamic>{};
     for (var i = 0; i < row.length; i++) {
       var value = postgresV3Value(config, row[i]);
-      if (value is List && value is! TypedData && arrays[i] &&
+      if (value is List &&
+          value is! TypedData &&
+          arrays[i] &&
           !_isTypedList(value)) {
         value = uniformList(value, _identity, retype: true);
       }

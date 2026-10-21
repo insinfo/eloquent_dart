@@ -1,5 +1,3 @@
-
-
 import '../pdo/core/pdo_interface.dart';
 
 abstract class ConnectorInterface {

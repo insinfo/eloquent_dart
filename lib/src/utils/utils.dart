@@ -172,54 +172,54 @@ class Utils {
   /// Se [keyP] != null, retorna um Map, onde cada chave é itemKey e valor é itemValue.
   ///
   static array_pluck(dynamic arrayP, dynamic valueP, [dynamic keyP]) {
-  if (arrayP == null) {
-    return keyP != null ? <dynamic, dynamic>{} : <dynamic>[];
-  }
+    if (arrayP == null) {
+      return keyP != null ? <dynamic, dynamic>{} : <dynamic>[];
+    }
 
-  var results = keyP != null ? <dynamic, dynamic>{} : <dynamic>[];
+    var results = keyP != null ? <dynamic, dynamic>{} : <dynamic>[];
 
-  // Explode "valueP" e "keyP"
-  var re = explodePluckParameters(valueP, keyP);
-  var valuePath = re[0];
-  var keyPath   = re[1];
+    // Explode "valueP" e "keyP"
+    var re = explodePluckParameters(valueP, keyP);
+    var valuePath = re[0];
+    var keyPath = re[1];
 
-  if (arrayP is List) {
-    for (var item in arrayP) {
-      var itemValue = data_get(item, valuePath);
+    if (arrayP is List) {
+      for (var item in arrayP) {
+        var itemValue = data_get(item, valuePath);
 
-      if (keyPath == null) {
-        (results as List).add(itemValue);
-      } else {
-        var itemKey = data_get(item, keyPath);
+        if (keyPath == null) {
+          (results as List).add(itemValue);
+        } else {
+          var itemKey = data_get(item, keyPath);
 
-        // Se a chave não foi encontrada, fallback = item inteiro
-        if (itemKey == null) {
-          itemKey = item;
+          // Se a chave não foi encontrada, fallback = item inteiro
+          if (itemKey == null) {
+            itemKey = item;
+          }
+
+          (results as Map)[itemKey] = itemValue;
         }
+      }
+    } else if (arrayP is Map) {
+      for (var entry in arrayP.entries) {
+        var itemValue = data_get(entry.value, valuePath);
 
-        (results as Map)[itemKey] = itemValue;
+        if (keyPath == null) {
+          (results as List).add(itemValue);
+        } else {
+          var itemKey = data_get(entry.value, keyPath);
+
+          if (itemKey == null) {
+            itemKey = entry.value;
+          }
+
+          (results as Map)[itemKey] = itemValue;
+        }
       }
     }
-  } else if (arrayP is Map) {
-    for (var entry in arrayP.entries) {
-      var itemValue = data_get(entry.value, valuePath);
 
-      if (keyPath == null) {
-        (results as List).add(itemValue);
-      } else {
-        var itemKey = data_get(entry.value, keyPath);
-
-        if (itemKey == null) {
-          itemKey = entry.value;
-        }
-
-        (results as Map)[itemKey] = itemValue;
-      }
-    }
+    return results;
   }
-
-  return results;
-}
 
   /// change all keys to case defined
   /// Changes the case of the keys of [map] in place (nested maps too) and

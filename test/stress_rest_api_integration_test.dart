@@ -190,8 +190,8 @@ Future<void> _clientMain(List<Object?> args) async {
   Future<(int, Map<String, dynamic>?)> call(String method, String path,
       [Object? body]) async {
     requests++;
-    final request = await http.openUrl(
-        method, Uri.parse('http://127.0.0.1:$port$path'));
+    final request =
+        await http.openUrl(method, Uri.parse('http://127.0.0.1:$port$path'));
     if (body != null) {
       request.headers.contentType = ContentType.json;
       request.write(jsonEncode(body));
@@ -219,8 +219,7 @@ Future<void> _clientMain(List<Object?> args) async {
         'read $id -> $read $row');
 
     final bumps = await Future.wait([
-      for (var k = 0; k < increments; k++)
-        call('POST', '/items/$id/increment'),
+      for (var k = 0; k < increments; k++) call('POST', '/items/$id/increment'),
     ]);
     for (final (status, result) in bumps) {
       check(status == 200 && result!['affected'] == 1,
@@ -259,8 +258,8 @@ Future<void> _clientMain(List<Object?> args) async {
 
 // -------------------------------------------------------------------- test
 
-Future<T> _spawn<T>(
-    void Function(List<Object?>) entry, List<Object?> Function(SendPort) args) async {
+Future<T> _spawn<T>(void Function(List<Object?>) entry,
+    List<Object?> Function(SendPort) args) async {
   final port = ReceivePort();
   await Isolate.spawn(entry, args(port.sendPort));
   final result = await port.first as T;
@@ -269,7 +268,13 @@ Future<T> _spawn<T>(
 }
 
 void main() {
-  for (final driver in ['postgres', 'postgres_v3', 'dargres', 'dpgsql', 'mysql']) {
+  for (final driver in [
+    'postgres',
+    'postgres_v3',
+    'dargres',
+    'dpgsql',
+    'mysql'
+  ]) {
     for (final (pool, adapterLock) in [
       (true, true),
       (false, true),
@@ -282,12 +287,17 @@ void main() {
               ? 'single connection'
               : 'single connection, driver queue only';
       test('$driver $mode: $_servers servers, $_clients clients', () async {
-        final manager = Manager()..addConnection(_config(driver, pool), 'setup');
+        final manager = Manager()
+          ..addConnection(_config(driver, pool), 'setup');
         final db = await manager.getConnection('setup');
         final serial =
             mysql ? 'int AUTO_INCREMENT PRIMARY KEY' : 'serial PRIMARY KEY';
         final timestamp = mysql ? 'datetime' : 'timestamp';
-        for (final table in ['stress_items', 'stress_counter', 'stress_notes']) {
+        for (final table in [
+          'stress_items',
+          'stress_counter',
+          'stress_notes'
+        ]) {
           await db.execute('DROP TABLE IF EXISTS $table');
         }
         await db.execute('CREATE TABLE stress_items (id $serial, client int, '
@@ -313,8 +323,8 @@ void main() {
         final watch = Stopwatch()..start();
         final results = await Future.wait([
           for (var c = 0; c < _clients; c++)
-            _spawn<List>(_clientMain,
-                (reply) => [port, c, _items, _increments, reply]),
+            _spawn<List>(
+                _clientMain, (reply) => [port, c, _items, _increments, reply]),
         ]);
         watch.stop();
 
@@ -326,8 +336,7 @@ void main() {
           stopped.close();
         }
 
-        final requests =
-            results.fold<int>(0, (sum, r) => sum + (r[0] as int));
+        final requests = results.fold<int>(0, (sum, r) => sum + (r[0] as int));
         final clientErrors = [
           for (final r in results) ...(r[1] as List).cast<String>(),
         ];
@@ -340,8 +349,7 @@ void main() {
         expect(await db.table('stress_items').count(), created);
         expect((await db.table('stress_items').sum('qty'))!.toInt(),
             created * _increments);
-        expect(
-            await db.table('stress_counter').where('id', 1).value('total'),
+        expect(await db.table('stress_counter').where('id', 1).value('total'),
             created,
             reason: 'counter updated inside every create transaction');
         expect(await db.table('stress_notes').count(), created);
@@ -353,7 +361,11 @@ void main() {
                 .count(),
             _clients);
 
-        for (final table in ['stress_items', 'stress_counter', 'stress_notes']) {
+        for (final table in [
+          'stress_items',
+          'stress_counter',
+          'stress_notes'
+        ]) {
           await db.execute('DROP TABLE IF EXISTS $table');
         }
         await manager.getDatabaseManager().purge('setup');

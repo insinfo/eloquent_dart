@@ -21,7 +21,7 @@ void main(List<String> args) async {
 
   final db = await manager.connection();
 
-  Timer.periodic(Duration(milliseconds: 2000), (timer) async{ 
+  Timer.periodic(Duration(milliseconds: 2000), (timer) async {
     var res = await db.table('temp_location').select().get();
     print('Timer.periodic $res');
   });

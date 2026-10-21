@@ -44,8 +44,8 @@ void main() {
     test('= null, <> null and != null', () {
       expect(pg().where('a', '=', null).toSql(),
           'select * from "t" where "a" is null');
-      expect(pg().where('a', null).toSql(),
-          'select * from "t" where "a" is null');
+      expect(
+          pg().where('a', null).toSql(), 'select * from "t" where "a" is null');
       expect(pg().where('a', '<>', null).toSql(),
           'select * from "t" where "a" is not null');
       expect(pg().where('a', '!=', null).toSql(),
@@ -259,14 +259,11 @@ void main() {
       expect(conn.lastDeleteBindings, [1, true]);
     });
 
-    test('delete/update with a left join throw instead of acting as inner',
-        () {
+    test('delete/update with a left join throw instead of acting as inner', () {
       expect(() => pg('a').leftJoin('b', 'b.a_id', '=', 'a.id').delete(),
           throwsUnsupportedError);
       expect(
-          () => pg('a')
-              .leftJoin('b', 'b.a_id', '=', 'a.id')
-              .update({'x': 1}),
+          () => pg('a').leftJoin('b', 'b.a_id', '=', 'a.id').update({'x': 1}),
           throwsUnsupportedError);
     });
 
@@ -279,8 +276,8 @@ void main() {
 
     test('update with a CTE keeps the WITH and orders the bindings', () async {
       await pg('jobs')
-          .withExpression('cte',
-              pg('jobs').select(['id']).where('status', '=', 'pending'))
+          .withExpression(
+              'cte', pg('jobs').select(['id']).where('status', '=', 'pending'))
           .join('cte', 'cte.id', '=', 'jobs.id')
           .where('jobs.tries', '<', 3)
           .update({'status': 'running'});

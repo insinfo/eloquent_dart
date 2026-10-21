@@ -12,7 +12,7 @@ void main(List<String> args) async {
     'password': 'dart',
     // for SSL conection
     'sslmode': 'require',
-    // options not implemented 
+    // options not implemented
     // 'options': {
     //   PDO_MYSQL_ATTR_SSL_VERIFY_SERVER_CERT: false,
     //   PDO_MYSQL_ATTR_SSL_KEY: '/certs/client-key.pem',

@@ -47,7 +47,7 @@ void main() {
   });
   group('query', () {
     test('exec command simple', () async {
-      final res = await db.execute(''' SELECT 'TEST'  ''');    
+      final res = await db.execute(''' SELECT 'TEST'  ''');
       expect(res, [1]);
     });
 

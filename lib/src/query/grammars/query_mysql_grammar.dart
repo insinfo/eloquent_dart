@@ -6,9 +6,23 @@ class QueryMySqlGrammar extends QueryGrammar {
   /// MySQL/MariaDB predicate operators for `QueryBuilder2.whereSqlOperator`.
   @override
   Set<String> get predicateOperators => const {
-        '=', '<>', '!=', '<', '>', '<=', '>=', '<=>',
-        'like', 'not like', 'like binary', 'not like binary',
-        'rlike', 'not rlike', 'regexp', 'not regexp', 'sounds like',
+        '=',
+        '<>',
+        '!=',
+        '<',
+        '>',
+        '<=',
+        '>=',
+        '<=>',
+        'like',
+        'not like',
+        'like binary',
+        'not like binary',
+        'rlike',
+        'not rlike',
+        'regexp',
+        'not regexp',
+        'sounds like',
       };
 
   /// All of the available clause operators.

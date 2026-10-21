@@ -101,8 +101,8 @@ void main() {
         expect(result, isA<int>());
         expect(result, 123);
 
-        final nested = await db.transaction(
-            (ctx) => ctx.transaction((ctx2) async => 'interno'));
+        final nested = await db
+            .transaction((ctx) => ctx.transaction((ctx2) async => 'interno'));
         expect(nested, 'interno');
       });
 
@@ -121,8 +121,7 @@ void main() {
         expect(await ids(), [1, 3]);
       });
 
-      test('an error in the outer transaction rolls back everything',
-          () async {
+      test('an error in the outer transaction rolls back everything', () async {
         await expectLater(
           db.transaction((ctx) async {
             await ctx.table(_table).insert({'id': 1});
@@ -168,8 +167,8 @@ void main() {
         });
         expect(await ids(), [1]);
 
-        final level = await db.transactionIfNeeded(
-            (ctx) async => ctx.transactionLevel());
+        final level =
+            await db.transactionIfNeeded((ctx) async => ctx.transactionLevel());
         expect(level, 1);
       });
 

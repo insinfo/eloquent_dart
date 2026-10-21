@@ -49,7 +49,13 @@ const _names = [
 ];
 
 void main() {
-  for (final driver in ['postgres', 'postgres_v3', 'dargres', 'dpgsql', 'mysql']) {
+  for (final driver in [
+    'postgres',
+    'postgres_v3',
+    'dargres',
+    'dpgsql',
+    'mysql'
+  ]) {
     final isPg = driver != 'mysql';
     group(driver, () {
       late Manager manager;
@@ -66,8 +72,8 @@ void main() {
             'nome varchar(60), ano int, numero int, valor int, minimo int, '
             'maximo int, criado timestamp, '
             'uid ${isPg ? 'uuid' : 'char(36)'})');
-        await db.execute(
-            'CREATE TABLE $_other (ref int PRIMARY KEY, flag int)');
+        await db
+            .execute('CREATE TABLE $_other (ref int PRIMARY KEY, flag int)');
         await db.table(_table).insertMany([
           for (var i = 1; i <= _names.length; i++)
             {
@@ -125,8 +131,8 @@ void main() {
             [10]);
         expect(await ids(db.table(_table).whereSearch(['nome'], null)),
             [for (var i = 1; i <= 10; i++) i]);
-        expect(
-            await ids2(db.table2(_table).whereSearch(['nome'], 'silva')), [1, 7]);
+        expect(await ids2(db.table2(_table).whereSearch(['nome'], 'silva')),
+            [1, 7]);
         // Words in order, anything between ("Contido no nome").
         expect(
             await ids(db.table(_table).whereSearch(['nome'], 'ana paula',
@@ -138,12 +144,12 @@ void main() {
             isEmpty);
         // lower() on both sides finds the same rows as ilike / the collation.
         expect(
-            await ids(db.table(_table).whereSearch(['nome'], 'SILVA', lower: true)),
+            await ids(
+                db.table(_table).whereSearch(['nome'], 'SILVA', lower: true)),
             [1, 7]);
         expect(
-            await ids2(db
-                .table2(_table)
-                .whereSearch(['nome'], 'jose s', lower: true)),
+            await ids2(
+                db.table2(_table).whereSearch(['nome'], 'jose s', lower: true)),
             [2]);
       });
 
@@ -159,14 +165,17 @@ void main() {
                   .table(_table)
                   .whereSearch(['nome'], 'joao', unaccent: true)),
               [6]);
-          expect(await ids(db.table(_table).whereSearch(['nome'], 'jose')), [2]);
           expect(
-              await ids(db.table(_table).whereSearch(['nome'], 'JOSÉ',
-                  unaccent: true, lower: true)),
+              await ids(db.table(_table).whereSearch(['nome'], 'jose')), [2]);
+          expect(
+              await ids(db
+                  .table(_table)
+                  .whereSearch(['nome'], 'JOSÉ', unaccent: true, lower: true)),
               [1, 2]);
           // An expression index on lower(unaccent(...)) needs an IMMUTABLE
           // function: the wrapper the grammar can be told to use.
-          await db.execute('CREATE OR REPLACE FUNCTION eloquent_f_unaccent(text) '
+          await db.execute(
+              'CREATE OR REPLACE FUNCTION eloquent_f_unaccent(text) '
               "RETURNS text LANGUAGE sql IMMUTABLE AS \$\$ SELECT unaccent(\$1) \$\$");
           await db.execute('CREATE INDEX eloquent_search_feat_nome_idx ON '
               '$_table (lower(eloquent_f_unaccent(nome::text)) text_pattern_ops)');
@@ -182,8 +191,10 @@ void main() {
                 [3, 7]);
           } finally {
             grammar.unaccentFunction = previous;
-            await db.execute('DROP INDEX IF EXISTS eloquent_search_feat_nome_idx');
-            await db.execute('DROP FUNCTION IF EXISTS eloquent_f_unaccent(text)');
+            await db
+                .execute('DROP INDEX IF EXISTS eloquent_search_feat_nome_idx');
+            await db
+                .execute('DROP FUNCTION IF EXISTS eloquent_f_unaccent(text)');
           }
           expect(
               await ids(db.table(_table).whereSearch(['nome'], 'silva jose',
@@ -203,7 +214,10 @@ void main() {
       }
 
       test('orderByInput', () async {
-        final allowed = {'nome': 'nome', 'chave': ['ano', 'numero']};
+        final allowed = {
+          'nome': 'nome',
+          'chave': ['ano', 'numero']
+        };
         final byName = await db
             .table(_table)
             .orderByInput('nome', 'DESC', allowed: allowed)
@@ -239,7 +253,10 @@ void main() {
             ])),
             [1, 2]);
         expect(
-            await ids(db.table(_table).whereNotInTuple(['ano', 'numero'], [
+            await ids(db.table(_table).whereNotInTuple([
+              'ano',
+              'numero'
+            ], [
               [2024, 1]
             ])),
             [2, 3, 4, 5, 6, 7, 8, 9, 10]);
@@ -251,7 +268,10 @@ void main() {
                 .whereRowValues(['ano', 'numero'], '>=', [2025, 5])),
             [5, 8]);
         expect(
-            await ids2(db.table2(_table).whereInTuple(['ano', 'numero'], [
+            await ids2(db.table2(_table).whereInTuple([
+              'ano',
+              'numero'
+            ], [
               [2023, 3]
             ])),
             [3]);
@@ -272,15 +292,18 @@ void main() {
                 .whereNotAnyArray('id', [1, 2])),
             [3, 4]);
         expect(
-            await ids(db.table(_table).whereAnyArray('uid', [
-              '00000000-0000-0000-0000-000000000003',
-              '00000000-0000-0000-0000-000000000005',
-            ], elementType: isPg ? 'uuid' : null)),
+            await ids(db.table(_table).whereAnyArray(
+                'uid',
+                [
+                  '00000000-0000-0000-0000-000000000003',
+                  '00000000-0000-0000-0000-000000000005',
+                ],
+                elementType: isPg ? 'uuid' : null)),
             [3, 5]);
         // One statement for any number of values.
         final many = [for (var i = 1; i <= 3000; i++) i];
-        expect((await ids(db.table(_table).whereAnyArray('id', many))).length,
-            10);
+        expect(
+            (await ids(db.table(_table).whereAnyArray('id', many))).length, 10);
         expect(await ids2(db.table2(_table).whereAnyArray('id', [7])), [7]);
       });
 
@@ -331,8 +354,9 @@ void main() {
             .table(_table)
             .where('id', '<', 3)
             .orderBy('id')
-            .afterQuery((rows) =>
-                [for (final row in rows) {...row, 'rotulo': 'n${row['id']}'}])
+            .afterQuery((rows) => [
+                  for (final row in rows) {...row, 'rotulo': 'n${row['id']}'}
+                ])
             .get(['id']);
         expect(rows.map((r) => r['rotulo']), ['n1', 'n2']);
         expect(
@@ -360,11 +384,8 @@ void main() {
             .orderByDesc('ano')
             .orderBy('criado')
             .orderBy('id')
-            .cursorPaginate(perPage: 3, cursor: cursor, columns: [
-              'id',
-              'ano',
-              'criado'
-            ]);
+            .cursorPaginate(
+                perPage: 3, cursor: cursor, columns: ['id', 'ano', 'criado']);
 
         final expected = (await db
                 .table(_table)
@@ -416,8 +437,8 @@ void main() {
         expect(window.total(), classic.total());
         expect(window.total(), 8);
         expect(window.items(), classic.items());
-        expect(window.items().first.containsKey('eloquent_window_total'),
-            isFalse);
+        expect(
+            window.items().first.containsKey('eloquent_window_total'), isFalse);
         final past =
             await query.clone().paginateWithWindowCount(perPage: 3, page: 9);
         expect(past.total(), 8);
@@ -432,15 +453,13 @@ void main() {
       });
 
       test('QueryBuilder2 parity', () async {
-        expect(
-            await ids2(db.table2(_table).whereAny(['numero', 'valor'], 30)),
+        expect(await ids2(db.table2(_table).whereAny(['numero', 'valor'], 30)),
             [3]);
-        expect(
-            await ids2(db.table2(_table).whereDate('criado', '2026-01-02')),
+        expect(await ids2(db.table2(_table).whereDate('criado', '2026-01-02')),
             [1, 5, 9]);
         expect(
-            await ids2(db.table2(_table).whereYear('criado', 2026)).then(
-                (list) => list.length),
+            await ids2(db.table2(_table).whereYear('criado', 2026))
+                .then((list) => list.length),
             10);
         expect(await db.table2(_table).where('id', 999).exists(), isFalse);
         await expectLater(db.table2(_table).where('id', 999).firstOrFail(),
@@ -454,7 +473,8 @@ void main() {
         final inserted = await db.table2(_other).insertUsing(
             ['ref', 'flag'],
             db.table2(_table).selectRaw('id + 100').selectRaw('2').where(
-                'id', 1, operator: ComparisonOperator.lessThanOrEqualTo));
+                'id', 1,
+                operator: ComparisonOperator.lessThanOrEqualTo));
         expect(inserted, 1);
         expect(await db.table2(_other).where('flag', 2).count(), 1);
         if (isPg) {

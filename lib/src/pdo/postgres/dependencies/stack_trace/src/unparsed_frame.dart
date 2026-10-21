@@ -1,4 +1,3 @@
-
 import 'frame.dart';
 
 /// A frame that failed to parse.

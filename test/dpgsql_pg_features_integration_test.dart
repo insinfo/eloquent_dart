@@ -44,13 +44,18 @@ void main() {
       )
     ''');
 
-    Future<void> ins(int uid, String tags, String meta, String body, String at) =>
-        db.execute("INSERT INTO perf_pgfeat (user_id, tags, meta, body, created_at) "
+    Future<void> ins(
+            int uid, String tags, String meta, String body, String at) =>
+        db.execute(
+            "INSERT INTO perf_pgfeat (user_id, tags, meta, body, created_at) "
             "VALUES ($uid, '$tags'::jsonb, '$meta'::jsonb, '$body', '$at')");
 
-    await ins(1, '["urgent","new"]', '{"name":"ada"}', 'the quick brown fox', '2026-01-01 10:00:00');
-    await ins(1, '["urgent"]', '{"name":"ada"}', 'lazy dogs sleeping', '2026-01-02 10:00:00');
-    await ins(2, '["new"]', '{"name":"bob"}', 'a clever fox and hound', '2026-01-03 10:00:00');
+    await ins(1, '["urgent","new"]', '{"name":"ada"}', 'the quick brown fox',
+        '2026-01-01 10:00:00');
+    await ins(1, '["urgent"]', '{"name":"ada"}', 'lazy dogs sleeping',
+        '2026-01-02 10:00:00');
+    await ins(2, '["new"]', '{"name":"bob"}', 'a clever fox and hound',
+        '2026-01-03 10:00:00');
   });
 
   tearDown(() async {
@@ -70,16 +75,13 @@ void main() {
   test('whereJsonContains scalar in nested path', () async {
     final count = await db
         .table('perf_pgfeat')
-        .whereJsonContains('meta', {'name': 'ada'})
-        .count();
+        .whereJsonContains('meta', {'name': 'ada'}).count();
     expect(count, equals(2));
   });
 
   test('whereJsonLength filters by array length', () async {
-    final rows = await db
-        .table('perf_pgfeat')
-        .whereJsonLength('tags', '>', 1)
-        .get();
+    final rows =
+        await db.table('perf_pgfeat').whereJsonLength('tags', '>', 1).get();
     expect(rows.length, equals(1));
     expect(rows.first['id'], equals(1));
   });
@@ -94,17 +96,15 @@ void main() {
   });
 
   test('JSON -> access in where', () async {
-    final count = await db
-        .table('perf_pgfeat')
-        .where('meta->name', '=', 'bob')
-        .count();
+    final count =
+        await db.table('perf_pgfeat').where('meta->name', '=', 'bob').count();
     expect(count, equals(1));
   });
 
   test('array operators @> / <@ / && on a text[] column', () async {
     await db.execute('DROP TABLE IF EXISTS perf_arr');
-    await db.execute(
-        'CREATE TABLE perf_arr (id serial primary key, tags text[])');
+    await db
+        .execute('CREATE TABLE perf_arr (id serial primary key, tags text[])');
     await db.execute("INSERT INTO perf_arr (tags) VALUES "
         "(ARRAY['a','b']), (ARRAY['b','c']), (ARRAY['x'])");
 

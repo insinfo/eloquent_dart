@@ -28,9 +28,11 @@ List<Object?> uniformList(
 List<Object?> _typed(List<Object?> elements) {
   final values = elements.where((e) => e != null);
   if (values.isEmpty) return elements;
-  if (values.every((e) => e is String)) return List<String?>.of(elements.cast());
+  if (values.every((e) => e is String))
+    return List<String?>.of(elements.cast());
   if (values.every((e) => e is int)) return List<int?>.of(elements.cast());
-  if (values.every((e) => e is double)) return List<double?>.of(elements.cast());
+  if (values.every((e) => e is double))
+    return List<double?>.of(elements.cast());
   if (values.every((e) => e is bool)) return List<bool?>.of(elements.cast());
   if (values.every((e) => e is DateTime)) {
     return List<DateTime?>.of(elements.cast());

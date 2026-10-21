@@ -29,7 +29,13 @@ Map<String, dynamic> _config(String driver) => driver == 'mysql'
       };
 
 void main() {
-  for (final driver in ['postgres', 'postgres_v3', 'dargres', 'dpgsql', 'mysql']) {
+  for (final driver in [
+    'postgres',
+    'postgres_v3',
+    'dargres',
+    'dpgsql',
+    'mysql'
+  ]) {
     group(driver, () {
       late Manager manager;
       late Connection db;
@@ -43,8 +49,8 @@ void main() {
         }
         await db.execute('CREATE TABLE qb2w_item (id int PRIMARY KEY, '
             'grupo varchar(5), n int)');
-        await db.execute(
-            'CREATE TABLE qb2w_seq (ano int PRIMARY KEY, ultimo int)');
+        await db
+            .execute('CREATE TABLE qb2w_seq (ano int PRIMARY KEY, ultimo int)');
         await db.execute(
             'CREATE TABLE qb2w_setor (id int PRIMARY KEY, pai_id int null)');
         await db.table2('qb2w_item').insertMany([
@@ -95,17 +101,19 @@ void main() {
                 onConflict: const OnConflict.doNothing(columns: ['id'])),
             0);
         expect(
-            await db
-                .table2('qb2w_item')
-                .insertOrIgnore([
-                  {'id': 2, 'grupo': 'z', 'n': 0},
-                  {'id': 30, 'grupo': 'c', 'n': 30},
-                ]),
+            await db.table2('qb2w_item').insertOrIgnore([
+              {'id': 2, 'grupo': 'z', 'n': 0},
+              {'id': 30, 'grupo': 'c', 'n': 30},
+            ]),
             1);
         await db.table2('qb2w_item').upsert([
           {'id': 3, 'grupo': 'z', 'n': 300},
           {'id': 31, 'grupo': 'c', 'n': 31},
-        ], uniqueBy: ['id'], update: ['n']);
+        ], uniqueBy: [
+          'id'
+        ], update: [
+          'n'
+        ]);
         final row3 = (await db.table2('qb2w_item').where('id', 3).first())!;
         expect(row3['n'], 300);
         expect(row3['grupo'], 'a', reason: 'only n is updated');
@@ -123,9 +131,11 @@ void main() {
           if (mysql) {
             await db.table2('qb2w_seq').insert({'ano': 2026, 'ultimo': 1},
                 onConflict: OnConflict.doUpdate(
-                    columns: ['ano'],
-                    set: {'ultimo': db.raw('ultimo + 1')}));
-            return (await db.table2('qb2w_seq').where('ano', 2026).value<int>('ultimo'))!;
+                    columns: ['ano'], set: {'ultimo': db.raw('ultimo + 1')}));
+            return (await db
+                .table2('qb2w_seq')
+                .where('ano', 2026)
+                .value<int>('ultimo'))!;
           }
           final rows = await db.table2('qb2w_seq').insertReturning(
               {'ano': 2026, 'ultimo': 1},
@@ -142,7 +152,10 @@ void main() {
       test('updateReturning and deleteReturning', () async {
         if (mysql) {
           expect(
-              () => db.table2('qb2w_item').where('id', 1).updateReturning({'n': 0}),
+              () => db
+                  .table2('qb2w_item')
+                  .where('id', 1)
+                  .updateReturning({'n': 0}),
               throwsUnsupportedError);
           return;
         }
@@ -167,7 +180,11 @@ void main() {
             .table2('qb2w_item')
             .select(['id'])
             .where('id', 1)
-            .unionAll(db.table2('qb2w_item').select(['id']).orderByDescending('id').limit(2))
+            .unionAll(db
+                .table2('qb2w_item')
+                .select(['id'])
+                .orderByDescending('id')
+                .limit(2))
             .orderBy('id')
             .pluck<int>('id');
         expect(ids, [1, 22, 23]);
@@ -190,14 +207,9 @@ void main() {
             .table2('arvore')
             .withRecursiveExpression(
                 'arvore',
-                db
-                    .table2('qb2w_setor')
-                    .select(['id'])
-                    .where('id', 1)
-                    .unionAll(db
-                        .table2('qb2w_setor as s')
-                        .select(['s.id'])
-                        .join('arvore as a', 'a.id', 's.pai_id')),
+                db.table2('qb2w_setor').select(['id']).where('id', 1).unionAll(
+                    db.table2('qb2w_setor as s').select(['s.id']).join(
+                        'arvore as a', 'a.id', 's.pai_id')),
                 columns: ['id'])
             .orderBy('id')
             .pluck<int>('id');

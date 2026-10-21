@@ -288,6 +288,7 @@ abstract class SchemaGrammar extends BaseGrammar {
   //  compileTableExists, compileColumnExists, Doctrine stubs... como antes)
 
   @protected
+
   /// `create [temporary] table t (column definitions)`. It returned `''`, so
   /// `schema.create()` on MySQL (which builds on it) ran an empty query.
   String compileCreateTable(

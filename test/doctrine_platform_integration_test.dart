@@ -40,7 +40,8 @@ Schema _expected({required bool postgres}) {
   cliente.addColumn('email', 'string',
       options: {'length': 120, 'nullable': true, 'comment': 'contato'});
   cliente.setPrimaryKey(['id']);
-  cliente.addUniqueIndex(columns: ['email'], name: '${_prefix}cliente_email_uniq');
+  cliente
+      .addUniqueIndex(columns: ['email'], name: '${_prefix}cliente_email_uniq');
   cliente.addOption('comment', 'clientes');
 
   final pedido = schema.createTable('${_prefix}pedido');
@@ -111,7 +112,8 @@ void main() {
 
       test('create, introspect, recreate: no differences', () async {
         final platform = db.getDatabasePlatform();
-        expect(platform, postgres ? isA<PostgreSQLPlatform>() : isA<MySQLPlatform>());
+        expect(platform,
+            postgres ? isA<PostgreSQLPlatform>() : isA<MySQLPlatform>());
 
         for (final sql in _expected(postgres: postgres).toSql(platform)) {
           await db.execute(sql);
@@ -126,7 +128,11 @@ void main() {
         expect(cliente.getColumn('email').comment, 'contato');
         expect(cliente.getComment(), 'clientes');
         expect(
-            cliente.getIndexes().where((i) => i.isUnique && !i.isPrimary).single.getColumns(),
+            cliente
+                .getIndexes()
+                .where((i) => i.isUnique && !i.isPrimary)
+                .single
+                .getColumns(),
             ['email']);
 
         final pedido = a.getTable('${_prefix}pedido');
@@ -148,7 +154,10 @@ void main() {
         for (final sql in a.toDropSql(platform)) {
           await db.execute(sql);
         }
-        expect(await db.getDoctrineSchemaManager().tablesExist(['${_prefix}pedido']),
+        expect(
+            await db
+                .getDoctrineSchemaManager()
+                .tablesExist(['${_prefix}pedido']),
             isFalse);
         for (final sql in a.toSql(platform)) {
           await db.execute(sql);
@@ -160,7 +169,8 @@ void main() {
             reason: platform.getAlterSchemaSQL(diff).join('\n'));
       });
 
-      test('compareSchemas + getAlterSchemaSQL migrate a live schema', () async {
+      test('compareSchemas + getAlterSchemaSQL migrate a live schema',
+          () async {
         final platform = db.getDatabasePlatform();
         for (final sql in _expected(postgres: postgres).toSql(platform)) {
           await db.execute(sql);
@@ -176,7 +186,8 @@ void main() {
         }
 
         final after = await _introspect(db);
-        expect(after.getTable('${_prefix}pedido').hasColumn('observacao'), isTrue);
+        expect(
+            after.getTable('${_prefix}pedido').hasColumn('observacao'), isTrue);
         expect(Comparator().compareSchemas(wanted, after).isEmpty(), isTrue,
             reason: platform
                 .getAlterSchemaSQL(Comparator().compareSchemas(wanted, after))

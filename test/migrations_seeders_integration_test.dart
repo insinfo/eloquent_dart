@@ -80,10 +80,12 @@ class WidgetsSeeder extends Seeder {
   @override
   Future<void> run() async {
     final conn = await db!.connection(connectionName);
-    await conn.table('perf_widgets').insert(
-        {'name': 'alpha', 'qty': 1, 'active': true});
-    await conn.table('perf_widgets').insert(
-        {'name': 'beta', 'qty': 2, 'active': false});
+    await conn
+        .table('perf_widgets')
+        .insert({'name': 'alpha', 'qty': 1, 'active': true});
+    await conn
+        .table('perf_widgets')
+        .insert({'name': 'beta', 'qty': 2, 'active': false});
   }
 }
 
@@ -158,8 +160,8 @@ void main() {
     final count = await db.table('perf_widgets').count();
     expect(count, equals(2));
 
-    final active = await db.table('perf_widgets')
-        .where('active', '=', true).count();
+    final active =
+        await db.table('perf_widgets').where('active', '=', true).count();
     expect(active, equals(1));
   });
 

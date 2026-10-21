@@ -860,7 +860,8 @@ class QueryGrammar extends BaseGrammar {
   /// `column = any(?)` with one array parameter. Only grammars with
   /// [supportsArrayBindings] produce this clause.
   String whereAnyArray(QueryBuilder query, Map<String, dynamic> where) {
-    throw UnsupportedError('Array parameters are not supported by this grammar.');
+    throw UnsupportedError(
+        'Array parameters are not supported by this grammar.');
   }
 
   /// `column [not] between first and second`, both bounds columns.
@@ -1127,8 +1128,7 @@ class QueryGrammar extends BaseGrammar {
     final table = this.wrapTable(query.fromProp);
     final columns = rows.first.keys.toList();
     final columnsSql = this.columnize(columns);
-    final singleRow =
-        '(${List.filled(columns.length, '?').join(', ')})';
+    final singleRow = '(${List.filled(columns.length, '?').join(', ')})';
     final allRows = List.filled(rows.length, singleRow).join(', ');
     return 'insert into $table ($columnsSql) values $allRows';
   }
@@ -1165,8 +1165,8 @@ class QueryGrammar extends BaseGrammar {
       }
     } else {
       for (final entry in update.entries) {
-        setParts.add(
-            '${this.wrap(entry.key)} = ${this.parameter(entry.value)}');
+        setParts
+            .add('${this.wrap(entry.key)} = ${this.parameter(entry.value)}');
       }
     }
 
@@ -1203,8 +1203,7 @@ class QueryGrammar extends BaseGrammar {
 
     final setParts = <String>[];
     for (final entry in conflict.updateValues!.entries) {
-      setParts
-          .add('${this.wrap(entry.key)} = ${this.parameter(entry.value)}');
+      setParts.add('${this.wrap(entry.key)} = ${this.parameter(entry.value)}');
     }
     buffer.write(' do update set ${setParts.join(', ')}');
     if (conflict.updateWhereRaw != null) {

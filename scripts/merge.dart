@@ -52,7 +52,7 @@ Future<void> mergeFiles(List<String> directories, String outputFile,
 
 void main() async {
   List<String> directories = [
-    r'C:\MyDartProjects\eloquent\lib',  
+    r'C:\MyDartProjects\eloquent\lib',
   ];
 
   String outputFile =

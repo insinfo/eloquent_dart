@@ -54,8 +54,7 @@ abstract class AbstractSchemaManager {
       for (final name in await listTableNames()) await listTableDetails(name),
     ];
     final sequences = <Sequence>[
-      for (final name in await listSequences())
-        await listSequenceDetails(name),
+      for (final name in await listSequences()) await listSequenceDetails(name),
     ];
     return Schema(
       tables: tables,
@@ -101,7 +100,6 @@ abstract class AbstractSchemaManager {
   /// A subclasse deve implementar a query SQL específica e chamar
   /// `parsePortableSequenceDefinition`.
   Future<Sequence> listSequenceDetails(String sequenceName);
-
 
   // --- Métodos auxiliares para parsear resultados do DB (existentes e NOVOS) ---
 

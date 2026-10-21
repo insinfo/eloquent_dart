@@ -83,21 +83,19 @@ abstract class PDOTransactionContext extends PDOExecutionContext {
 
   @override
   Future<void> createSavepoint(String name, [int? timeoutInSeconds]) async {
-    await execute(
-        'SAVEPOINT ${_checkedSavepointName(name)}', timeoutInSeconds);
+    await execute('SAVEPOINT ${_checkedSavepointName(name)}', timeoutInSeconds);
   }
 
   @override
-  Future<void> rollbackToSavepoint(String name,
-      [int? timeoutInSeconds]) async {
+  Future<void> rollbackToSavepoint(String name, [int? timeoutInSeconds]) async {
     await execute('ROLLBACK TO SAVEPOINT ${_checkedSavepointName(name)}',
         timeoutInSeconds);
   }
 
   @override
   Future<void> releaseSavepoint(String name, [int? timeoutInSeconds]) async {
-    await execute('RELEASE SAVEPOINT ${_checkedSavepointName(name)}',
-        timeoutInSeconds);
+    await execute(
+        'RELEASE SAVEPOINT ${_checkedSavepointName(name)}', timeoutInSeconds);
   }
 }
 

@@ -32,7 +32,13 @@ Map<String, dynamic> _config(String driver) => driver == 'mysql'
 const _table = 'eloquent_l12_port';
 
 void main() {
-  for (final driver in ['postgres', 'postgres_v3', 'dargres', 'dpgsql', 'mysql']) {
+  for (final driver in [
+    'postgres',
+    'postgres_v3',
+    'dargres',
+    'dpgsql',
+    'mysql'
+  ]) {
     group(driver, () {
       late Manager manager;
       late Connection db;
@@ -75,9 +81,8 @@ void main() {
         await expectLater(db.select('select * from tabela_inexistente_l12'),
             throwsA(anything));
 
-        expect(events.map((e) => e.sql).toList(), [
-          for (final e in events) e.sql
-        ]);
+        expect(
+            events.map((e) => e.sql).toList(), [for (final e in events) e.sql]);
         expect(events.where((e) => e.sql.contains('update')), hasLength(1),
             reason: 'statements run through the transaction ctx are reported');
         expect(events.last.failed, isTrue);
@@ -113,8 +118,7 @@ void main() {
         expect(
             await db
                 .table(_table)
-                .whereAny(['nome', 'grupo'], 'like', 'Ana 2%')
-                .count(),
+                .whereAny(['nome', 'grupo'], 'like', 'Ana 2%').count(),
             4); // Ana 2, Ana 20, Ana 22, Ana 24
       });
 
@@ -137,8 +141,10 @@ void main() {
         });
         expect(pages, 3);
 
-        final names = await db.table(_table).orderBy('id').chunkMap(
-            (r) => (r['nome'] as String).split(' ').first, 10);
+        final names = await db
+            .table(_table)
+            .orderBy('id')
+            .chunkMap((r) => (r['nome'] as String).split(' ').first, 10);
         expect(names.toSet(), {'Ana', 'JOÃO'});
       });
 
@@ -151,10 +157,7 @@ void main() {
       });
 
       test('incrementEach, sole, having variants and subqueries', () async {
-        await db
-            .table(_table)
-            .where('id', 1)
-            .incrementEach({'n': 10, 'm': 2});
+        await db.table(_table).where('id', 1).incrementEach({'n': 10, 'm': 2});
         final row = await db.table(_table).where('id', 1).sole(['n', 'm']);
         expect(row['n'], 11);
         expect(row['m'], 2);
@@ -178,9 +181,10 @@ void main() {
             .addSelect({
               'maior': db.table('$_table as x').selectRaw('max(x.n)'),
             })
-            .orderByDesc((QueryBuilder q) =>
-                q.from('$_table as y').selectRaw('max(y.n)').whereColumn(
-                    'y.id', '$_table.id'))
+            .orderByDesc((QueryBuilder q) => q
+                .from('$_table as y')
+                .selectRaw('max(y.n)')
+                .whereColumn('y.id', '$_table.id'))
             .first();
         expect(top!['id'], 25);
         expect((top['maior'] as num).toInt(), 25);

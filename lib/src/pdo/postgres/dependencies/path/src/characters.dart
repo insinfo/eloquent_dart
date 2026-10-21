@@ -1,5 +1,3 @@
-
-
 /// This library contains character-code definitions.
 const plus = 0x2b;
 const minus = 0x2d;

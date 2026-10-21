@@ -69,11 +69,10 @@ void main() {
         lost(_SqlStateError('23505',
             'duplicate key value violates unique constraint: (cep)=(08001-000)')),
         isFalse);
+    expect(lost(_MySqlError(1292, "Incorrect datetime value: '2013-02-30'")),
+        isFalse);
     expect(
-        lost(_MySqlError(1292, "Incorrect datetime value: '2013-02-30'")),
-        isFalse);
-    expect(lost(_SqlStateError('42601', 'syntax error at or near "57"')),
-        isFalse);
+        lost(_SqlStateError('42601', 'syntax error at or near "57"')), isFalse);
     expect(lost(StateError('Bad state: no element')), isFalse);
     expect(lost(TimeoutExceptionLike()), isFalse);
   });

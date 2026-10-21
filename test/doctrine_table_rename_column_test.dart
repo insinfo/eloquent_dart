@@ -2,8 +2,7 @@ import 'package:eloquent/eloquent.dart';
 import 'package:test/test.dart';
 
 void main() {
-  test('renameColumn updates indexes, unique constraints and foreign keys',
-      () {
+  test('renameColumn updates indexes, unique constraints and foreign keys', () {
     final table = Table('pedido');
     table.addColumn('id', 'integer');
     table.addColumn('cliente_id', 'integer');

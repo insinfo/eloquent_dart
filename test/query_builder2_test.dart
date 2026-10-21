@@ -10,8 +10,7 @@ void main() {
       () => QueryBuilder(connection, QueryPostgresGrammar(), Processor()),
       table);
   QueryBuilder2 mysql([String table = 'usuarios']) => QueryBuilder2.using(
-      () => QueryBuilder(connection, QueryMySqlGrammar(), Processor()),
-      table);
+      () => QueryBuilder(connection, QueryMySqlGrammar(), Processor()), table);
 
   group('where', () {
     test('the documented example', () {
@@ -21,9 +20,8 @@ void main() {
           .where('idade', 18, operator: ComparisonOperator.greaterThanOrEqualTo)
           .whereIn('perfil', ['administrador', 'operador'])
           .whereNull('excluido_em')
-          .whereGroup((w) => w
-              .where('cidade', 'Rio das Ostras')
-              .orWhere('cidade', 'Macaé'))
+          .whereGroup((w) =>
+              w.where('cidade', 'Rio das Ostras').orWhere('cidade', 'Macaé'))
           .orderBy('nome')
           .limit(50);
       expect(
@@ -70,20 +68,18 @@ void main() {
               .where('x', null, operator: ComparisonOperator.notEqualTo)
               .toSql(),
           endsWith('where "x" is not null'));
-      expect(
-          pg().whereNotEqualTo('x', null).orWhereNull('y').toSql(),
+      expect(pg().whereNotEqualTo('x', null).orWhereNull('y').toSql(),
           endsWith('where "x" is not null or "y" is null'));
       expect(
-          () => pg()
-              .where('x', null, operator: ComparisonOperator.greaterThan),
+          () => pg().where('x', null, operator: ComparisonOperator.greaterThan),
           throwsArgumentError);
     });
 
     test('subqueries, callbacks and raw SQL are not values', () {
       expect(() => pg().where('x', pg('y')), throwsArgumentError);
       expect(() => pg().where('x', () => 1), throwsArgumentError);
-      expect(() => pg().where('x', QueryExpression('now()')),
-          throwsArgumentError);
+      expect(
+          () => pg().where('x', QueryExpression('now()')), throwsArgumentError);
       expect(() => pg().where(' ', 1), throwsArgumentError);
     });
 
@@ -101,7 +97,8 @@ void main() {
       expect(pg().whereIn('id', {1, 2}).getBindings(), [1, 2]);
       expect(() => pg().whereIn('id', [1, null]), throwsArgumentError);
 
-      final between = pg().whereBetween('idade', 18, 65).orWhereNotBetween('n', 1, 2);
+      final between =
+          pg().whereBetween('idade', 18, 65).orWhereNotBetween('n', 1, 2);
       expect(between.toSql(),
           endsWith('where "idade" between ? and ? or "n" not between ? and ?'));
       expect(between.getBindings(), [18, 65, 1, 2]);
@@ -117,9 +114,8 @@ void main() {
     test('groups', () {
       final q = pg()
           .where('ativo', true)
-          .whereGroup((w) => w
-              .where('perfil', 'administrador')
-              .orWhereGroup((inner) => inner
+          .whereGroup((w) => w.where('perfil', 'administrador').orWhereGroup(
+              (inner) => inner
                   .where('perfil', 'supervisor')
                   .whereNotNull('assinado_em')))
           .orWhereNotGroup((w) => w.where('bloqueado', true))
@@ -134,7 +130,8 @@ void main() {
     test('exists and in subquery; subqueries are copied when added', () {
       final pedidos = pg('pedidos').select(['cliente_id']).where('pago', true);
       final q = pg('clientes')
-          .whereExists(pg('pedidos').whereColumn('pedidos.cliente_id', 'clientes.id'))
+          .whereExists(
+              pg('pedidos').whereColumn('pedidos.cliente_id', 'clientes.id'))
           .whereNotInSubquery('id', pedidos);
       pedidos.where('cancelado', false); // later change: not in q
       expect(
@@ -159,15 +156,17 @@ void main() {
       // operators are PostgreSQL only.
       expect(() => pg().whereSqlOperator('a', '-', 1).toSql(),
           throwsArgumentError);
-      expect(() => pg().whereSqlOperator('dados', '?', 'k').toSql(),
-          throwsA(isA<ArgumentError>().having(
-              (e) => e.message, 'message', contains('jsonb_exists'))));
+      expect(
+          () => pg().whereSqlOperator('dados', '?', 'k').toSql(),
+          throwsA(isA<ArgumentError>()
+              .having((e) => e.message, 'message', contains('jsonb_exists'))));
       expect(() => mysql().whereSqlOperator('a', '~', 'x').toSql(),
           throwsArgumentError);
     });
 
     test('whereRaw', () {
-      final q = pg().whereRaw('jsonb_exists(dados, ?)', ['telefone']).orWhereRaw('1 = 1');
+      final q = pg()
+          .whereRaw('jsonb_exists(dados, ?)', ['telefone']).orWhereRaw('1 = 1');
       expect(q.toSql(), endsWith('where jsonb_exists(dados, ?) or 1 = 1'));
       expect(q.getBindings(), ['telefone']);
     });
@@ -180,7 +179,9 @@ void main() {
           .addSelect(['p.total as valor'])
           .selectRaw('coalesce(p.desconto, ?) as desconto', [0])
           .selectSubquery(
-              pg('itens').selectRaw('count(*)').whereColumn('itens.pedido_id', 'p.id'),
+              pg('itens')
+                  .selectRaw('count(*)')
+                  .whereColumn('itens.pedido_id', 'p.id'),
               'qtd')
           .distinct();
       expect(
@@ -190,8 +191,9 @@ void main() {
           'where "itens"."pedido_id" = "p"."id") as "qtd" from "pedidos" as "p"');
       expect(q.getBindings(), [0]);
 
-      final sub = pg().fromSubquery(pg('vendas').where('ano', 2026), 'v').where('v.total', 10,
-          operator: ComparisonOperator.greaterThan);
+      final sub = pg()
+          .fromSubquery(pg('vendas').where('ano', 2026), 'v')
+          .where('v.total', 10, operator: ComparisonOperator.greaterThan);
       expect(sub.toSql(),
           'select * from (select * from "vendas" where "ano" = ?) as "v" where "v"."total" > ?');
       expect(sub.getBindings(), [2026, 10]);
@@ -270,7 +272,8 @@ void main() {
     });
 
     test('MySQL dialect', () {
-      final q = mysql().where('a', 1).orderByDescending('b').limit(5).sharedLock();
+      final q =
+          mysql().where('a', 1).orderByDescending('b').limit(5).sharedLock();
       expect(q.toSql(),
           'select * from `usuarios` where `a` = ? order by `b` desc limit 5 lock in share mode');
     });

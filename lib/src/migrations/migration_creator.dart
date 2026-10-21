@@ -95,7 +95,6 @@ class CreateClassName extends Migration {
 }
 ''';
 
-
   /// Create a new migration creator instance.
   MigrationCreator(); // Filesystem operations are static in dart:io
 
@@ -107,7 +106,8 @@ class CreateClassName extends Migration {
   /// [create] Whether the migration creates the table (true) or modifies it (false). Ignored if [table] is null.
   /// Returns the full path to the created migration file.
   /// Throws [FileSystemException] on file system errors.
-  Future<String> create(String name, String path, {String? table, bool create = false}) async {
+  Future<String> create(String name, String path,
+      {String? table, bool create = false}) async {
     // Ensure the directory exists
     await _ensureDirectoryExists(path);
 

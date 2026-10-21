@@ -266,9 +266,8 @@ abstract final class PgBinaryText {
     final exponent = int.parse(exponential.substring(e + 1));
     final sign = value < 0 ? '-' : '';
     if (exponent < -4 || exponent >= 15) {
-      final mantissa = digits.length == 1
-          ? digits
-          : '${digits[0]}.${digits.substring(1)}';
+      final mantissa =
+          digits.length == 1 ? digits : '${digits[0]}.${digits.substring(1)}';
       final expSign = exponent < 0 ? '-' : '+';
       return '$sign${mantissa}e$expSign${_two(exponent.abs())}';
     }
@@ -492,7 +491,8 @@ abstract final class PgBinaryText {
     String bound(bool infinite) {
       if (infinite) return '';
       final length = data.getInt32(offset);
-      final value = Uint8List.sublistView(bytes, offset + 4, offset + 4 + length);
+      final value =
+          Uint8List.sublistView(bytes, offset + 4, offset + 4 + length);
       offset += 4 + length;
       return _quoteRangeBound(scalar(elementOid, value)!);
     }
@@ -584,7 +584,8 @@ class _BinaryArray {
     var index = 0;
     List<Object?> level(int dimension) => dimension == sizes.length - 1
         ? <E>[
-            for (var i = 0; i < sizes[dimension]; i++) decode(elements[index++]),
+            for (var i = 0; i < sizes[dimension]; i++)
+              decode(elements[index++]),
           ]
         : <Object?>[
             for (var i = 0; i < sizes[dimension]; i++) level(dimension + 1),

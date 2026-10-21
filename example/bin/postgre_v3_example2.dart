@@ -6,7 +6,7 @@ void main(List<String> args) async {
     final stopwatch = new Stopwatch()..start();
     final db = await getConn();
     final res = await db.table('test_table').select(['name']).limit(1).get();
-     db.disconnect();
+    db.disconnect();
     print('executed in ${stopwatch.elapsed.inMilliseconds}ms');
     print('res $res');
     //await Future.delayed(Duration(milliseconds: 1000));

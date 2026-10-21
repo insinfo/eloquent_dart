@@ -26,8 +26,8 @@ class Processor {
       QueryBuilder query, String sql, List values,
       [String sequence = 'id']) async {
     final resp = await query.getConnection().insert(sql, values);
-    final id = resp.isNotEmpty ? resp.first[sequence] : null;   
-    return id;    
+    final id = resp.isNotEmpty ? resp.first[sequence] : null;
+    return id;
   }
 
   ///

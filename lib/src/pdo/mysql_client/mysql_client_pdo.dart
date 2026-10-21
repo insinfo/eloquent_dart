@@ -130,8 +130,8 @@ class MySqlClientPDO extends PDOInterface {
             options.flag('allowPublicKeyRetrieval') ?? false,
         serverPublicKey: options.text('serverPublicKey'),
         timeoutMs: options.integer('timeoutMs') ?? 10000,
-        idleTestThreshold: options.duration('idleTestThreshold') ??
-            const Duration(minutes: 1),
+        idleTestThreshold:
+            options.duration('idleTestThreshold') ?? const Duration(minutes: 1),
         maxConnectionAge:
             options.duration('maxConnectionAge') ?? const Duration(hours: 12),
         maxSessionUse:
@@ -208,7 +208,8 @@ class MySqlClientPDO extends PDOInterface {
   }
 
   /// Executa uma instrução SQL e retornar o número de linhas afetadas
-  Future<int> _executeUnlocked(String statement, [int? timeoutInSeconds]) async {
+  Future<int> _executeUnlocked(String statement,
+      [int? timeoutInSeconds]) async {
     if (connection is MySQLConnectionPool) {
       final result = await (connection as MySQLConnectionPool)
           .execute(statement)

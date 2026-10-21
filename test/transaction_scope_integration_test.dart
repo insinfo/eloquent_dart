@@ -108,27 +108,23 @@ void main() {
       });
 
       test('an error rolls back the work done through db', () async {
-        await expectLater(
-            db.transactionScope((ctx) async {
-              await repository.insert(1);
-              await db.select('select 1 as x');
-              await db.table(_table).where('id', 1).update({'status': 'x'});
-              throw StateError('falhou');
-            }),
-            throwsStateError);
+        await expectLater(db.transactionScope((ctx) async {
+          await repository.insert(1);
+          await db.select('select 1 as x');
+          await db.table(_table).where('id', 1).update({'status': 'x'});
+          throw StateError('falhou');
+        }), throwsStateError);
         expect(await ids(), isEmpty);
       });
 
       test('db.transaction inside the scope is a SAVEPOINT', () async {
         await db.transactionScope((ctx) async {
           await repository.insert(1);
-          await expectLater(
-              db.transaction((inner) async {
-                expect(db.transactionLevel(), 2);
-                await repository.insert(2);
-                throw StateError('item');
-              }),
-              throwsStateError);
+          await expectLater(db.transaction((inner) async {
+            expect(db.transactionLevel(), 2);
+            await repository.insert(2);
+            throw StateError('item');
+          }), throwsStateError);
           expect(db.transactionLevel(), 1);
           final joined = await db.transactionIfNeeded((same) async {
             await repository.insert(3);
@@ -186,8 +182,8 @@ void main() {
         expect(db.isInTransactionScope, isFalse);
         if (pool) {
           // Another connection of the pool: the row is not committed yet.
-          expect(await repository.count().timeout(const Duration(seconds: 10)),
-              0);
+          expect(
+              await repository.count().timeout(const Duration(seconds: 10)), 0);
         }
         release.complete();
         await scope;
@@ -196,13 +192,11 @@ void main() {
 
       if (pool) {
         test('outsideTransaction survives the rollback', () async {
-          await expectLater(
-              db.transactionScope((ctx) async {
-                await repository.insert(1);
-                await db.outsideTransaction(() => repository.insert(99, 'log'));
-                throw StateError('falhou');
-              }),
-              throwsStateError);
+          await expectLater(db.transactionScope((ctx) async {
+            await repository.insert(1);
+            await db.outsideTransaction(() => repository.insert(99, 'log'));
+            throw StateError('falhou');
+          }), throwsStateError);
           expect(await ids(), [99]);
         });
       } else {

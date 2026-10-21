@@ -30,7 +30,7 @@ class PostgresConnection extends Connection {
   ///
   /// @return \Illuminate\Database\Schema\Grammars\PostgresGrammar
   ///
-  SchemaGrammar getDefaultSchemaGrammar() {   
+  SchemaGrammar getDefaultSchemaGrammar() {
     return this.withTablePrefix(SchemaPostgresGrammar());
   }
 

@@ -128,7 +128,8 @@ class QueryPostgresGrammar extends QueryGrammar {
   @override
   String whereJsonContains(QueryBuilder query, Map<String, dynamic> where) {
     final not = where['not'] == true ? 'not ' : '';
-    return not + compileJsonContains(where['column'], parameter(where['value']));
+    return not +
+        compileJsonContains(where['column'], parameter(where['value']));
   }
 
   /// `jsonb_array_length(("column")::jsonb) <operator> ?`.
@@ -280,8 +281,7 @@ class QueryPostgresGrammar extends QueryGrammar {
   String whereLike(QueryBuilder query, Map<String, dynamic> where) {
     final not = where['not'] == true ? 'not ' : '';
     final lower = where['lower'] == true;
-    final operator =
-        lower || where['caseSensitive'] == true ? 'like' : 'ilike';
+    final operator = lower || where['caseSensitive'] == true ? 'like' : 'ilike';
     var column = '${this.wrap(where['column'])}::text';
     var value = this.parameter(where['value']);
     if (where['unaccent'] == true) {
@@ -338,7 +338,8 @@ class QueryPostgresGrammar extends QueryGrammar {
     if (value is List && value is! Uint8List) {
       final items = value.map((item) {
         if (item == null) return 'NULL';
-        final text = item.toString().replaceAll('\\', '\\\\').replaceAll('"', '\\"');
+        final text =
+            item.toString().replaceAll('\\', '\\\\').replaceAll('"', '\\"');
         return '"$text"';
       }).join(',');
       return this.quoteRawString('{$items}');
@@ -359,7 +360,8 @@ class QueryPostgresGrammar extends QueryGrammar {
 
     if (query.joinsProp.isNotEmpty) {
       _assertJoinsBecomeFrom(query, 'delete');
-      final using = query.joinsProp.map((join) => wrapTable(join.table)).join(', ');
+      final using =
+          query.joinsProp.map((join) => wrapTable(join.table)).join(', ');
       final where = this.compileUpdateWheres(query);
       return '$ctes delete from $table using $using $where'.trim();
     }

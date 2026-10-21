@@ -17,7 +17,8 @@ class Member extends Model {
     globalScopes: {'tenant': (w) => w.where('ar4_members.tenant', 1)},
   );
 
-  static final roles = BelongsToMany<Member, Role>('roles', () => Role.definition,
+  static final roles = BelongsToMany<Member, Role>(
+      'roles', () => Role.definition,
       pivotTable: 'ar4_member_role',
       foreignPivotKey: 'member_id',
       relatedPivotKey: 'role_id',
@@ -108,12 +109,19 @@ Map<String, dynamic> _config(String driver) => driver == 'mysql'
 const _tables = ['ar4_member_role', 'ar4_posts', 'ar4_roles', 'ar4_members'];
 
 void main() {
-  for (final driver in ['postgres', 'postgres_v3', 'dargres', 'dpgsql', 'mysql']) {
+  for (final driver in [
+    'postgres',
+    'postgres_v3',
+    'dargres',
+    'dpgsql',
+    'mysql'
+  ]) {
     group(driver, () {
       late Manager manager;
       late Connection db;
       final mysql = driver == 'mysql';
-      final serial = mysql ? 'int AUTO_INCREMENT PRIMARY KEY' : 'serial PRIMARY KEY';
+      final serial =
+          mysql ? 'int AUTO_INCREMENT PRIMARY KEY' : 'serial PRIMARY KEY';
       final timestamp = mysql ? 'datetime' : 'timestamp';
 
       setUp(() async {
@@ -122,12 +130,16 @@ void main() {
         for (final t in _tables) {
           await db.execute('DROP TABLE IF EXISTS $t');
         }
-        await db.execute('CREATE TABLE ar4_members (id $serial, name varchar(20), '
-            'tenant int, deleted_at $timestamp NULL)');
-        await db.execute('CREATE TABLE ar4_roles (id int PRIMARY KEY, name varchar(20))');
-        await db.execute('CREATE TABLE ar4_member_role (member_id int, role_id int, '
+        await db
+            .execute('CREATE TABLE ar4_members (id $serial, name varchar(20), '
+                'tenant int, deleted_at $timestamp NULL)');
+        await db.execute(
+            'CREATE TABLE ar4_roles (id int PRIMARY KEY, name varchar(20))');
+        await db.execute(
+            'CREATE TABLE ar4_member_role (member_id int, role_id int, '
             'level int NULL)');
-        await db.execute('CREATE TABLE ar4_posts (id int PRIMARY KEY, member_id int, '
+        await db.execute(
+            'CREATE TABLE ar4_posts (id int PRIMARY KEY, member_id int, '
             'deleted_at $timestamp NULL)');
         await db.table2('ar4_members').insertMany([
           {'id': 1, 'name': 'ana', 'tenant': 1, 'deleted_at': null},
@@ -159,7 +171,10 @@ void main() {
         expect(await Member.definition.query(db).count(), 2,
             reason: 'tenant 2 is out');
         expect(
-            await Member.definition.query(db).withoutGlobalScope('tenant').count(),
+            await Member.definition
+                .query(db)
+                .withoutGlobalScope('tenant')
+                .count(),
             3);
         expect(
             (await Member.definition.query(db).apply(Member.named).get())
@@ -183,7 +198,8 @@ void main() {
         expect(await Member.definition.query(db).count(), 1);
         expect(await Member.definition.query(db).withTrashed().count(), 2);
         expect(
-            (await Member.definition.query(db).onlyTrashed().get()).single.id, 2);
+            (await Member.definition.query(db).onlyTrashed().get()).single.id,
+            2);
 
         await bia.restore();
         expect(bia.trashed, isFalse);
@@ -202,7 +218,8 @@ void main() {
       test('many-to-many: attach, pivot, eager load, sync, detach', () async {
         final ana = (await Member.definition.query(db).find(1))!;
         final bia = (await Member.definition.query(db).find(2))!;
-        expect(await Member.roles.attach(ana, [10, 20], pivot: {'level': 5}), 2);
+        expect(
+            await Member.roles.attach(ana, [10, 20], pivot: {'level': 5}), 2);
         await Member.roles.attach(bia, [20]);
 
         final roles = await Member.roles.fetch(ana);

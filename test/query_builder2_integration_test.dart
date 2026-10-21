@@ -28,7 +28,13 @@ Map<String, dynamic> _config(String driver) => driver == 'mysql'
       };
 
 void main() {
-  for (final driver in ['postgres', 'postgres_v3', 'dargres', 'dpgsql', 'mysql']) {
+  for (final driver in [
+    'postgres',
+    'postgres_v3',
+    'dargres',
+    'dpgsql',
+    'mysql'
+  ]) {
     group(driver, () {
       late Manager manager;
       late Connection db;
@@ -78,14 +84,19 @@ void main() {
         expect(rows.map((r) => r['id']).toList(), [3, 4, 5, 7, 9]);
 
         expect(await db.table2('qb2_item').where('obs', null).count(), 1);
-        expect(await db.table2('qb2_item').whereNotEqualTo('obs', null).count(), 9);
-        expect(await db.table2('qb2_item').whereBetween('n', 2, 4).pluck<int>('n'),
+        expect(await db.table2('qb2_item').whereNotEqualTo('obs', null).count(),
+            9);
+        expect(
+            await db.table2('qb2_item').whereBetween('n', 2, 4).pluck<int>('n'),
             unorderedEquals([2, 3, 4]));
         expect(await db.table2('qb2_item').where('n', 5).value<String>('nome'),
             'JOÃO 5');
-        expect((await db.table2('qb2_item').where('n', 6).sole())['nome'], 'Ana 6');
-        expect(await db.table2('qb2_item').whereIn('n', <int>[]).exists(), isFalse);
-        expect(await db.table2('qb2_item').whereNotIn('n', <int>[]).count(), 10);
+        expect((await db.table2('qb2_item').where('n', 6).sole())['nome'],
+            'Ana 6');
+        expect(await db.table2('qb2_item').whereIn('n', <int>[]).exists(),
+            isFalse);
+        expect(
+            await db.table2('qb2_item').whereNotIn('n', <int>[]).count(), 10);
         expect((await db.table2('qb2_item').sum('n'))!.toInt(), 55);
 
         final joined = await db
@@ -113,8 +124,10 @@ void main() {
             .table2('qb2_item')
             .insertGetId<int>({'grupo_id': 2, 'nome': 'Novo', 'n': 11});
         expect(id, 11);
-        expect(await db.table2('qb2_item').where('id', id).update({'obs': 'y'}), 1);
-        expect(await db.table2('qb2_item').where('id', id).increment('n', 5), 1);
+        expect(await db.table2('qb2_item').where('id', id).update({'obs': 'y'}),
+            1);
+        expect(
+            await db.table2('qb2_item').where('id', id).increment('n', 5), 1);
         expect(await db.table2('qb2_item').where('id', id).value<int>('n'), 16);
 
         await db.transaction((ctx) async {
@@ -139,7 +152,10 @@ void main() {
                   .count(),
               5);
           expect(
-              await db.table2('qb2_item').whereSqlOperator('obs', '<=>', null).count(),
+              await db
+                  .table2('qb2_item')
+                  .whereSqlOperator('obs', '<=>', null)
+                  .count(),
               1);
         } else {
           expect(

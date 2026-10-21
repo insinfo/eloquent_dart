@@ -20,16 +20,16 @@ class User extends Model {
   );
 
   /// The last order (highest id).
-  static final latestOrder =
-      HasOne<User, Order>('latestOrder', () => Order.definition,
-              foreignKey: 'user_id')
-          .latestOfMany();
+  static final latestOrder = HasOne<User, Order>(
+          'latestOrder', () => Order.definition,
+          foreignKey: 'user_id')
+      .latestOfMany();
 
   /// The most expensive order (ties: highest id; null prices ignored).
-  static final largestOrder =
-      HasOne<User, Order>('largestOrder', () => Order.definition,
-              foreignKey: 'user_id')
-          .ofMany('price', AggregateFunction.maximum);
+  static final largestOrder = HasOne<User, Order>(
+          'largestOrder', () => Order.definition,
+          foreignKey: 'user_id')
+      .ofMany('price', AggregateFunction.maximum);
 
   static final orders = HasMany<User, Order>('orders', () => Order.definition,
       foreignKey: 'user_id');
@@ -58,8 +58,8 @@ class Order extends Model {
     },
   );
 
-  static final user =
-      BelongsTo<Order, User>('user', () => User.definition, foreignKey: 'user_id');
+  static final user = BelongsTo<Order, User>('user', () => User.definition,
+      foreignKey: 'user_id');
 
   int get id => readAttribute<int>('id');
   double? get price => readAttribute<double?>('price');
@@ -88,7 +88,13 @@ Map<String, dynamic> _config(String driver) => driver == 'mysql'
       };
 
 void main() {
-  for (final driver in ['postgres', 'postgres_v3', 'dargres', 'dpgsql', 'mysql']) {
+  for (final driver in [
+    'postgres',
+    'postgres_v3',
+    'dargres',
+    'dpgsql',
+    'mysql'
+  ]) {
     group(driver, () {
       late Manager manager;
       late Connection db;
@@ -243,13 +249,11 @@ void main() {
         await bia.refresh();
         expect(bia.name, 'Bia');
 
-        await expectLater(
-            db.transaction((ctx) async {
-              final novo = User.definition.make(ctx, {'name': 'Temp'});
-              await novo.save();
-              throw StateError('rollback');
-            }),
-            throwsStateError);
+        await expectLater(db.transaction((ctx) async {
+          final novo = User.definition.make(ctx, {'name': 'Temp'});
+          await novo.save();
+          throw StateError('rollback');
+        }), throwsStateError);
         expect(await User.definition.query(db).where('name', 'Temp').exists(),
             isFalse);
       });

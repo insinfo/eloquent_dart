@@ -5,7 +5,6 @@ import 'dart:async';
 ///
 /// Corresponds to Illuminate\Database\Migrations\MigrationRepositoryInterface.
 abstract class MigrationRepositoryInterface {
-
   /// Get the list of migration file names that have already been run.
   /// Returns a list of migration file names (e.g., '2023_10_27_000000_create_users_table').
   Future<List<String>> getRan();
@@ -17,7 +16,8 @@ abstract class MigrationRepositoryInterface {
   /// Get the list of migrations based on a batch limit.
   /// [steps] The number of batches to retrieve migrations from.
   /// Returns a list of migration records (typically Maps).
-  Future<List<Map<String, dynamic>>> getMigrations(int steps); // Added based on Migrator usage
+  Future<List<Map<String, dynamic>>> getMigrations(
+      int steps); // Added based on Migrator usage
 
   /// Log that a migration was run.
   ///

@@ -1,5 +1,3 @@
-
-
 import 'characters.dart' as chars;
 
 /// Returns whether [char] is the code for an ASCII letter (uppercase or

@@ -6,6 +6,5 @@ const chainGap = '===== asynchronous gap ===========================\n';
 /// the gap between traces.
 final vmChainGap = RegExp(r'^<asynchronous suspension>\n?$', multiLine: true);
 
-
 /// Whether we're running in a JS context.
 const bool inJS = 0.0 is int;

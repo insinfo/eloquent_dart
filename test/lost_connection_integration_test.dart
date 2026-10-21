@@ -34,9 +34,16 @@ Map<String, dynamic> _config(String driver, bool pool) => driver == 'mysql'
       };
 
 void main() {
-  for (final driver in ['postgres', 'postgres_v3', 'dargres', 'dpgsql', 'mysql']) {
+  for (final driver in [
+    'postgres',
+    'postgres_v3',
+    'dargres',
+    'dpgsql',
+    'mysql'
+  ]) {
     for (final pool in [false, true]) {
-      test('$driver${pool ? ' (pool)' : ''} reconnects after the session is '
+      test(
+          '$driver${pool ? ' (pool)' : ''} reconnects after the session is '
           'terminated', () async {
         final mysql = driver == 'mysql';
         final manager = Manager()

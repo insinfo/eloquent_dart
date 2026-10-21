@@ -288,6 +288,5 @@ class PostgresNotificationListener {
     if (!_onError.isClosed) _onError.add(error);
   }
 
-  static String _quote(String channel) =>
-      '"${channel.replaceAll('"', '""')}"';
+  static String _quote(String channel) => '"${channel.replaceAll('"', '""')}"';
 }

@@ -635,8 +635,8 @@ class QueryBuilder {
   QueryBuilder crossJoinSub(dynamic query, String alias) {
     final res = this.createSub(query);
     this.addBinding(res[1], 'join');
-    return this.crossJoin(QueryExpression(
-        '(${res[0]}) as ${this.grammar.wrapTable(alias)}'));
+    return this.crossJoin(
+        QueryExpression('(${res[0]}) as ${this.grammar.wrapTable(alias)}'));
   }
 
   /// Add a left join to the query.
@@ -715,8 +715,7 @@ class QueryBuilder {
   ///
   QueryBuilder when(dynamic condition, Function callback,
       [Function? otherwise]) {
-    final value =
-        condition is dynamic Function() ? condition() : condition;
+    final value = condition is dynamic Function() ? condition() : condition;
     if (_isTruthy(value)) {
       _callConditional(callback, value);
     } else if (otherwise != null) {
@@ -728,8 +727,7 @@ class QueryBuilder {
   /// The opposite of [when]: runs [callback] when [condition] is falsy.
   QueryBuilder unless(dynamic condition, Function callback,
       [Function? otherwise]) {
-    final value =
-        condition is dynamic Function() ? condition() : condition;
+    final value = condition is dynamic Function() ? condition() : condition;
     if (!_isTruthy(value)) {
       _callConditional(callback, value);
     } else if (otherwise != null) {
@@ -794,7 +792,9 @@ class QueryBuilder {
   /// `is null` for `=` and `is not null` for `<>`/`!=`; any other operator with
   /// `null` throws [ArgumentError] instead of silently changing the filter.
   QueryBuilder where(dynamic column,
-      [dynamic operator, dynamic value = _absent, String boolean = SqlBool.and]) {
+      [dynamic operator,
+      dynamic value = _absent,
+      String boolean = SqlBool.and]) {
     // Two-argument form: the "operator" slot holds the value.
     if (identical(value, _absent)) {
       if (column is Map || column is Function) {
@@ -1224,15 +1224,14 @@ class QueryBuilder {
   /// `not (c1 op ? or c2 op ? ...)`: none of [columns] matches.
   QueryBuilder whereNone(List columns, dynamic operator,
           [dynamic value = _absent, String boolean = SqlBool.and]) =>
-      _whereColumnsGroup(
-          columns, operator, value, SqlBool.or, '$boolean not');
+      _whereColumnsGroup(columns, operator, value, SqlBool.or, '$boolean not');
 
   QueryBuilder orWhereNone(List columns, dynamic operator,
           [dynamic value = _absent]) =>
       _whereColumnsGroup(columns, operator, value, SqlBool.or, 'or not');
 
-  QueryBuilder _whereColumnsGroup(List columns, dynamic operator,
-      dynamic value, String inner, String boolean) {
+  QueryBuilder _whereColumnsGroup(List columns, dynamic operator, dynamic value,
+      String inner, String boolean) {
     if (identical(value, _absent)) {
       value = operator;
       operator = SqlOperator.equals;
@@ -1247,7 +1246,8 @@ class QueryBuilder {
   /// `not (...)`: the negation of a where (same arguments as [where],
   /// including a `Function(QueryBuilder)` group).
   QueryBuilder whereNot(dynamic column,
-          [dynamic operator, dynamic value = _absent,
+          [dynamic operator,
+          dynamic value = _absent,
           String boolean = SqlBool.and]) =>
       this.where(column, operator, value, '$boolean not');
 
@@ -1501,7 +1501,8 @@ class QueryBuilder {
   /// of [tuples], e.g. `whereInTuple(['cod_processo', 'ano_exercicio'],
   /// [[10, '2024'], [11, '2025']])`. Every tuple has one value per column;
   /// an empty [tuples] matches nothing. A null in a tuple never matches.
-  QueryBuilder whereInTuple(List<String> columns, Iterable<List<Object?>> tuples,
+  QueryBuilder whereInTuple(
+      List<String> columns, Iterable<List<Object?>> tuples,
       [String boolean = SqlBool.and, bool not = false]) {
     if (columns.isEmpty) {
       throw ArgumentError.value(columns, 'columns', 'Must not be empty.');
@@ -2084,7 +2085,8 @@ class QueryBuilder {
     return this;
   }
 
-  QueryBuilder orWhereJsonLength(String column, String operator, dynamic value) =>
+  QueryBuilder orWhereJsonLength(
+          String column, String operator, dynamic value) =>
       this.whereJsonLength(column, operator, value, SqlBool.or);
 
   /// Add a PostgreSQL full-text search clause across one or more [columns].
@@ -2352,7 +2354,9 @@ class QueryBuilder {
   /// `Function(QueryBuilder)` column builds a nested group.
   ///
   QueryBuilder having(dynamic column,
-      [dynamic operator, dynamic value = _absent, String boolean = SqlBool.and]) {
+      [dynamic operator,
+      dynamic value = _absent,
+      String boolean = SqlBool.and]) {
     if (column is Function) {
       return this.havingNested(column, boolean);
     }
@@ -2389,12 +2393,13 @@ class QueryBuilder {
   }
 
   /// A parenthesized group of having clauses built by [callback].
-  QueryBuilder havingNested(Function callback,
-      [String boolean = SqlBool.and]) {
+  QueryBuilder havingNested(Function callback, [String boolean = SqlBool.and]) {
     final query = this.forNestedWhere();
     callback(query);
     if (query.havingsProp.isNotEmpty) {
-      this.havingsProp.add({'type': 'Nested', 'query': query, 'boolean': boolean});
+      this
+          .havingsProp
+          .add({'type': 'Nested', 'query': query, 'boolean': boolean});
       this.addBinding(query.bindings['having'], 'having');
     }
     return this;
@@ -2443,8 +2448,7 @@ class QueryBuilder {
   QueryBuilder orHavingNull(dynamic columns) =>
       this.havingNull(columns, SqlBool.or);
 
-  QueryBuilder havingNotNull(dynamic columns,
-          [String boolean = SqlBool.and]) =>
+  QueryBuilder havingNotNull(dynamic columns, [String boolean = SqlBool.and]) =>
       this.havingNull(columns, boolean, true);
 
   QueryBuilder orHavingNotNull(dynamic columns) =>
@@ -2565,8 +2569,8 @@ class QueryBuilder {
           (item is String && item.trim().isNotEmpty)) {
         this.orderBy(item, direction);
       } else {
-        throw ArgumentError.value(target, name,
-            'Expected a column, db.raw(...) or a list of them.');
+        throw ArgumentError.value(
+            target, name, 'Expected a column, db.raw(...) or a list of them.');
       }
     }
     return this;
@@ -2902,7 +2906,8 @@ class QueryBuilder {
 
   /// The only row of the query: throws [RecordsNotFoundException] when there
   /// is none and [MultipleRecordsFoundException] when there is more than one.
-  Future<Map<String, dynamic>> sole([List<String> columns = const ['*']]) async {
+  Future<Map<String, dynamic>> sole(
+      [List<String> columns = const ['*']]) async {
     final rows = await this.clone().take(2).get(columns);
     if (rows.isEmpty) {
       throw RecordsNotFoundException();
@@ -2931,8 +2936,7 @@ class QueryBuilder {
   /// The row with `id = id`, or the result of [callback] when there is none.
   Future<dynamic> findOr(dynamic id, FutureOr<dynamic> Function() callback,
       [List<String> columns = const ['*']]) async {
-    final row =
-        await this.where('id', SqlOperator.equals, id).first(columns);
+    final row = await this.where('id', SqlOperator.equals, id).first(columns);
     return row ?? await callback();
   }
 
@@ -3201,7 +3205,9 @@ class QueryBuilder {
       ];
     }
     if (position != null) {
-      final values = [for (final (column, _) in orders) position.valueOf(column)];
+      final values = [
+        for (final (column, _) in orders) position.valueOf(column)
+      ];
       if (values.contains(null)) {
         throw const FormatException(
             'cursorPaginate does not support null order values.');
@@ -3742,7 +3748,8 @@ class QueryBuilder {
 
   /// Whether a plain `count(...)` would not count the rows of this query.
   bool _needsCountSubquery(List<String> columns) {
-    final allColumns = columns.isEmpty || (columns.length == 1 && columns.first == '*');
+    final allColumns =
+        columns.isEmpty || (columns.length == 1 && columns.first == '*');
     return groupsProp.isNotEmpty ||
         havingsProp.isNotEmpty ||
         unionsProp.isNotEmpty ||
@@ -3941,7 +3948,8 @@ class QueryBuilder {
           conflict,
           returning,
         );
-    return this.connection
+    return this
+        .connection
         .insert(sql, this.cleanBindings(bindings), _timeoutSeconds(timeout));
   }
 
@@ -3959,7 +3967,8 @@ class QueryBuilder {
   ///   .insert({'ano': 2026, 'last_id': 1});
   /// final seq = rows.first['last_id'];
   /// ```
-  QueryBuilder onConflict([List<String> columns = const [], String? constraint]) {
+  QueryBuilder onConflict(
+      [List<String> columns = const [], String? constraint]) {
     this.onConflictProp = OnConflictClause(
       columns: columns,
       constraint: constraint,
@@ -4187,7 +4196,8 @@ class QueryBuilder {
     final table = this.grammar.wrapTable(this.fromProp);
     final columnList = names.map(this.grammar.wrap).join(', ');
     final arrays = names.map((n) => '?::${types[n]!.trim()}[]').join(', ');
-    final sql = 'insert into $table ($columnList) select * from unnest($arrays)';
+    final sql =
+        'insert into $table ($columnList) select * from unnest($arrays)';
     // Each column as a PostgreSQL array literal (text), cast by the SQL: the
     // same for every driver, whatever it does with Dart lists.
     return this.connection.affectingStatement(sql, [
@@ -4205,10 +4215,8 @@ class QueryBuilder {
       if (value == null) {
         buffer.write('NULL');
       } else {
-        final text = value
-            .toString()
-            .replaceAll(r'\', r'\\')
-            .replaceAll('"', r'\"');
+        final text =
+            value.toString().replaceAll(r'\', r'\\').replaceAll('"', r'\"');
         buffer.write('"$text"');
       }
     }
@@ -4245,7 +4253,8 @@ class QueryBuilder {
         throw StateError('nextValue(lock: true) needs a transaction: the lock '
             'lasts until commit and must cover the insert of the number.');
       }
-      final key = '${query.fromProp}|$column|${query.grammar.compileWheres(query)}|'
+      final key =
+          '${query.fromProp}|$column|${query.grammar.compileWheres(query)}|'
           '${query.getBindings().join('|')}';
       await this.connection.select(
           'select pg_advisory_xact_lock(hashtextextended(?, 0))', [key], false);
@@ -4265,8 +4274,9 @@ class QueryBuilder {
     final sql = this.grammar.compileUpdate(this, keyValues);
     // Each dialect orders CTE/join/SET/where bindings like its SQL.
     final bindings = this.grammar.prepareBindingsForUpdate(this, keyValues);
-    return this.connection.update(
-        sql, this.cleanBindings(bindings), _timeoutSeconds(timeout));
+    return this
+        .connection
+        .update(sql, this.cleanBindings(bindings), _timeoutSeconds(timeout));
   }
 
   /// [Duration] → whole seconds for the driver (rounded up; null = default).
@@ -4380,8 +4390,9 @@ class QueryBuilder {
     var sql = this.grammar.compileDelete(this);
     final bindings = this.grammar.prepareBindingsForDelete(this);
 
-    return this.connection.delete(
-        sql, this.cleanBindings(bindings), _timeoutSeconds(timeout));
+    return this
+        .connection
+        .delete(sql, this.cleanBindings(bindings), _timeoutSeconds(timeout));
   }
 
   ///
@@ -4719,8 +4730,8 @@ class QueryBuilder {
       [Map<String, dynamic> extra = const {}]) {
     return this.update({
       for (final entry in columns.entries)
-        entry.key: QueryExpression(
-            '${this.grammar.wrap(entry.key)} + ${entry.value}'),
+        entry.key:
+            QueryExpression('${this.grammar.wrap(entry.key)} + ${entry.value}'),
       ...extra,
     });
   }
@@ -4730,8 +4741,8 @@ class QueryBuilder {
       [Map<String, dynamic> extra = const {}]) {
     return this.update({
       for (final entry in columns.entries)
-        entry.key: QueryExpression(
-            '${this.grammar.wrap(entry.key)} - ${entry.value}'),
+        entry.key:
+            QueryExpression('${this.grammar.wrap(entry.key)} - ${entry.value}'),
       ...extra,
     });
   }
@@ -4785,13 +4796,13 @@ class QueryBuilder {
 
     newQuery.recursionLimitProp = recursionLimitProp;
 
-    newQuery.aggregateProp =
-        aggregateProp != null ? Map<String, dynamic>.from(aggregateProp!) : null;
+    newQuery.aggregateProp = aggregateProp != null
+        ? Map<String, dynamic>.from(aggregateProp!)
+        : null;
     newQuery.useWritePdoProp = useWritePdoProp;
     // OnConflictClause is immutable.
     newQuery.onConflictProp = onConflictProp;
-    newQuery.returningProp =
-        returningProp != null ? [...returningProp!] : null;
+    newQuery.returningProp = returningProp != null ? [...returningProp!] : null;
     newQuery.afterQueryCallbacks.addAll(afterQueryCallbacks);
 
     newQuery.bindings = {

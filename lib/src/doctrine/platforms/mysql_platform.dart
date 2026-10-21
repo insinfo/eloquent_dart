@@ -108,7 +108,8 @@ class MySQLPlatform extends AbstractPlatform {
       'CONCAT(${strings.join(', ')})';
 
   @override
-  String getLocateExpression(String string, String substring, [String? start]) =>
+  String getLocateExpression(String string, String substring,
+          [String? start]) =>
       start == null
           ? 'LOCATE($substring, $string)'
           : 'LOCATE($substring, $string, $start)';
@@ -152,7 +153,8 @@ class MySQLPlatform extends AbstractPlatform {
     if (engine != null) sql.write(' ENGINE = $engine');
     final charset = table.getOption('charset');
     if (charset != null) sql.write(' DEFAULT CHARACTER SET $charset');
-    final collation = table.getOption('collation') ?? table.getOption('collate');
+    final collation =
+        table.getOption('collation') ?? table.getOption('collate');
     if (collation != null) sql.write(' COLLATE $collation');
     final comment = table.getComment();
     if (comment != null && comment.isNotEmpty) {

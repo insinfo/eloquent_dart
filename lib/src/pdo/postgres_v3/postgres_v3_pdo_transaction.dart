@@ -20,8 +20,7 @@ class PostgresV3PDOTransaction extends PDOTransactionContext {
 
   Future<int> execute(String statement, [int? timeoutInSeconds]) async {
     if (timeoutInSeconds == null) {
-      timeoutInSeconds =
-          (pdoInstance as PostgresV3PDO).queryTimeoutInSeconds;
+      timeoutInSeconds = (pdoInstance as PostgresV3PDO).queryTimeoutInSeconds;
     }
     final res = await transactionContext.execute(
       statement,
@@ -34,8 +33,7 @@ class PostgresV3PDOTransaction extends PDOTransactionContext {
   Future<PDOResults> query(String query,
       [dynamic params, int? timeoutInSeconds]) async {
     if (timeoutInSeconds == null) {
-      timeoutInSeconds =
-          (pdoInstance as PostgresV3PDO).queryTimeoutInSeconds;
+      timeoutInSeconds = (pdoInstance as PostgresV3PDO).queryTimeoutInSeconds;
     }
 
     final rs = await transactionContext.execute(

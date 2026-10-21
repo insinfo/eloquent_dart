@@ -126,8 +126,8 @@ class DpgsqlPDO extends PDOInterface {
 
   /// Runs [query] on [connection] and maps the result. Shared with
   /// [DpgsqlPDOTransaction].
-  static Future<PDOResults> runQuery(DpgsqlConnection connection,
-      String query, dynamic params, Duration timeout,
+  static Future<PDOResults> runQuery(DpgsqlConnection connection, String query,
+      dynamic params, Duration timeout,
       [PDOConfig? config]) {
     return runWithTimeout(connection, () async {
       // A CTE may wrap a SELECT or an UPDATE/DELETE without RETURNING: read
@@ -416,8 +416,9 @@ class DpgsqlPDO extends PDOInterface {
     final offset = value.isUtc ? Duration.zero : value.timeZoneOffset;
     final sign = offset.isNegative ? '-' : '+';
     final minutes = offset.inMinutes.abs();
-    final fraction =
-        (value.millisecond * 1000 + value.microsecond).toString().padLeft(6, '0');
+    final fraction = (value.millisecond * 1000 + value.microsecond)
+        .toString()
+        .padLeft(6, '0');
     return '${value.year.toString().padLeft(4, '0')}-'
         '${two(value.month)}-'
         '${two(value.day)} '
@@ -500,7 +501,8 @@ class DpgsqlPDO extends PDOInterface {
     }
     final statementTimeout = config.statementTimeout;
     if (statementTimeout != null && statementTimeout.isNotEmpty) {
-      settings.statementTimeout = PDOConfig.normalizePgTimeout(statementTimeout);
+      settings.statementTimeout =
+          PDOConfig.normalizePgTimeout(statementTimeout);
     }
     final lockTimeout = config.lockTimeout;
     if (lockTimeout != null && lockTimeout.isNotEmpty) {
@@ -508,7 +510,8 @@ class DpgsqlPDO extends PDOInterface {
     }
     final idleTimeout = config.idleInTransactionSessionTimeout;
     if (idleTimeout != null && idleTimeout.isNotEmpty) {
-      settings.idleInTransactionSessionTimeout = PDOConfig.normalizePgTimeout(idleTimeout);
+      settings.idleInTransactionSessionTimeout =
+          PDOConfig.normalizePgTimeout(idleTimeout);
     }
     if (config.pool == true) {
       settings.noResetOnClose = true;
@@ -529,21 +532,45 @@ class DpgsqlPDO extends PDOInterface {
   }
 
   static const _connectionKeywords = {
-    'Client Encoding', 'Encoding', 'TimeZone',
-    'Force Decode Timestamptz As UTC', 'Force Decode Timestamp As UTC',
-    'Force Decode Date As UTC', 'Use Current Offset For Local Timestamp',
-    'Use IANA Time Zone Database', 'IANA Time Zone Database Scope',
-    'Throw On DateTime Infinity', 'Host', 'Port', 'Username', 'Password',
-    'Database', 'SSL Mode', 'Trust Server Certificate', 'Pooling',
-    'Minimum Pool Size', 'Maximum Pool Size', 'Timeout',
-    'Connection Idle Lifetime', 'Connection Lifetime',
-    'Connection Pruning Interval', 'Max Auto Prepare',
-    'Auto Prepare Min Usages', 'No Reset On Close', 'Search Path',
-    'Application Name', 'Statement Timeout', 'Lock Timeout',
-    'Idle In Transaction Session Timeout', 'Decode Network Types As String',
-    'Decode Uuid As String', 'Decode Json As String',
-    'Decode Numeric As String', 'Use Custom Decimal',
-    'Decode Extended Types As Text', 'Infer String Parameters As Unknown',
+    'Client Encoding',
+    'Encoding',
+    'TimeZone',
+    'Force Decode Timestamptz As UTC',
+    'Force Decode Timestamp As UTC',
+    'Force Decode Date As UTC',
+    'Use Current Offset For Local Timestamp',
+    'Use IANA Time Zone Database',
+    'IANA Time Zone Database Scope',
+    'Throw On DateTime Infinity',
+    'Host',
+    'Port',
+    'Username',
+    'Password',
+    'Database',
+    'SSL Mode',
+    'Trust Server Certificate',
+    'Pooling',
+    'Minimum Pool Size',
+    'Maximum Pool Size',
+    'Timeout',
+    'Connection Idle Lifetime',
+    'Connection Lifetime',
+    'Connection Pruning Interval',
+    'Max Auto Prepare',
+    'Auto Prepare Min Usages',
+    'No Reset On Close',
+    'Search Path',
+    'Application Name',
+    'Statement Timeout',
+    'Lock Timeout',
+    'Idle In Transaction Session Timeout',
+    'Decode Network Types As String',
+    'Decode Uuid As String',
+    'Decode Json As String',
+    'Decode Numeric As String',
+    'Use Custom Decimal',
+    'Decode Extended Types As Text',
+    'Infer String Parameters As Unknown',
     'Use Extended Query For Unparameterized Commands',
   };
 
@@ -583,5 +610,4 @@ class DpgsqlPDO extends PDOInterface {
         message.contains('broken pipe') ||
         message.contains('socketbinaryinput');
   }
-
 }

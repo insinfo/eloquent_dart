@@ -118,8 +118,7 @@ abstract class AbstractPlatform {
   String quoteSingleIdentifier(String identifier) =>
       '"${identifier.replaceAll('"', '""')}"';
 
-  String quoteStringLiteral(String value) =>
-      "'${value.replaceAll("'", "''")}'";
+  String quoteStringLiteral(String value) => "'${value.replaceAll("'", "''")}'";
 
   KeywordList getReservedKeywordsList() =>
       _keywords ??= createReservedKeywordsList();
@@ -259,7 +258,8 @@ abstract class AbstractPlatform {
     return 'TRIM(${tokens.join(' ')})';
   }
 
-  String getSubstringExpression(String string, String start, [String? length]) =>
+  String getSubstringExpression(String string, String start,
+          [String? length]) =>
       length == null
           ? 'SUBSTRING($string FROM $start)'
           : 'SUBSTRING($string FROM $start FOR $length)';
@@ -373,7 +373,8 @@ abstract class AbstractPlatform {
     ];
     final primaryKey = table.getPrimaryKey();
     if (primaryKey != null) {
-      definitions.add('PRIMARY KEY (${_quoteColumns(primaryKey.getColumns())})');
+      definitions
+          .add('PRIMARY KEY (${_quoteColumns(primaryKey.getColumns())})');
     }
     for (final constraint in table.getUniqueConstraints()) {
       definitions.add(getUniqueConstraintDeclarationSQL(constraint));
@@ -482,7 +483,8 @@ abstract class AbstractPlatform {
       'ALTER TABLE ${quoteIdentifier(table)} '
       'ADD ${getUniqueConstraintDeclarationSQL(constraint)}';
 
-  String getCreateForeignKeySQL(ForeignKeyConstraint foreignKey, String table) =>
+  String getCreateForeignKeySQL(
+          ForeignKeyConstraint foreignKey, String table) =>
       'ALTER TABLE ${quoteIdentifier(table)} '
       'ADD ${getForeignKeyDeclarationSQL(foreignKey)}';
 
@@ -537,7 +539,13 @@ abstract class AbstractPlatform {
 
   String getForeignKeyReferentialActionSQL(String action) {
     final upper = action.toUpperCase();
-    const valid = {'CASCADE', 'SET NULL', 'NO ACTION', 'RESTRICT', 'SET DEFAULT'};
+    const valid = {
+      'CASCADE',
+      'SET NULL',
+      'NO ACTION',
+      'RESTRICT',
+      'SET DEFAULT'
+    };
     if (!valid.contains(upper)) {
       throw InvalidArgumentException('Invalid foreign key action "$action".');
     }
@@ -546,7 +554,8 @@ abstract class AbstractPlatform {
 
   // ---------------------------------------------------------------- drop
 
-  String getDropTableSQL(String table) => 'DROP TABLE ${quoteIdentifier(table)}';
+  String getDropTableSQL(String table) =>
+      'DROP TABLE ${quoteIdentifier(table)}';
 
   String getDropTemporaryTableSQL(String table) => getDropTableSQL(table);
 
@@ -735,8 +744,8 @@ abstract class AbstractPlatform {
 
   /// Escapes the LIKE wildcards (and [escapeChar]) in [inputString].
   String escapeStringForLike(String inputString, String escapeChar) {
-    final special = RegExp(
-        '[${RegExp.escape(getLikeWildcardCharacters() + escapeChar)}]');
+    final special =
+        RegExp('[${RegExp.escape(getLikeWildcardCharacters() + escapeChar)}]');
     return inputString.replaceAllMapped(
         special, (match) => '$escapeChar${match.group(0)}');
   }

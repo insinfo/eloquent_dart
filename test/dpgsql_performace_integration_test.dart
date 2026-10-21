@@ -58,31 +58,40 @@ void main() {
 
     test('upsert inserts then updates on conflict', () async {
       await db.table('perf_upsert').upsert(
-        [{'email': 'a@x.com', 'name': 'A', 'hits': 1}],
+        [
+          {'email': 'a@x.com', 'name': 'A', 'hits': 1}
+        ],
         ['email'],
       );
       await db.table('perf_upsert').upsert(
-        [{'email': 'a@x.com', 'name': 'A2', 'hits': 5}],
+        [
+          {'email': 'a@x.com', 'name': 'A2', 'hits': 5}
+        ],
         ['email'],
-        {'name': db.raw('excluded.name'), 'hits': db.raw('perf_upsert.hits + 1')},
+        {
+          'name': db.raw('excluded.name'),
+          'hits': db.raw('perf_upsert.hits + 1')
+        },
       );
 
-      final row = await db.table('perf_upsert')
-          .where('email', '=', 'a@x.com').first();
+      final row =
+          await db.table('perf_upsert').where('email', '=', 'a@x.com').first();
       expect(row!['name'], equals('A2'));
       expect(row['hits'], equals(2)); // 1 -> +1
     });
 
     test('insertOrIgnore skips the duplicate', () async {
-      final a = await db.table('perf_upsert')
+      final a = await db
+          .table('perf_upsert')
           .insertOrIgnore({'email': 'b@x.com', 'name': 'B'});
-      final b = await db.table('perf_upsert')
+      final b = await db
+          .table('perf_upsert')
           .insertOrIgnore({'email': 'b@x.com', 'name': 'B-dup'});
       expect(a, equals(1));
       expect(b, equals(0));
 
-      final count = await db.table('perf_upsert')
-          .where('email', '=', 'b@x.com').count();
+      final count =
+          await db.table('perf_upsert').where('email', '=', 'b@x.com').count();
       expect(count, equals(1));
     });
   });
@@ -100,11 +109,11 @@ void main() {
     tearDown(() => db.execute('DROP TABLE IF EXISTS processos_sequences'));
 
     Future<int> nextSeq(int ano) async {
-      final rows = await db.table('processos_sequences')
-          .onConflict(['ano'])
-          .doUpdate({'last_id': db.raw('processos_sequences.last_id + 1')})
-          .returning(['last_id'])
-          .insert({'ano': ano, 'last_id': 1});
+      final rows = await db
+          .table('processos_sequences')
+          .onConflict(['ano']).doUpdate({
+        'last_id': db.raw('processos_sequences.last_id + 1')
+      }).returning(['last_id']).insert({'ano': ano, 'last_id': 1});
       return rows.first['last_id'] as int;
     }
 

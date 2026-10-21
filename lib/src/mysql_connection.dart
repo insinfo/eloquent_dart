@@ -23,7 +23,7 @@ class MySqlConnection extends Connection {
   ///
   /// @return \Illuminate\Database\Query\Grammars\QueryMySqlGrammar
   ///
-  QueryGrammar getDefaultQueryGrammar() {  
+  QueryGrammar getDefaultQueryGrammar() {
     return withTablePrefix(QueryMySqlGrammar());
   }
 

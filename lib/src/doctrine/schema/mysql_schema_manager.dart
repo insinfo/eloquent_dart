@@ -485,8 +485,7 @@ class MySqlSchemaManager extends AbstractSchemaManager {
   List<String> _parseEnumOrSetExpression(String expression) {
     final List<String> values = [];
     // Matches quoted values, allowing escaped quotes (\') and doubled quotes ('').
-    final matches =
-        RegExp(r"'((?:[^'\\]|\\.|'')*)'").allMatches(expression);
+    final matches = RegExp(r"'((?:[^'\\]|\\.|'')*)'").allMatches(expression);
     for (final match in matches) {
       values.add(_unescapeMysqlStringLiteral(match.group(1)!));
     }

@@ -26,9 +26,8 @@ void main() {
   });
 
   test('a union part with its own order/limit is wrapped', () {
-    final q = pg('a')
-        .select(['id'])
-        .union(pg('b').select(['id']).orderByDescending('id').limit(3));
+    final q = pg('a').select(['id']).union(
+        pg('b').select(['id']).orderByDescending('id').limit(3));
     expect(
         q.toSql(),
         'select "id" from "a" union select * from (select "id" from "b" '
@@ -59,12 +58,9 @@ void main() {
 
     final tree = pg('arvore').withRecursiveExpression(
         'arvore',
-        pg('setor')
-            .select(['id', 'pai_id'])
-            .where('id', 1)
-            .unionAll(pg('setor as s')
-                .select(['s.id', 's.pai_id'])
-                .join('arvore as a', 'a.id', 's.pai_id')),
+        pg('setor').select(['id', 'pai_id']).where('id', 1).unionAll(
+            pg('setor as s').select(['s.id', 's.pai_id']).join(
+                'arvore as a', 'a.id', 's.pai_id')),
         columns: ['id', 'pai_id']);
     expect(
         tree.toSql(),
@@ -83,15 +79,16 @@ void main() {
   });
 
   test('PageResult', () {
-    const page = PageResult(
-        items: [{'id': 1}, {'id': 2}], total: 12, perPage: 5, currentPage: 3);
+    const page = PageResult(items: [
+      {'id': 1},
+      {'id': 2}
+    ], total: 12, perPage: 5, currentPage: 3);
     expect(page.lastPage, 3);
     expect(page.hasMorePages, isFalse);
     expect(page.from, 11);
     expect(page.to, 12);
     expect(page.toMap()['last_page'], 3);
-    const empty =
-        PageResult(items: [], total: 0, perPage: 5, currentPage: 1);
+    const empty = PageResult(items: [], total: 0, perPage: 5, currentPage: 1);
     expect(empty.lastPage, 1);
     expect(empty.from, isNull);
   });

@@ -159,7 +159,8 @@ class PDOConfig {
       pool: map['pool'],
       poolSize: key(['poolsize', 'pool_size', 'poolSize']),
       applicationName: key(['application_name', 'applicationName']),
-      allowReconnect: key(['allowreconnect', 'allow_reconnect', 'allowReconnect']),
+      allowReconnect:
+          key(['allowreconnect', 'allow_reconnect', 'allowReconnect']),
       sslmode: map['sslmode'],
       timezone: map['timezone'],
       schema: map['schema'],
@@ -250,8 +251,8 @@ class PDOConfig {
       case 'native':
         return DateTimeBindings.native;
     }
-    throw ArgumentError.value(value, 'datetime_bindings',
-        "Expected 'string' or 'native'.");
+    throw ArgumentError.value(
+        value, 'datetime_bindings', "Expected 'string' or 'native'.");
   }
 
   List<String> postgresTimeoutStatements() {

@@ -36,7 +36,11 @@ void main() {
       late SchemaBuilder schema;
 
       Future<void> cleanup() async {
-        for (final t in ['eloq_fk_pedido2', 'eloq_fk_pedido', 'eloq_fk_cliente']) {
+        for (final t in [
+          'eloq_fk_pedido2',
+          'eloq_fk_pedido',
+          'eloq_fk_cliente'
+        ]) {
           await db.execute('DROP TABLE IF EXISTS $t');
         }
       }
@@ -118,7 +122,9 @@ void main() {
 
           // The child row comes first; the parent arrives before COMMIT.
           await db.transaction((ctx) async {
-            await ctx.table('eloq_fk_pedido').insert({'id': 1, 'cliente_id': 7});
+            await ctx
+                .table('eloq_fk_pedido')
+                .insert({'id': 1, 'cliente_id': 7});
             await ctx.table('eloq_fk_cliente').insert({'id': 7});
           });
           expect(await db.table('eloq_fk_pedido').count(), 1);
@@ -136,7 +142,7 @@ void main() {
       t.onDelete('cascade; drop table x');
     });
     final command = blueprint.getCommands().last;
-    expect(() => grammar.compileForeign(blueprint, command),
-        throwsArgumentError);
+    expect(
+        () => grammar.compileForeign(blueprint, command), throwsArgumentError);
   });
 }

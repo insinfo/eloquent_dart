@@ -75,7 +75,10 @@ void main() {
         );
       ''');
       await db.table('clients').insert({'name': 'John Doe'});
-      await db.table('clients').where('id', '=', 1).update({'name': 'John Doe 2'});
+      await db
+          .table('clients')
+          .where('id', '=', 1)
+          .update({'name': 'John Doe 2'});
       final res = await db.table('clients').where('id', '=', 1).first();
       expect(res, {'id': 1, 'name': 'John Doe 2'});
     });
@@ -127,7 +130,8 @@ void main() {
       await db.table('clients').insert({'name': 'Bob'});
       await db.table('clients').insert({'name': 'Charlie'});
       // Consulta usando whereIn – assumindo que o método whereIn está implementado.
-      final res = await db.table('clients').whereIn('name', ['Alice', 'Charlie']).get();
+      final res =
+          await db.table('clients').whereIn('name', ['Alice', 'Charlie']).get();
       expect(res.length, equals(2));
       final names = res.map((row) => row['name']).toList();
       expect(names, containsAll(['Alice', 'Charlie']));
@@ -209,9 +213,10 @@ void main() {
       await db.table('clients').insert({'name': 'Charlie'});
       await db.table('clients').insert({'name': 'David'});
       await db.table('clients').insert({'name': 'Eve'});
-      
+
       var totalCount = 0;
-      final chunkResult = await db.table('clients').chunk(2, (chunk, page) async {
+      final chunkResult =
+          await db.table('clients').chunk(2, (chunk, page) async {
         totalCount += chunk.length;
         return true;
       });

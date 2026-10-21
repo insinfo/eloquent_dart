@@ -17,9 +17,8 @@ void main() {
     setUp(() => conn = FakeConnection());
 
     test('upsert with explicit update map', () async {
-      final qb =
-          QueryBuilder(conn, QueryPostgresGrammar(), PostgresProcessor())
-              .from('users');
+      final qb = QueryBuilder(conn, QueryPostgresGrammar(), PostgresProcessor())
+          .from('users');
       await qb.upsert(
         [
           {'email': 'a@x.com', 'name': 'A'},
@@ -40,9 +39,8 @@ void main() {
 
     test('upsert without update map updates non-unique columns from excluded',
         () async {
-      final qb =
-          QueryBuilder(conn, QueryPostgresGrammar(), PostgresProcessor())
-              .from('users');
+      final qb = QueryBuilder(conn, QueryPostgresGrammar(), PostgresProcessor())
+          .from('users');
       await qb.upsert(
         [
           {'email': 'a@x.com', 'name': 'A', 'age': 30},
@@ -62,9 +60,8 @@ void main() {
     });
 
     test('upsert with multiple rows', () async {
-      final qb =
-          QueryBuilder(conn, QueryPostgresGrammar(), PostgresProcessor())
-              .from('users');
+      final qb = QueryBuilder(conn, QueryPostgresGrammar(), PostgresProcessor())
+          .from('users');
       await qb.upsert(
         [
           {'email': 'a@x.com', 'name': 'A'},
@@ -88,9 +85,8 @@ void main() {
     });
 
     test('insertOrIgnore -> on conflict do nothing', () async {
-      final qb =
-          QueryBuilder(conn, QueryPostgresGrammar(), PostgresProcessor())
-              .from('users');
+      final qb = QueryBuilder(conn, QueryPostgresGrammar(), PostgresProcessor())
+          .from('users');
       await qb.insertOrIgnore({'email': 'a@x.com', 'name': 'A'});
 
       expect(
@@ -105,17 +101,12 @@ void main() {
 
     test('low-level onConflict + doUpdate(raw) + returning (the user case)',
         () async {
-      final qb =
-          QueryBuilder(conn, QueryPostgresGrammar(), PostgresProcessor())
-              .from('processos_sequences');
+      final qb = QueryBuilder(conn, QueryPostgresGrammar(), PostgresProcessor())
+          .from('processos_sequences');
 
-      await qb
-          .onConflict(['ano'])
-          .doUpdate({
-            'last_id': qb.raw('processos_sequences.last_id + 1'),
-          })
-          .returning(['last_id'])
-          .insert({'ano': 2026, 'last_id': 1});
+      await qb.onConflict(['ano']).doUpdate({
+        'last_id': qb.raw('processos_sequences.last_id + 1'),
+      }).returning(['last_id']).insert({'ano': 2026, 'last_id': 1});
 
       expect(
         conn.lastInsertSql,
@@ -131,13 +122,9 @@ void main() {
     });
 
     test('onConflict on named constraint + doNothing', () async {
-      final qb =
-          QueryBuilder(conn, QueryPostgresGrammar(), PostgresProcessor())
-              .from('t');
-      await qb
-          .onConflict([], 'my_unique')
-          .doNothing()
-          .insert({'a': 1, 'b': 2});
+      final qb = QueryBuilder(conn, QueryPostgresGrammar(), PostgresProcessor())
+          .from('t');
+      await qb.onConflict([], 'my_unique').doNothing().insert({'a': 1, 'b': 2});
 
       expect(
         conn.lastInsertSql,
@@ -150,12 +137,12 @@ void main() {
     });
 
     test('returning with default (*)', () async {
-      final qb =
-          QueryBuilder(conn, QueryPostgresGrammar(), PostgresProcessor())
-              .from('t');
+      final qb = QueryBuilder(conn, QueryPostgresGrammar(), PostgresProcessor())
+          .from('t');
       await qb.returning().insert({'a': 1});
 
-      expect(conn.lastInsertSql, equals('insert into "t" ("a") values (?) returning *'));
+      expect(conn.lastInsertSql,
+          equals('insert into "t" ("a") values (?) returning *'));
     });
   });
 

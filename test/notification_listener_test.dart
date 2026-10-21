@@ -53,7 +53,8 @@ class _FakeConnection {
   void kill() => _lost.complete();
 }
 
-Future<void> _settle() => Future<void>.delayed(const Duration(milliseconds: 30));
+Future<void> _settle() =>
+    Future<void>.delayed(const Duration(milliseconds: 30));
 
 void main() {
   late _FakeServer server;

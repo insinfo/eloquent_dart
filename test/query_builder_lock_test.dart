@@ -17,10 +17,9 @@ void main() {
           .from('jobs')
           .where('status', '=', 'pending');
 
-  QueryBuilder my() =>
-      QueryBuilder(conn, QueryMySqlGrammar(), MySqlProcessor())
-          .from('jobs')
-          .where('status', '=', 'pending');
+  QueryBuilder my() => QueryBuilder(conn, QueryMySqlGrammar(), MySqlProcessor())
+      .from('jobs')
+      .where('status', '=', 'pending');
 
   const base = 'select * from "jobs" where "status" = ?';
 
@@ -45,8 +44,8 @@ void main() {
     });
 
     test('noWait and OF', () {
-      expect(pg().lockForUpdate(noWait: true).toSql(),
-          '$base for update nowait');
+      expect(
+          pg().lockForUpdate(noWait: true).toSql(), '$base for update nowait');
       expect(pg().lockForUpdate(of: ['jobs'], skipLocked: true).toSql(),
           '$base for update of "jobs" skip locked');
     });
@@ -58,8 +57,7 @@ void main() {
     });
 
     test('raw string lock is still used verbatim', () {
-      expect(pg().lock('for no key update').toSql(),
-          '$base for no key update');
+      expect(pg().lock('for no key update').toSql(), '$base for no key update');
     });
 
     test('SKIP LOCKED and NOWAIT cannot be combined', () {

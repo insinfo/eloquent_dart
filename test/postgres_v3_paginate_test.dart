@@ -51,9 +51,11 @@ void main() {
   });
 
   group('Paginate tests', () {
-    test('Paginate retorna informações corretas e os itens esperados', () async {
+    test('Paginate retorna informações corretas e os itens esperados',
+        () async {
       // Seleciona os itens ordenados por id (ascendente)
-      final query = db.table('test_items').select(['id', 'name']).orderBy('id', 'asc');
+      final query =
+          db.table('test_items').select(['id', 'name']).orderBy('id', 'asc');
 
       // Chama paginate com 10 itens por página e solicita a página 2.
       final paginator = await query.paginate(perPage: 10, page: 2);

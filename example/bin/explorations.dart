@@ -204,10 +204,10 @@ void main(List<String> args) async {
 
   final nowDt = DateTime.now();
   var baseDt = DateTime(2000);
- 
-  if (baseDt.timeZoneOffset != nowDt.timeZoneOffset) {    
-    final difference = baseDt.timeZoneOffset - nowDt.timeZoneOffset;       
-    baseDt = baseDt.add(difference);     
+
+  if (baseDt.timeZoneOffset != nowDt.timeZoneOffset) {
+    final difference = baseDt.timeZoneOffset - nowDt.timeZoneOffset;
+    baseDt = baseDt.add(difference);
   }
   final dtLocalDecode = baseDt.add(dur);
 

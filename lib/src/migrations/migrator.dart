@@ -4,7 +4,7 @@ import 'dart:async';
 import 'dart:io'; // For Directory and File access
 import 'package:path/path.dart' as p; // For path manipulation
 import 'package:eloquent/eloquent.dart'; // Main package imports
-//import '../support/str.dart'; 
+//import '../support/str.dart';
 
 /// Manages and runs database migrations.
 /// Corresponds to Illuminate\Database\Migrations\Migrator.
@@ -54,12 +54,12 @@ class Migrator {
     return r is DatabaseManager ? r : null;
   }
 
-
   /// Runs the outstanding migrations found in the specified paths.
   ///
   /// [paths] A list of directory paths containing migration files.
   /// [options] Options map, supporting 'pretend' (bool) and 'step' (bool).
-  Future<void> run(List<String> paths, {bool pretend = false, bool step = false}) async {
+  Future<void> run(List<String> paths,
+      {bool pretend = false, bool step = false}) async {
     notes.clear();
 
     // 1. Get all migration file names from paths
@@ -68,13 +68,15 @@ class Migrator {
     // 2. Get migrations already run from the repository
     // Ensure repository exists before proceeding
     if (!await repository.repositoryExists()) {
-       note('<error>Migration table not found.</error> Run migration setup first.');
-       return; // Or throw?
+      note(
+          '<error>Migration table not found.</error> Run migration setup first.');
+      return; // Or throw?
     }
     final List<String> ran = await repository.getRan();
 
     // 3. Determine migrations to run (files not in ran)
-    final List<String> migrationsToRun = files.where((file) => !ran.contains(file)).toList();
+    final List<String> migrationsToRun =
+        files.where((file) => !ran.contains(file)).toList();
 
     // 4. Run the migrations
     await runMigrationList(migrationsToRun, pretend: pretend, step: step);
@@ -84,7 +86,8 @@ class Migrator {
   ///
   /// [migrations] List of migration file names to run.
   /// [options] Options map, supporting 'pretend' (bool) and 'step' (bool).
-  Future<void> runMigrationList(List<String> migrations, {bool pretend = false, bool step = false}) async {
+  Future<void> runMigrationList(List<String> migrations,
+      {bool pretend = false, bool step = false}) async {
     if (migrations.isEmpty) {
       note('<info>Nothing to migrate.</info>');
       return;
@@ -115,23 +118,23 @@ class Migrator {
     migration.db = _db;
 
     if (pretend) {
-       await _pretendToRun(migration, 'up');
-       return; // Don't log in pretend mode
+      await _pretendToRun(migration, 'up');
+      return; // Don't log in pretend mode
     }
 
     try {
-       // Execute the 'up' method, optionally inside a transaction so a failure
-       // rolls back the migration's DDL (PostgreSQL supports transactional DDL).
-       await _runMigrationMethod(migration, () => migration.up());
+      // Execute the 'up' method, optionally inside a transaction so a failure
+      // rolls back the migration's DDL (PostgreSQL supports transactional DDL).
+      await _runMigrationMethod(migration, () => migration.up());
 
-       // Log the migration if execution was successful
-       await repository.log(file, batch);
-       note("<info>Migrated:</info> $file");
+      // Log the migration if execution was successful
+      await repository.log(file, batch);
+      note("<info>Migrated:</info> $file");
     } catch (e, s) {
-       note("<error>Failed Migration:</error> $file - $e");
-       // Optionally rethrow or handle the error
-       print(s); // Print stack trace for debugging
-       rethrow;
+      note("<error>Failed Migration:</error> $file - $e");
+      // Optionally rethrow or handle the error
+      print(s); // Print stack trace for debugging
+      rethrow;
     }
   }
 
@@ -144,19 +147,20 @@ class Migrator {
     notes.clear();
 
     if (!await repository.repositoryExists()) {
-       note('<error>Migration table not found.</error>');
-       return 0;
+      note('<error>Migration table not found.</error>');
+      return 0;
     }
 
     // Get the migrations from the last 'steps' batches
-    final List<Map<String, dynamic>> migrations = await repository.getMigrations(steps);
+    final List<Map<String, dynamic>> migrations =
+        await repository.getMigrations(steps);
 
     final count = migrations.length;
 
     if (count == 0) {
       note('<info>Nothing to rollback.</info>');
     } else {
-       note('<info>Rolling back migrations:</info>');
+      note('<info>Rolling back migrations:</info>');
       // Rollback in reverse order they were retrieved (which was desc)
       for (final migrationMap in migrations) {
         await _runDown(migrationMap, pretend);
@@ -165,7 +169,6 @@ class Migrator {
     return count;
   }
 
-
   /// Rolls all of the currently applied migrations back.
   ///
   /// [pretend] If true, simulate the reset.
@@ -173,22 +176,26 @@ class Migrator {
   Future<int> reset({bool pretend = false}) async {
     notes.clear();
 
-     if (!await repository.repositoryExists()) {
-       note('<error>Migration table not found.</error>');
-       return 0;
-     }
+    if (!await repository.repositoryExists()) {
+      note('<error>Migration table not found.</error>');
+      return 0;
+    }
 
     // Get all ran migrations in reverse order they should be run down
-    final List<String> migrationsToReset = (await repository.getRan()).reversed.toList();
+    final List<String> migrationsToReset =
+        (await repository.getRan()).reversed.toList();
     final count = migrationsToReset.length;
 
     if (count == 0) {
       note('<info>Nothing to rollback.</info>');
     } else {
-       note('<info>Rolling back all migrations:</info>');
+      note('<info>Rolling back all migrations:</info>');
       for (final migrationName in migrationsToReset) {
         // Create a map structure similar to what repository->getLast() returns
-        final migrationMap = {'migration': migrationName, 'batch': -1}; // Batch number doesn't matter much for reset down
+        final migrationMap = {
+          'migration': migrationName,
+          'batch': -1
+        }; // Batch number doesn't matter much for reset down
         await _runDown(migrationMap, pretend);
       }
     }
@@ -207,11 +214,11 @@ class Migrator {
     instance.db = _db;
 
     if (pretend) {
-       await _pretendToRun(instance, 'down');
-       return; // Don't delete from repository in pretend mode
+      await _pretendToRun(instance, 'down');
+      return; // Don't delete from repository in pretend mode
     }
 
-     // Get connection for this migration
+    // Get connection for this migration
     //final conn = await _resolveConnection(instance.getConnectionName());
 
     try {
@@ -268,14 +275,15 @@ class Migrator {
           if (entity is File) {
             final filename = p.basename(entity.path);
             // Basic pattern matching: YYYY_MM_DD_HHMMSS_*.dart
-            if (RegExp(r'^\d{4}_\d{2}_\d{2}_\d{6}_.*?\.dart$').hasMatch(filename)) {
+            if (RegExp(r'^\d{4}_\d{2}_\d{2}_\d{6}_.*?\.dart$')
+                .hasMatch(filename)) {
               // Remove .dart extension for the name
               files.add(filename.substring(0, filename.length - 5));
             }
           }
         }
       } else {
-         note("<warning>Migration path not found:</warning> $path");
+        note("<warning>Migration path not found:</warning> $path");
       }
     }
     // Sort files chronologically based on the timestamp prefix
@@ -293,40 +301,43 @@ class Migrator {
     final conn = await _resolveConnection(migration.getConnectionName());
 
     // Check if the connection object supports pretend mode
-    if (conn is! Connection || !(conn ).getConfigs()['pretend'] == true ) {
-        note("<warning>Pretend mode not supported or enabled for this connection.</warning> Simulating $method for ${migration.runtimeType}");
-        if (method == 'up') {
-           note(" -> Would run up() method.");
-        } else {
-           note(" -> Would run down() method.");
-        }
-        return;
-        // Or throw an exception?
-        // throw UnsupportedError("Pretend mode requires a Connection object with the 'pretend' config option enabled.");
+    if (conn is! Connection || !(conn).getConfigs()['pretend'] == true) {
+      note(
+          "<warning>Pretend mode not supported or enabled for this connection.</warning> Simulating $method for ${migration.runtimeType}");
+      if (method == 'up') {
+        note(" -> Would run up() method.");
+      } else {
+        note(" -> Would run down() method.");
+      }
+      return;
+      // Or throw an exception?
+      // throw UnsupportedError("Pretend mode requires a Connection object with the 'pretend' config option enabled.");
     }
 
     try {
-        final List<Map<String, dynamic>> queries = await (conn ).pretend(() async {
-          if (method == 'up') {
-            await migration.up();
-          } else {
-            await migration.down();
-          }
-        });
-
-        if (queries.isEmpty) {
-            note("<comment>No queries simulated for:</comment> ${migration.runtimeType}.$method()");
+      final List<Map<String, dynamic>> queries = await (conn).pretend(() async {
+        if (method == 'up') {
+          await migration.up();
+        } else {
+          await migration.down();
         }
+      });
 
-        for (final query in queries) {
-          final name = migration.runtimeType.toString();
-          final sql = query['query'] ?? 'N/A';
-          final bindings = query['bindings'] ?? [];
-          note("<info>$name:</info> $sql <comment>Bindings: $bindings</comment>");
-        }
+      if (queries.isEmpty) {
+        note(
+            "<comment>No queries simulated for:</comment> ${migration.runtimeType}.$method()");
+      }
+
+      for (final query in queries) {
+        final name = migration.runtimeType.toString();
+        final sql = query['query'] ?? 'N/A';
+        final bindings = query['bindings'] ?? [];
+        note("<info>$name:</info> $sql <comment>Bindings: $bindings</comment>");
+      }
     } catch (e, s) {
-       note("<error>Error during pretend run for ${migration.runtimeType}.$method():</error> $e");
-       print(s);
+      note(
+          "<error>Error during pretend run for ${migration.runtimeType}.$method():</error> $e");
+      print(s);
     }
   }
 
@@ -336,7 +347,8 @@ class Migrator {
   @protected
   Migration _resolve(String file) {
     if (!migrationRegistry.containsKey(file)) {
-      throw Exception("Migration not found in registry: $file. Ensure migrations are registered.");
+      throw Exception(
+          "Migration not found in registry: $file. Ensure migrations are registered.");
     }
     // Call the factory function to get a new instance
     return migrationRegistry[file]!();
@@ -369,9 +381,7 @@ class Migrator {
     // Fall back to the resolver's default connection when neither the migration
     // nor the migrator specifies a name (instead of dereferencing a null).
     final name = connectionName ?? connection;
-    return name == null
-        ? resolver.connection()
-        : resolver.connection(name);
+    return name == null ? resolver.connection() : resolver.connection(name);
   }
 
   /// Set the default connection name.

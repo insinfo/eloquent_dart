@@ -47,11 +47,15 @@ void main() {
 
   test('upsert inserts then updates on duplicate key', () async {
     await db.table('mysql_upsert').upsert(
-      [{'email': 'a@x.com', 'name': 'A', 'hits': 1}],
+      [
+        {'email': 'a@x.com', 'name': 'A', 'hits': 1}
+      ],
       ['email'],
     );
     await db.table('mysql_upsert').upsert(
-      [{'email': 'a@x.com', 'name': 'A2', 'hits': 9}],
+      [
+        {'email': 'a@x.com', 'name': 'A2', 'hits': 9}
+      ],
       ['email'],
       {'name': 'A2', 'hits': db.raw('mysql_upsert.hits + 1')},
     );

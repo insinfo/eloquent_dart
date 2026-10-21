@@ -215,7 +215,8 @@ class Comparator {
   }
 
   bool _sequenceChanged(Sequence a, Sequence b) =>
-      a.getCache() != b.getCache() || a.getInitialValue() != b.getInitialValue();
+      a.getCache() != b.getCache() ||
+      a.getInitialValue() != b.getInitialValue();
 
   dynamic diffTable(Table oldTable, Table newTable) {
     final diff = compareTables(oldTable, newTable);

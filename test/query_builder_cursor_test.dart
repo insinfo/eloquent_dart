@@ -32,10 +32,12 @@ void main() {
         equals('select * from "big" where "ok" = ?'),
       );
       expect(conn.lastSelectBindings, equals([true]));
-      expect(rows, equals([
-        {'id': 1},
-        {'id': 2},
-      ]));
+      expect(
+          rows,
+          equals([
+            {'id': 1},
+            {'id': 2},
+          ]));
     });
 
     test('streams rows lazily (one at a time)', () async {
@@ -53,9 +55,11 @@ void main() {
         {'id': 9},
       ];
       final rows = await builder().lazy().toList();
-      expect(rows, equals([
-        {'id': 9},
-      ]));
+      expect(
+          rows,
+          equals([
+            {'id': 9},
+          ]));
     });
 
     test('restores columns after streaming', () async {
