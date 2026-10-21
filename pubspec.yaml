@@ -29,7 +29,7 @@ dependencies:
   dpgsql: ^1.1.0
   # postgres v2
   postgres_fork: ^3.0.0
-  mysql_dart: ^3.0.1
+  mysql_dart: ^3.0.2
   # postgres v3
   postgres: ^3.5.4
 
