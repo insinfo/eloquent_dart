@@ -182,6 +182,11 @@ Details and migration notes: [doc/release_notes_4.0.0.md](doc/release_notes_4.0.
 
 ### Fixed
 
+- A connection the server closed for being idle was not always seen as lost:
+  PostgreSQL 14+ `idle_session_timeout` (SQLSTATE 57P05, "terminating
+  connection due to idle-session timeout") made every later query fail on
+  dargres; it reconnects, as MySQL/MariaDB `wait_timeout` already did
+  (issue #2). Tested on every adapter, with and without a pool.
 - postgres (postgres_fork): an SQL error inside a nested `transaction()`
   (SAVEPOINT) rolled back the whole transaction, as the driver did not know
   a savepoint was active; nested transactions use the driver's own

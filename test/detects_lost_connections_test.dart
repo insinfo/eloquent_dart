@@ -55,6 +55,16 @@ void main() {
   test('structured codes', () {
     expect(lost(_SqlStateError('08006', 'connection failure')), isTrue);
     expect(lost(_SqlStateError('57P01', 'admin shutdown')), isTrue);
+    // PostgreSQL 14+ idle_session_timeout (issue #2).
+    expect(lost(_SqlStateError('57P05', 'idle-session timeout')), isTrue);
+    expect(
+        lost(Exception('PostgresqlException: FATAL 57P05 terminando a '
+            'conexão devido ao tempo limite de sessão ociosa')),
+        isTrue); // dargres
+    expect(
+        lost(Exception('FATAL: terminating connection due to idle-session '
+            'timeout')),
+        isTrue);
     expect(lost(_CodeError('08003')), isTrue);
     expect(lost(_MySqlError(2006, 'MySQL server has gone away')), isTrue);
     expect(lost(_MySqlError(1927, 'Connection was killed')), isTrue);

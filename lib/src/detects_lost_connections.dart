@@ -1,10 +1,11 @@
 import 'dart:io';
 
 mixin DetectsLostConnections {
-  /// PostgreSQL admin/crash shutdown and "cannot connect now". Safe to match
-  /// in a message; the connection_exception class (08xxx) is only read from
-  /// the exception's code, since 08001 can also be data (a CEP, for example).
-  static final _lostSqlStateInMessage = RegExp(r'\b57P0[123]\b');
+  /// PostgreSQL admin/crash shutdown, "cannot connect now" and the
+  /// idle_session_timeout of PostgreSQL 14+ (57P05). Safe to match in a
+  /// message; the connection_exception class (08xxx) is only read from the
+  /// exception's code, since 08001 can also be data (a CEP, for example).
+  static final _lostSqlStateInMessage = RegExp(r'\b57P0[1235]\b');
 
   /// MySQL/MariaDB errors of a lost connection: 2002 can't connect, 2006
   /// gone away, 2013 lost during query, 1053 shutdown in progress, 1927
@@ -43,6 +44,7 @@ mixin DetectsLostConnections {
     'could not translate host name',
     'temporary failure in name resolution',
     'terminating connection due to administrator command',
+    'terminating connection due to idle-session timeout',
     'the database system is shutting down',
     'the database system is starting up',
     'connection was killed',

@@ -78,6 +78,39 @@ void main() {
             .timeout(const Duration(seconds: 10));
         await manager.getDatabaseManager().purge('killer');
       });
+
+      // Issue #2: the server closes a connection left idle (MySQL/MariaDB
+      // wait_timeout, PostgreSQL 14+ idle_session_timeout); the next query
+      // must reconnect instead of failing until the application restarts.
+      test(
+          '$driver${pool ? ' (pool)' : ''} reconnects after the server closes '
+          'an idle connection', () async {
+        final mysql = driver == 'mysql';
+        final manager = Manager()..addConnection(_config(driver, pool), 'idle');
+        final db = await manager.getConnection('idle');
+
+        Future<dynamic> pid() async => (await db.select(mysql
+                ? 'select connection_id() as pid'
+                : 'select pg_backend_pid() as pid'))
+            .first['pid'];
+
+        final before = await pid();
+        await db.execute(mysql
+            ? 'set session wait_timeout = 1'
+            : "set idle_session_timeout = '1s'");
+        await Future<void>.delayed(const Duration(seconds: 3));
+
+        final after = await pid().timeout(const Duration(seconds: 20));
+        expect(after, isNot(before), reason: 'a new session runs the query');
+        expect(await db.select('select 1 as one'), [
+          {'one': 1}
+        ]);
+
+        await manager
+            .getDatabaseManager()
+            .purge('idle')
+            .timeout(const Duration(seconds: 10));
+      });
     }
   }
 }
