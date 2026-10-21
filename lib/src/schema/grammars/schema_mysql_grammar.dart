@@ -137,6 +137,23 @@ class SchemaMySqlGrammar extends SchemaGrammar {
     return ['alter table $table ${columns.join(', ')}'];
   }
 
+  /// The column definitions of a create/add, with `primary key` after an
+  /// auto_increment column (`increments('id')`): MySQL requires the column
+  /// to be a key (error 1075), and Laravel declares it inline too. (The
+  /// Doctrine platform declares columns through getColumnDeclarationSql and
+  /// adds its own PRIMARY KEY clause.)
+  @override
+  List<String> getColumns(Blueprint blueprint) {
+    final columns = blueprint.getAddedColumns();
+    final sql = super.getColumns(blueprint);
+    return [
+      for (var i = 0; i < sql.length; i++)
+        modifyIncrementing(blueprint, columns[i]) != null
+            ? '${sql[i]} primary key'
+            : sql[i],
+    ];
+  }
+
   /// Compile a primary key command (MySQL: ALTER TABLE ... ADD PRIMARY KEY).
   @override
   List<String> compilePrimary(Blueprint blueprint, Fluent command) {
@@ -490,28 +507,33 @@ class SchemaMySqlGrammar extends SchemaGrammar {
   }
 
   @override
-  String typeDateTime(Fluent column) =>
-      'datetime'; // Precision handled differently if needed
+  String typeDateTime(Fluent column) => 'datetime${_fsp(column)}';
   @override
   String typeDateTimeTz(Fluent column) {
     print(
         "Warning: MySQL does not support DATETIME WITH TIMEZONE. Using DATETIME.");
-    return 'datetime';
+    return typeDateTime(column);
   }
 
   @override
-  String typeTime(Fluent column) => 'time'; // Precision handled differently
+  String typeTime(Fluent column) => 'time${_fsp(column)}';
   @override
   String typeTimeTz(Fluent column) {
     print("Warning: MySQL does not support TIME WITH TIMEZONE. Using TIME.");
-    return 'time';
+    return typeTime(column);
   }
 
   @override
   String typeTimestamp(Fluent column) {
-    String type = 'timestamp';
     // MySQL TIMESTAMP default needs special handling via modifyDefault/modifyNullable
-    return type;
+    return 'timestamp${_fsp(column)}';
+  }
+
+  /// `(n)` fractional seconds for a precision above 0; MySQL's default is
+  /// whole seconds.
+  String _fsp(Fluent column) {
+    final precision = column['precision'];
+    return precision is int && precision > 0 ? '($precision)' : '';
   }
 
   @override

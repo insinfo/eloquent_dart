@@ -10,6 +10,20 @@ Details and migration notes: [doc/release_notes_4.0.0.md](doc/release_notes_4.0.
 - `transaction()` inside a transaction now creates a SAVEPOINT instead of a
   new transaction, and `timeoutInSeconds` is passed to the driver.
 - `InvalidArgumentException` replaced by `ArgumentError`.
+- Time columns (`timestamp`, `dateTime`, `time` and the `Tz` forms,
+  `timestamps()`, `softDeletes()`) have no precision by default
+  (`timestamp without time zone`, microseconds on PostgreSQL); they were
+  `timestamp(0)`, which rounds the fractions that 4.0 writes to the next
+  second. `SchemaBuilder.defaultTimePrecision = 0` restores Laravel's
+  default; `precision:` sets one column.
+- `Blueprint.toSql` throws for a command that does not compile or is
+  unknown (it printed a warning and skipped the DDL).
+- `Manager.bootEloquent()` (empty) and `Manager.setFetchMode()` (wrote a
+  `database.fetch` setting nothing read) removed.
+- `Container` stubs that returned null (`getMethodDependencies`,
+  `getCallReflector`, `getDependencies`, `resolveNonClass`, `resolveClass`,
+  `keyParametersByArgument`, `getFunctionHint`) and the static
+  `Container.object` removed.
 - The dargres adapter requires dargres 4.0.1.
 - `where(col, op, null)` with an operator other than `=`, `<>` or `!=` throws
   (it silently became `is not null`); `where(col, value)` means `= value`.
@@ -29,6 +43,10 @@ Details and migration notes: [doc/release_notes_4.0.0.md](doc/release_notes_4.0.
   `money` the decimal amount, arrays `List<T?>`, arrays of user-defined types
   (`enum[]`) the array literal. `pg_types: 'driver'` keeps each driver's
   types. See the release notes.
+- A unique violation (PostgreSQL `23505`, MySQL 1062/1586) throws
+  `UniqueConstraintViolationException` (a `QueryException` with the driver's
+  exception in `previous` and its text in `toString()`) instead of the
+  driver's exception; other errors are not wrapped.
 
 ### Added
 
@@ -118,6 +136,17 @@ Details and migration notes: [doc/release_notes_4.0.0.md](doc/release_notes_4.0.
   `whereRowValues` (`(a, b) > (?, ?)`), `whereAnyArray`/`whereNotAnyArray`
   (`col = any(?)` with one array parameter, `in (...)` on MySQL),
   `whereBetweenColumns`, `whereValueBetween`.
+- Migrations: `Migrator.runPending()` (the registered migrations not run
+  yet, from the registry alone, so it works in an AOT build) and
+  `pending()`; `markAsRan()` (baseline of an existing database);
+  `Migrator.isolated` (default on PostgreSQL: each migration takes an
+  advisory lock and checks the log again, so concurrent deploys apply it
+  once); the log is written in the migration's transaction
+  (`transactionScope`), so a failure rolls both back;
+  `Migration.connection` and `Migration.statement(sql)` for raw SQL; the
+  migration table gets an `id` primary key.
+- PostgreSQL column comments (`comment(...)`) become `COMMENT ON COLUMN`
+  (they were ignored); MySQL time columns take `precision:` (`datetime(3)`).
 - `cursorPaginate()` (keyset pagination with opaque cursors, `CursorPage`),
   `paginateWithWindowCount()` (opt-in one-query pagination with
   `count(*) over ()`), `explain({analyze})`, `afterQuery(callback)`,
@@ -133,11 +162,36 @@ Details and migration notes: [doc/release_notes_4.0.0.md](doc/release_notes_4.0.
   `Day`/`Month`/`Year`, JSON (`whereJsonContains`, `whereJsonLength`),
   arrays (`whereArray`), `whereFullText`, `distinctOn`, `joinSub`,
   `joinLateral`/`leftJoinLateral`, `latest`/`oldest`/`inRandomOrder`,
-  `cursor`, `chunk`, `chunkById`, `insertUsing`, `firstOrFail`, and every
-  item above.
+- `UniqueConstraintViolationException` (Laravel 10+) with the violated
+  `constraint`, on the five adapters, also when it ends a transaction on
+  postgres/postgres_v3. `createOrFirst()`/`firstOrCreate()` (insert or return
+  the row a unique index already has; `on conflict do nothing returning *` on
+  PostgreSQL, so a surrounding transaction stays usable).
+- PostgreSQL locks: `db.advisoryLock(key)`/`db.tryAdvisoryLock(key)`
+  (`pg_advisory_xact_lock`, held until the transaction ends) and
+  `lockTable(TableLockMode, {noWait})` (`LOCK TABLE`, mode from an enum).
+  `cursor`, `chunk`, `chunkById`, `insertUsing`, `firstOrFail`,
+  `createOrFirst`, `firstOrCreate`, `lockTable`, and every item above.
 
 ### Fixed
 
+- MySQL `increments()` in a create or add failed with error 1075 (the
+  auto_increment column was not declared a key); it is `primary key` inline,
+  as in Laravel.
+- `Manager.connection()`, `table()` and `schema()` used the global instance
+  (`instance!`), so they failed with a null check without `setAsGlobal()`;
+  they use the manager they are called on.
+- IoC `Container`: factories were called with the wrong arguments (every
+  closure binding failed); they are called with `()`, `(container)` or
+  `(container, parameters)`. `extend`, `rebinding`, contextual bindings
+  (`when().needs().give()`, which also passed a method instead of the
+  abstract) and `[]=` with a value crashed; `share` cached one value for all
+  closures; `make` of an unknown type crashed with `NoSuchMethodError`
+  (`BindingResolutionException` now); a binding to another name threw
+  `UnimplementedError`; `resolving`/`afterResolving` did nothing; empty
+  list/map instances were not `bound`; `call`/`wrap` passed `null` instead
+  of the parameters; `refresh` and `Class@method` throw `UnsupportedError`
+  (they need reflection).
 - dpgsql: `EXPLAIN`, `VALUES`, `TABLE`, `FETCH` and parenthesized `SELECT`s
   returned no rows (they were run as statements without a result).
 - postgres_v3: `inet`, `cidr`, `macaddr` and `oid` came back as garbage

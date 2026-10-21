@@ -37,6 +37,15 @@ class Migrator {
   /// itself a [DatabaseManager].
   final DatabaseManager? databaseManager;
 
+  /// On PostgreSQL, each transactional migration first takes an advisory
+  /// lock and checks the migration table again, so migrators running at the
+  /// same time (two instances deploying) apply each migration once. The
+  /// lock is held until the migration commits.
+  bool isolated = true;
+
+  /// Advisory lock key of [isolated].
+  static const lockKey = 'eloquent.migrations';
+
   /// Create a new migrator instance.
   ///
   /// [repository] Stores migration history.
@@ -82,6 +91,65 @@ class Migrator {
     await runMigrationList(migrationsToRun, pretend: pretend, step: step);
   }
 
+  /// Runs the registered migrations that have not run yet, in name order,
+  /// creating the migration table when it is missing. It reads only
+  /// [migrationRegistry], so it also works in a compiled (AOT) application,
+  /// where the migration source files are not on disk. Returns the
+  /// migrations it was asked to run.
+  ///
+  /// ```dart
+  /// final migrator = Migrator(repository, dbm, {
+  ///   '2026_10_21_000001_tipo_norma_nome_unico': () => TipoNormaNomeUnico(),
+  /// }, databaseManager: dbm);
+  /// await migrator.runPending();
+  /// ```
+  Future<List<String>> runPending(
+      {bool pretend = false, bool step = false}) async {
+    notes.clear();
+    await _ensureRepository();
+    final migrations = await pending();
+    await runMigrationList(migrations, pretend: pretend, step: step);
+    return migrations;
+  }
+
+  /// The registered migrations that have not run yet, in name order.
+  Future<List<String>> pending() async {
+    final ran = await repository.repositoryExists()
+        ? (await repository.getRan()).toSet()
+        : <String>{};
+    return migrationRegistry.keys.where((name) => !ran.contains(name)).toList()
+      ..sort();
+  }
+
+  /// Records [migrations] as run without running them: the baseline of a
+  /// database whose schema already has them (created by the SQL scripts of
+  /// earlier versions, for example). They must be registered.
+  Future<void> markAsRan(List<String> migrations) async {
+    notes.clear();
+    await _ensureRepository();
+    final ran = (await repository.getRan()).toSet();
+    final batch = await repository.getNextBatchNumber();
+    for (final name in migrations) {
+      if (!migrationRegistry.containsKey(name)) {
+        throw ArgumentError.value(name, 'migrations', 'Not registered.');
+      }
+      if (ran.contains(name)) continue;
+      await repository.log(name, batch);
+      note('<info>Marked as ran:</info> $name');
+    }
+  }
+
+  /// Creates the migration table when it is missing (another migrator may
+  /// create it at the same time).
+  Future<void> _ensureRepository() async {
+    if (await repository.repositoryExists()) return;
+    try {
+      await repository.createRepository();
+    } catch (_) {
+      if (!await repository.repositoryExists()) rethrow;
+    }
+  }
+
   /// Run a specific list of migrations.
   ///
   /// [migrations] List of migration file names to run.
@@ -123,13 +191,19 @@ class Migrator {
     }
 
     try {
-      // Execute the 'up' method, optionally inside a transaction so a failure
-      // rolls back the migration's DDL (PostgreSQL supports transactional DDL).
-      await _runMigrationMethod(migration, () => migration.up());
-
-      // Log the migration if execution was successful
-      await repository.log(file, batch);
-      note("<info>Migrated:</info> $file");
+      // The check, the 'up' method and the log run in the migration's
+      // transaction (when it has one): a failure rolls back the DDL and the
+      // log together, and a migrator that waited for the lock sees the log.
+      var migrated = false;
+      await _runMigrationMethod(migration, () async {
+        if ((await repository.getRan()).contains(file)) return;
+        await migration.up();
+        await repository.log(file, batch);
+        migrated = true;
+      });
+      note(migrated
+          ? "<info>Migrated:</info> $file"
+          : "<comment>Already migrated:</comment> $file");
     } catch (e, s) {
       note("<error>Failed Migration:</error> $file - $e");
       // Optionally rethrow or handle the error
@@ -218,15 +292,13 @@ class Migrator {
       return; // Don't delete from repository in pretend mode
     }
 
-    // Get connection for this migration
-    //final conn = await _resolveConnection(instance.getConnectionName());
-
     try {
-      // Execute the 'down' method (optionally transactional, see _runUp).
-      await _runMigrationMethod(instance, () => instance.down());
-
-      // Delete the migration record if successful
-      await repository.delete(migrationMap);
+      // The 'down' method and the removal of the log run in the same
+      // transaction (see _runUp).
+      await _runMigrationMethod(instance, () async {
+        await instance.down();
+        await repository.delete(migrationMap);
+      });
       note("<info>Rolled back:</info> $file");
     } catch (e, s) {
       note("<error>Failed Rollback:</error> $file - $e");
@@ -239,6 +311,11 @@ class Migrator {
   /// when [Migration.withinTransaction] is true and the connection is a
   /// [Connection]. On failure the DDL is rolled back (PostgreSQL supports
   /// transactional DDL); `withinTransaction = false` opts out.
+  ///
+  /// The transaction is a [Connection.transactionScope], so the migration
+  /// table (through the resolver's connection) and code that uses `db`
+  /// take part in it. With [isolated] on PostgreSQL it starts with the
+  /// advisory lock [lockKey].
   @protected
   Future<void> _runMigrationMethod(
       Migration migration, Future<void> Function() body) async {
@@ -255,8 +332,11 @@ class Migrator {
     }
 
     try {
-      await conn.transaction((txConn) async {
+      await conn.transactionScope((txConn) async {
         migration.connectionOverride = txConn;
+        if (isolated && conn.getDriverName() == 'pgsql') {
+          await txConn.advisoryLock(lockKey);
+        }
         await body();
       });
     } finally {

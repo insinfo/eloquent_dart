@@ -1813,6 +1813,23 @@ final class QueryBuilder2 with WhereConditions<QueryBuilder2> {
   Future<int> nextValue(String column, {int start = 1, bool lock = true}) =>
       toQueryBuilder().nextValue(column, start: start, lock: lock);
 
+  /// Inserts [attributes] + [values], or returns the row of [attributes]
+  /// when a unique index refuses the insert (see QueryBuilder.createOrFirst).
+  Future<Map<String, dynamic>> createOrFirst(Map<String, Object?> attributes,
+          [Map<String, Object?> values = const {}]) =>
+      toQueryBuilder().createOrFirst(attributes, values);
+
+  /// The row of [attributes], or [createOrFirst] when there is none.
+  Future<Map<String, dynamic>> firstOrCreate(Map<String, Object?> attributes,
+          [Map<String, Object?> values = const {}]) =>
+      toQueryBuilder().firstOrCreate(attributes, values);
+
+  /// PostgreSQL `LOCK TABLE` of this table until the transaction ends (see
+  /// QueryBuilder.lockTable).
+  Future<void> lockTable(TableLockMode mode,
+          {bool noWait = false, Duration? timeout}) =>
+      toQueryBuilder().lockTable(mode, noWait: noWait, timeout: timeout);
+
   /// Laravel's updateFrom: the inner joins become `update ... from ...`
   /// (PostgreSQL); the same SQL as [update] here.
   Future<int> updateFrom(Map<String, Object?> values, {Duration? timeout}) =>

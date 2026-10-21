@@ -12,12 +12,49 @@ eloquent 5.2 query builder port from PHP Laravel to dart
 
 https://laravel.com/docs/5.2/queries
 
-for now it only works with PostgreSQL and MySQL
+for now it only works with PostgreSQL and MySQL. PostgreSQL has four driver
+implementations (`postgres`, `postgres_v3`, `dargres`, `dpgsql`) that return
+the same Dart types.
+
+### What's new in 4.0
+
+Details, breaking changes and migration notes:
+[doc/release_notes_4.0.0.md](doc/release_notes_4.0.0.md).
+
+- [QueryBuilder2](#querybuilder2-dart-3-api): a Dart 3 API with fixed-meaning
+  arguments and typed results (`db.table2()`).
+- [Nested transactions](#transactions-nested-transactions-savepoint-and-transactionifneeded)
+  (SAVEPOINT), `transactionIfNeeded` and the
+  [ambient `transactionScope`](#ambient-transaction-transactionscope).
+- [Unique violations, `createOrFirst` and explicit locks](#unique-values-createorfirst-and-explicit-locks):
+  `UniqueConstraintViolationException`, `createOrFirst`/`firstOrCreate`,
+  `advisoryLock`, `lockTable`; [row locks](#row-locks-for-update--for-share-skip-locked-nowait)
+  with SKIP LOCKED/NOWAIT.
+- [Search and filters](#search-filters-and-client-ordering) (`whereSearch`,
+  `unaccent`, `orderByInput`), [pagination](#pagination) (offset, keyset,
+  window count), [composite keys and arrays](#composite-keys-and-arrays).
+- [UPSERT / ON CONFLICT / RETURNING](#upsert--on-conflict--returning-postgresql--mysql),
+  [bulk inserts and numbering](#bulk-inserts-and-numbering) (`copyInto`,
+  `insertUnnest`, `nextValue`).
+- [Helpers ported from Laravel 12](#helpers-ported-from-laravel-12): query
+  listeners, `toRawSql()`, `when`/`unless`, `whereAny`/`whereAll`, `sole`,
+  `lazyById`...
+- [Streaming](#streaming-large-result-sets-server-side-cursor) on every
+  PostgreSQL adapter, [LISTEN/NOTIFY](#postgresql-listen--notify),
+  [direct driver access](#direct-driver-access-copy-listennotify-raw-connection).
+- [ORM](#orm-active-record-or-data-mapper-no-code-generation-no-reflection)
+  without code generation (Active Record and Data Mapper),
+  [migrations, seeders and CLI](#migrations-seeders-and-cli),
+  [Doctrine schema port](#schema-objects-and-platforms-doctrine-dbal-port)
+  and `schema:diff`.
+- [Uniform PostgreSQL types](#postgresql-value-types-pg_types-and-driver-options)
+  (`pg_types`), `driver_options` and
+  [`datetime_bindings`](#datetime-bindings-datetime_bindings).
 
 
 ## Creating a connection executing a simple select
 ```dart
-    var manager = new Manager();
+    final manager = new Manager();
     manager.addConnection({
       'driver': 'pgsql',
       'host': 'localhost',
@@ -214,8 +251,8 @@ equivalent `QueryBuilder` for features not exposed yet.
 receives a `Connection` bound to the transaction:
 
 ```dart
-final id = await db.transaction((ctx) async {   // id is an int
-  return await ctx.table('pedidos').insertGetId({'cliente': 1});
+final id = await db.transaction<int>((ctx) async {   // id is an int
+  return await ctx.table('pedidos').insertGetId({'cliente': 1}) as int;
 });
 ```
 
@@ -268,6 +305,26 @@ transaction.
 > isolates Dart exceptions there. `dargres`, `dpgsql` and MySQL recover with
 > `ROLLBACK TO SAVEPOINT` and the outer transaction continues.
 
+## Ambient transaction: transactionScope
+
+`db.transaction((ctx) ...)` only covers what runs through `ctx`: a repository
+that uses `db` inside the callback runs on another pooled connection (outside
+the transaction), or waits forever on a single connection.
+`transactionScope` makes the transaction ambient for the callback:
+
+```dart
+await db.transactionScope((ctx) async {
+  await processoRepository.encaminhar(dados);           // uses `db`: in the transaction
+  await db.transaction((inner) async { /* ... */ });    // a SAVEPOINT of it
+  await db.outsideTransaction(() => log.gravar(evento)); // survives a rollback (needs a pool)
+});
+```
+
+The scope is a `Zone` value, so it covers only the async calls of the
+callback; other requests on the same `db` are not affected. Inside it
+`db.isInTransaction` and `db.isInTransactionScope` are true and
+`db.transactionIfNeeded` joins the transaction.
+
 ## Row locks: FOR UPDATE / FOR SHARE, SKIP LOCKED, NOWAIT
 
 ```dart
@@ -292,6 +349,63 @@ db.table('jobs').lock('for no key update');        // raw clause, verbatim
 
 MySQL uses the 8.0 syntax (`for share`, `skip locked`, `nowait`) whenever a
 modifier is present; a plain `sharedLock()` keeps `lock in share mode`.
+
+## Unique values, createOrFirst and explicit locks
+
+A unique violation (PostgreSQL `23505`, MySQL 1062/1586) throws
+`UniqueConstraintViolationException`, a `QueryException` with the violated
+`constraint`, the `sql`/`bindings` and the driver's exception in `previous`
+(its text is kept in `toString()`). Other driver errors are not wrapped. With
+a unique index the database enforces the rule, without locks or races:
+
+```dart
+// CREATE UNIQUE INDEX tipo_norma_nome_uq
+//   ON normas.tipo_norma (lower(public.immutable_unaccent(trim(nom_tipo_norma))));
+try {
+  await db.table('normas.tipo_norma').insert(item.toMap());
+} on UniqueConstraintViolationException catch (e) {
+  if (e.constraint != 'tipo_norma_nome_uq') rethrow;
+  throw ConflictException('A type with this name already exists.');
+}
+```
+
+`createOrFirst` / `firstOrCreate` (Laravel's semantics) insert the row, or
+return the one a unique index already has:
+
+```dart
+final tag = await db.table('tags').createOrFirst({'slug': 'dart'}, {'nome': 'Dart'});
+final user = await db.table2('users').firstOrCreate({'email': email}, {'nome': nome});
+```
+
+On PostgreSQL `createOrFirst` uses `insert ... on conflict do nothing
+returning *`, so a conflict is not an error and a surrounding transaction
+stays usable on every adapter; on MySQL it runs in a SAVEPOINT.
+
+When the rule is not a unique value, serialize the code that checks and writes:
+
+```dart
+await db.transaction((ctx) async {
+  // pg_advisory_xact_lock: one transaction at a time per key, until commit.
+  // Reads, other writes and foreign key checks are not blocked.
+  await ctx.advisoryLock('normas.tipo_norma');
+  if (!await ctx.tryAdvisoryLock('other-key')) { /* held elsewhere */ }
+
+  // LOCK TABLE "normas"."tipo_norma" IN EXCLUSIVE MODE (blocks much more)
+  await ctx.table('normas.tipo_norma').lockTable(TableLockMode.exclusive);
+  await ctx.table('fila').lockTable(TableLockMode.share, noWait: true);
+});
+```
+
+| Need | Tool |
+|---|---|
+| A value must be unique (name, code per year) | Unique index + `UniqueConstraintViolationException` or `createOrFirst` |
+| Lock the rows that will be changed | `lockForUpdate()` |
+| One transaction at a time in a piece of code | `advisoryLock(key)`; `nextValue()` for a max + 1 |
+| Block writes to the whole table | `lockTable(mode)` |
+
+`advisoryLock` and `lockTable` need a transaction (`StateError` outside one)
+and PostgreSQL (`UnsupportedError` on MySQL). The key is a `String` (hashed)
+or an `int`.
 
 ## UPSERT / ON CONFLICT / RETURNING (PostgreSQL & MySQL)
 
@@ -330,14 +444,121 @@ RETURNING last_id;
 > The client-side idiom is `RETURNING <col>` whose value is read in Dart — which
 > is exactly what `.returning([...]).insert(...)` returns (a `List<Map>`).
 
-## Streaming large result sets (server-side cursor)
-
-`cursor()` streams rows one at a time using the driver's incremental reader,
-so memory stays roughly constant even for millions of rows (only the `dpgsql`
-driver implementation supports it today; others throw `UnsupportedError`).
+## Search, filters and client ordering
 
 ```dart
-// driver_implementation: 'dpgsql'
+final query = db.table('cgm as c')
+    // (unaccent(c.nom_cgm::text) ilike unaccent(?) or unaccent(c.cpf::text) ilike unaccent(?))
+    // '%' and '_' in the term are escaped; a null or blank term adds nothing.
+    .whereSearch(['c.nom_cgm', 'c.cpf'], filtros.searchString, unaccent: true)
+    // the client's field goes through an allow-list, never into the SQL
+    .orderByInput(filtros.orderBy, filtros.orderDir,
+        allowed: {'nome': 'c.nom_cgm', 'cpf': 'c.cpf'}, fallback: 'c.numcgm');
+```
+
+- `whereSearch` options: `match` (`SearchMatch.contains` (default),
+  `startsWith`, `endsWith`, `exact`, `wordsInOrder`), `everyWord` (each word
+  in some column: "ana silva" finds "Ana Maria da Silva"), `lower: true`
+  (`lower(col) like lower(?)`, the form an expression index can serve),
+  `caseSensitive`. Columns are identifiers or `db.raw(...)`.
+- `whereLike(column, pattern, {caseSensitive, unaccent, lower})`,
+  `whereAnyLike(columns, pattern)`, `QueryBuilder.escapeLike(text)`.
+- `unaccent` needs the PostgreSQL extension; set
+  `QueryPostgresGrammar.unaccentFunction` to use an IMMUTABLE wrapper that an
+  index can use. MySQL leaves case and accents to the collation.
+
+## Pagination
+
+```dart
+// LIMIT/OFFSET + count
+final page = await db.table('processo').orderBy('id').paginate(perPage: 20, page: 2);
+
+// The same in one query (count(*) over ()); measure before using it.
+final page2 = await db.table('processo').orderBy('id')
+    .paginateWithWindowCount(perPage: 20, page: 2);
+
+// Keyset pagination: no OFFSET, no count. Order by unique columns.
+final first = await db.table('processo').orderBy('data').orderBy('id')
+    .cursorPaginate(perPage: 50);
+final next = await db.table('processo').orderBy('data').orderBy('id')
+    .cursorPaginate(perPage: 50, cursor: first.nextCursor);
+return next.toMap(); // data, per_page, next_cursor, prev_cursor
+```
+
+## Composite keys and arrays
+
+```dart
+// ("cod_processo", "ano_exercicio") in ((?, ?), (?, ?))
+db.table('processo').whereInTuple(['cod_processo', 'ano_exercicio'], [[10, '2024'], [11, '2024']]);
+// ("ano", "numero") > (?, ?)
+db.table('processo').whereRowValues(['ano', 'numero'], '>', [2024, 100]);
+// "id" = any(?) with ONE array parameter (PostgreSQL; MySQL: in (...))
+db.table('processo').whereAnyArray('id', ids);
+db.table('arquivo').whereAnyArray('uuid', uuids, elementType: 'uuid'); // ?::uuid[]
+// "valor" between "minimo" and "maximo"; ? between "data_inicio" and "data_fim"
+db.table('faixa').whereBetweenColumns('valor', ['minimo', 'maximo']);
+db.table('vigencia').whereValueBetween(DateTime.now(), ['data_inicio', 'data_fim']);
+```
+
+## Bulk inserts and numbering
+
+```dart
+// COPY ... FROM STDIN on dpgsql, multi-row INSERTs elsewhere
+await db.table('leitura').copyInto(rows);
+
+// insert ... select * from unnest(?::int[], ?::text[]): one parameter per column
+await db.table('leitura').insertUnnest(rows, types: {'id': 'int', 'nome': 'text'});
+
+// max + 1 per scope under pg_advisory_xact_lock, in the inserting transaction
+await db.transaction((ctx) async {
+  final cod = await ctx.table('andamento')
+      .where('cod_processo', '=', p)
+      .nextValue('cod_andamento');
+  await ctx.table('andamento').insert({'cod_processo': p, 'cod_andamento': cod});
+});
+```
+
+## Helpers ported from Laravel 12
+
+```dart
+// Query listeners (failed statements included) and slow queries
+final stop = db.listen((QueryExecuted q) => print('${q.time.inMilliseconds} ms ${q.toRawSql()}'));
+db.onSlowQuery(Duration(milliseconds: 200), (q) => log.warning(q.sql));
+
+// SQL with the bindings inlined, for logs and debugging (never execute it)
+print(db.table('users').where('id', '=', 1).toRawSql());
+
+// Conditional building
+db.table('processo')
+    .when(filtro.situacao, (QueryBuilder q, situacao) => q.where('situacao', situacao))
+    .unless(incluirArquivados, (QueryBuilder q) => q.whereNull('arquivado_em'));
+
+db.table('users').whereAny(['nome', 'email'], 'like', '%ana%'); // (... or ...)
+db.table('users').whereAll(['a', 'b'], '>', 0);                 // (... and ...)
+db.table('users').whereNot('situacao', 'C');
+db.table('users').whereIntegerInRaw('id', ids);                 // no 65535-parameter limit
+
+final user = await db.table('users').where('email', '=', e).sole(); // exactly one row
+final row = await db.table('users').where('id', '=', 1).firstOrFail();
+if (await db.table('users').where('id', '=', 1).doesntExist()) { /* ... */ }
+
+await for (final row in db.table('users').lazyById(1000)) { /* keyset, every driver */ }
+await db.table('contador').where('id', '=', 1).incrementEach({'acessos': 1, 'cliques': 2});
+```
+
+Also: `orderByDesc`, `reorder`, `select`/`addSelect` with subqueries,
+`fromSub`, `leftJoinSub`, `eachById`, `chunkByIdDesc`, `chunkMap`,
+`soleValue`, `findOr`, `existsOr`, `havingBetween`, `havingNull`,
+`explain({analyze})`, `afterQuery(callback)` and MySQL `whereFullText`.
+
+## Streaming large result sets (server-side cursor)
+
+`cursor()` streams rows so memory stays roughly constant even for millions of
+rows. `dpgsql` uses its incremental reader; the other PostgreSQL adapters use
+an SQL cursor (`DECLARE ... FETCH`, inside the current transaction or one held
+while the stream is read). MySQL throws `UnsupportedError` (use `lazyById`).
+
+```dart
 await for (final row in db.table('big_table').where('ativo', '=', true).cursor()) {
   process(row); // constant memory, no full materialization
 }
@@ -567,6 +788,71 @@ for (final sql in platform.getAlterSchemaSQL(diff)) {
 - The platforms also give type declarations, portable expressions (dates,
   `LOCATE`, `CONCAT`, ...), reserved keywords, isolation levels and limits.
 
+## Migrations, seeders and CLI
+
+Migrations are Dart classes registered in a map (no code generation). Each
+`up`/`down` runs in a transaction together with its row in the migration
+table, so a failure rolls both back; `withinTransaction = false` opts out
+(for `CREATE INDEX CONCURRENTLY`, `VACUUM`).
+
+```dart
+class TipoNormaNomeUnico extends Migration {
+  @override
+  Future<void> up() async {
+    await (await schema).table('normas.tipo_norma', (Blueprint t) {
+      t.timestamp('alterado_em');   // timestamp without time zone (microseconds)
+      t.nullable();
+      t.comment('Última alteração do nome.'); // COMMENT ON COLUMN on PostgreSQL
+    });
+    // Anything the Blueprint does not cover: one statement per call.
+    await statement('create unique index tipo_norma_nome_uq on normas.tipo_norma '
+        '(lower(public.immutable_unaccent(trim(nom_tipo_norma))))');
+  }
+
+  @override
+  Future<void> down() async => statement('drop index normas.tipo_norma_nome_uq');
+}
+
+/// The schema of the version the databases already have (empty up/down).
+class Baseline extends Migration {
+  @override
+  Future<void> up() async {}
+  @override
+  Future<void> down() async {}
+}
+
+final dbm = manager.getDatabaseManager();
+final migrator = Migrator(DatabaseMigrationRepository(dbm, 'migrations'), dbm, {
+  '2026_10_21_000000_baseline_6_4_0': () => Baseline(),
+  '2026_10_21_000001_tipo_norma_nome_unico': () => TipoNormaNomeUnico(),
+}, databaseManager: dbm);
+
+// An existing database already has the baseline: record it without running it.
+await migrator.markAsRan(['2026_10_21_000000_baseline_6_4_0']);
+
+// Run what is pending (creates the migration table). Works in an AOT build:
+// it reads the registry, not the source files.
+await migrator.runPending();
+
+await SeederRunner(dbm).call(WidgetsSeeder()); // class WidgetsSeeder extends Seeder
+```
+
+- On PostgreSQL each migration first takes an advisory lock and checks the
+  migration table again (`migrator.isolated`, on by default), so two
+  instances deploying at the same time apply each migration once.
+- Time columns have no precision by default (`timestamp without time zone`,
+  microseconds), so the fractions of a `DateTime` are kept. `precision: 3`
+  sets one column; `SchemaBuilder.defaultTimePrecision = 0` restores
+  Laravel's `timestamp(0)`, which PostgreSQL rounds to the nearest second.
+- `rollback()`, `reset()`, `pending()` and `run(paths)` (Laravel's form,
+  reading `YYYY_MM_DD_HHMMSS_name.dart` files from a directory) are also
+  available.
+
+```bash
+dart run eloquent:eloquent make:migration create_widgets_table --create=widgets
+dart run eloquent:eloquent make:seeder WidgetsSeeder
+```
+
 ## schema:diff CLI
 
 ```bash
@@ -734,7 +1020,7 @@ await drv.withRawConnection((conn) async {
     while (true){
       //connect
       final db = await manager.connection();
-      final res = await query
+      final res = await db.table('temp_location')
           .select(['temp_location.id', 'city', 'street'])
           .where('temp_location.id', '=', 1)
           .join('people', 'people.id', '=', 'temp_location.id_people', 'inner')
@@ -753,7 +1039,7 @@ await drv.withRawConnection((conn) async {
     var manager = new Manager();
     manager.addConnection({
       'driver': 'pgsql',
-      'driver_implementation': 'postgres_v3', // postgres | dargres | postgres_v3
+      'driver_implementation': 'postgres_v3', // postgres | postgres_v3 | dargres | dpgsql
       'host': 'localhost',
       'port': '5432',
       'database': 'database_name',
@@ -767,7 +1053,7 @@ await drv.withRawConnection((conn) async {
     
       //connect
       final db = await manager.connection();
-      final res = await query
+      final res = await db.table('temp_location')
           .select(['temp_location.id', 'city', 'street'])
           .where('temp_location.id', '=', 1)
           .join('people', 'people.id', '=', 'temp_location.id_people', 'inner')
@@ -779,6 +1065,29 @@ await drv.withRawConnection((conn) async {
        
 
 ```
+
+## PostgreSQL value types (`pg_types`) and driver options
+
+With `'pg_types': 'uniform'` (the default) the four PostgreSQL adapters
+return the same Dart types: `numeric` and `money` as exact `String`
+(`'150.50'`), `time`, `interval`, `inet`, ranges and geometric types as the
+server's text, arrays as `List<T?>`, `json`/`jsonb` decoded. `'driver'`
+keeps each driver's own types (`PgInterval`, `Interval`, `DpgsqlRange`...).
+
+`driver_options` passes settings to the driver as they are; an unknown key
+throws an `ArgumentError` with the list of known keys:
+
+```dart
+manager.addConnection({
+  'driver': 'pgsql',
+  'driver_implementation': 'dargres',
+  // ...
+  'pg_types': 'uniform', // 'uniform' (default) | 'driver'
+  'driver_options': {'statementCacheCapacity': 256, 'commandTimeout': 60},
+});
+```
+
+See the release notes for the full type table and the keys of each adapter.
 
 ## DateTime bindings (`datetime_bindings`)
 
@@ -847,14 +1156,14 @@ void main(List<String> args) async {
 
   final db = await manager.connection();
 
-  await db.execute('DROP TABLE clients');
+  await db.execute('DROP TABLE IF EXISTS clients');
   await db.execute(''' CREATE TABLE IF NOT EXISTS clients (
     id int NOT NULL AUTO_INCREMENT,
     name varchar(255) NOT NULL,      
     PRIMARY KEY (id)
 ); ''');
 
-  await db.execute('DROP TABLE contacts');
+  await db.execute('DROP TABLE IF EXISTS contacts');
   await db.execute(''' CREATE TABLE IF NOT EXISTS contacts (
     id_client int NOT NULL ,
     tel varchar(255) NOT NULL  
@@ -895,7 +1204,13 @@ void main(List<String> args) async {
  final manager = Manager();
   manager.addConnection({
     'driver': 'pgsql',
-    'driver_implementation': 'postgres_v3', // postgres | dargres | postgres_v3
+    'driver_implementation': 'postgres_v3', // postgres | postgres_v3 | dargres | dpgsql
+    // 'uniform' (default): the same Dart types on every PostgreSQL adapter
+    'pg_types': 'uniform',
+    // 'string' (default) | 'native': how DateTime bindings reach the driver
+    'datetime_bindings': 'string',
+    // settings passed to the driver as they are (keys of each driver)
+    // 'driver_options': {'queryTimeoutInSeconds': 60},
     // set connection time zone UTC = default
     'timezone': 'America/Sao_Paulo',   
     // If true, decodes the timestamp with timezone (timestamptz) as UTC = default

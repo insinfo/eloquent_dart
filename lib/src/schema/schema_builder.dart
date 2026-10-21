@@ -18,6 +18,16 @@ class SchemaBuilder {
   /// Allows for customizing Blueprint creation.
   Function(String table, Function(Blueprint)? callback)? resolver;
 
+  /// Precision of the time columns (`timestamp`, `dateTime`, `time` and their
+  /// `Tz` forms) made without an explicit `precision:` (Laravel 11's
+  /// `Schema::defaultTimePrecision`).
+  ///
+  /// `null` (the default) writes no precision: PostgreSQL keeps
+  /// microseconds, which the DateTime bindings send. `0` is Laravel's
+  /// default (`timestamp(0)`): PostgreSQL then rounds a fraction to the
+  /// nearest second, so 10:20:30.6 is stored as 10:20:31.
+  static int? defaultTimePrecision;
+
   /// Creates a new database Schema manager.
   ///
   /// [connection] The database connection instance.

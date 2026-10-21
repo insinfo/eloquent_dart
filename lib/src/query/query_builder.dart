@@ -8,6 +8,7 @@ import 'package:eloquent/src/contracts/pagination/default_paginator.dart';
 import 'package:eloquent/src/contracts/pagination/length_aware_paginator.dart';
 import 'package:eloquent/src/contracts/pagination/pagination_utils.dart';
 
+import 'package:eloquent/src/pdo/core/pdo_result.dart';
 import 'package:eloquent/src/query/cursor_pagination.dart';
 import 'package:eloquent/src/query/expression.dart';
 import 'package:eloquent/src/query/grammars/query_grammar.dart';
@@ -16,6 +17,7 @@ import 'package:eloquent/src/query/on_conflict_clause.dart';
 import 'package:eloquent/src/query/processors/processor.dart';
 import 'package:eloquent/src/query/query_lock.dart';
 import 'package:eloquent/src/exceptions/records_not_found_exception.dart';
+import 'package:eloquent/src/exceptions/unique_constraint_violation_exception.dart';
 import 'package:eloquent/src/query/sql_constants.dart';
 import 'package:eloquent/src/support/arr.dart';
 import 'package:eloquent/src/utils/utils.dart';
@@ -4328,6 +4330,75 @@ class QueryBuilder {
     }
   }
 
+  /// Laravel's createOrFirst: inserts [attributes] + [values] and returns the
+  /// row; when a unique index or constraint refuses it
+  /// ([UniqueConstraintViolationException]), returns the row that matches
+  /// [attributes] instead (read from the write connection). The unique index
+  /// decides, so two concurrent callers never insert the same row and need
+  /// no lock; without a unique index on [attributes] it always inserts.
+  ///
+  /// On PostgreSQL the insert is `insert ... on conflict do nothing
+  /// returning *`: a conflict is not an error, so a surrounding transaction
+  /// stays usable on every adapter (postgres and postgres_v3 end the
+  /// transaction on any SQL error, even inside a SAVEPOINT). When no row
+  /// matches [attributes] after a conflict (another unique index refused the
+  /// row), a plain insert is run to throw the
+  /// [UniqueConstraintViolationException].
+  ///
+  /// On MySQL the insert runs in a SAVEPOINT when inside a transaction and
+  /// the row is read back by [attributes].
+  ///
+  /// ```dart
+  /// final tag = await db.table('tags').createOrFirst({'slug': 'dart'},
+  ///     {'nome': 'Dart'});
+  /// ```
+  Future<Map<String, dynamic>> createOrFirst(Map<String, dynamic> attributes,
+      [Map<String, dynamic> values = const {}]) async {
+    final row = {...attributes, ...values};
+    if (this.grammar.supportsReturning) {
+      final inserted = await (this.clone()
+            ..onConflict().doNothing()
+            ..returning())
+          .insert(row) as PDOResults;
+      if (inserted.rows.isNotEmpty) return inserted.rows.first;
+      final existing =
+          await this.clone().useWritePdo().where(attributes).first();
+      if (existing != null) return existing;
+      final result = await (this.clone()
+            ..onConflictProp = null
+            ..returning())
+          .insert(row) as PDOResults;
+      return result.rows.first;
+    }
+    try {
+      if (!this.connection.isInTransaction) {
+        return await _insertAndRead(this.clone(), attributes, row);
+      }
+      return await this.connection.transaction((ctx) =>
+          _insertAndRead(this.clone()..connection = ctx, attributes, row));
+    } on UniqueConstraintViolationException {
+      final existing =
+          await this.clone().useWritePdo().where(attributes).first();
+      if (existing == null) rethrow;
+      return existing;
+    }
+  }
+
+  /// Laravel's firstOrCreate: the row that matches [attributes], or
+  /// [createOrFirst] of [attributes] + [values] when there is none (so a
+  /// concurrent insert of the same row is resolved by the unique index).
+  Future<Map<String, dynamic>> firstOrCreate(Map<String, dynamic> attributes,
+      [Map<String, dynamic> values = const {}]) async {
+    final existing = await this.clone().where(attributes).first();
+    return existing ?? await this.createOrFirst(attributes, values);
+  }
+
+  static Future<Map<String, dynamic>> _insertAndRead(QueryBuilder query,
+      Map<String, dynamic> attributes, Map<String, dynamic> row) async {
+    await query.insert(row);
+    return await query.useWritePdo().where(attributes).first() ?? row;
+  }
+
   /// Increment a column's value by a given amount.
   ///
   /// [column] Name of the column to increment.
@@ -4406,6 +4477,38 @@ class QueryBuilder {
 
       await this.connection.statement(sql, bindings);
     }
+  }
+
+  ///
+  /// PostgreSQL `LOCK TABLE` of this query's table in [mode], held until the
+  /// transaction ends (there is no unlock). [noWait] fails at once (SQLSTATE
+  /// `55P03`) instead of waiting for a conflicting lock.
+  ///
+  /// Prefer the narrowest tool: a unique index ([createOrFirst],
+  /// [UniqueConstraintViolationException]) for uniqueness, [lockForUpdate]
+  /// for rows, `db.advisoryLock(key)` to serialize one piece of code. A
+  /// table lock also blocks unrelated work: [TableLockMode.exclusive]
+  /// blocks `FOR UPDATE/SHARE` and the foreign key checks of inserts into
+  /// tables that reference this one.
+  ///
+  /// Needs a transaction ([StateError] outside one, where PostgreSQL refuses
+  /// `LOCK TABLE`) and PostgreSQL ([UnsupportedError] on MySQL).
+  ///
+  /// ```dart
+  /// await db.transaction((ctx) async {
+  ///   await ctx.table('normas.tipo_norma').lockTable(TableLockMode.exclusive);
+  ///   // lock table "normas"."tipo_norma" in exclusive mode
+  /// });
+  /// ```
+  ///
+  Future<void> lockTable(TableLockMode mode,
+      {bool noWait = false, Duration? timeout}) async {
+    final sql = this.grammar.compileLockTable(this, mode, noWait: noWait);
+    if (!this.connection.isInTransaction) {
+      throw StateError('lockTable() needs a transaction: the lock is held '
+          'until the transaction ends.');
+    }
+    await this.connection.statement(sql, [], _timeoutSeconds(timeout));
   }
 
   ///

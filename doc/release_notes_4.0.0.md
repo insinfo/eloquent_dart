@@ -176,6 +176,9 @@ bool get supportsSavepoints;
 | `recursionLimit()` was ignored | `UnsupportedError` on PostgreSQL and MySQL | Filter a depth column, or set `cte_max_recursion_depth` / `max_recursive_iterations`. |
 | `whereIn(col, [])` produced `in ()` (SQL error) | `0 = 1` (`not in`: `1 = 1`) | Nothing. |
 | `update(values, timeout)` / `delete(id, timeout)` defaulted to 300 s and ignored it | Default `null` (driver default, 30 s); a given timeout is applied | Pass a longer timeout where a statement needs it. |
+| `t.timestamp('x')` (and `dateTime`, `time`, `timestamps()`, `softDeletes()`) created `timestamp(0)` | No precision: `timestamp without time zone` (microseconds on PostgreSQL) | Nothing for new columns; `SchemaBuilder.defaultTimePrecision = 0` keeps Laravel's `timestamp(0)`, which rounds 10:20:30.6 to 10:20:31. |
+| `Blueprint.toSql` printed a warning and skipped a command that did not compile | Throws | Fix the command; the migration no longer passes without its DDL. |
+| A unique violation threw the driver's exception (`PostgreSQLException`, `ServerException`, `PostgresqlException`, `PostgresException`, `MySQLServerException`) | `UniqueConstraintViolationException` (a `QueryException`; the driver's exception in `previous`, its text kept in `toString()`) | Catch `UniqueConstraintViolationException` instead of the driver type; code that looks for `23505` or the constraint name in `'$e'` keeps working. |
 
 ## Transactions (issue #6)
 
@@ -501,6 +504,22 @@ set, removing a list allocation per query.
 - Working PostgreSQL schema DDL: the previously stubbed `compileCreate`
   (`CREATE TABLE`, `bigserial primary key` for `increments`), `compileAdd`
   (`ALTER TABLE ADD COLUMN`), `compileDrop` and `compileDropIfExists`.
+
+- Runner for production (4.0 review): `Migrator.runPending()` runs the
+  registered migrations not in the log, reading only the registry (an AOT
+  build has no source files); `pending()` lists them; `markAsRan(names)`
+  records a baseline without running it. Each transactional migration runs
+  in a `transactionScope` that takes `pg_advisory_xact_lock` (`isolated`,
+  PostgreSQL), checks the log again, runs `up` and writes the log, so two
+  migrators running at the same time apply it once and a failure rolls back
+  the DDL and the log together (the log was written afterwards, on another
+  connection). `Migration.connection` and `Migration.statement(sql,
+  [bindings])` run raw SQL in the migration's transaction. The migration
+  table gets an `id` primary key.
+- PostgreSQL `comment(...)` on a column is compiled to `COMMENT ON COLUMN`
+  after `create`/`add`/`change` (it was ignored). MySQL `increments()` is
+  declared `primary key` (error 1075 before) and time columns take
+  `precision:`.
 
 ## Doctrine schema port
 
@@ -932,6 +951,68 @@ await db.transactionScope((ctx) async {
   lock (`select max ... for update` deadlocks on InnoDB); `lock: false` is a
   plain max + 1.
 
+## Unique violations, createOrFirst and explicit locks
+
+- `UniqueConstraintViolationException` (Laravel 10+): a `QueryException`
+  thrown for PostgreSQL SQLSTATE `23505` and MySQL/MariaDB errors 1062/1586,
+  on the five adapters. `constraint` is the violated constraint or unique
+  index (PostgreSQL's constraint name; MySQL's key name without the table),
+  `sql`/`bindings` the statement, `previous` the driver's exception. Other
+  driver errors are not wrapped. On postgres and postgres_v3 the transaction
+  ends with the driver's exception; `transaction()` rethrows it as the
+  mapped exception, so the caller of `db.transaction` sees the same type on
+  every adapter.
+
+  With a unique index the database enforces the rule, and the check in Dart
+  is only for the message:
+
+  ```dart
+  // CREATE UNIQUE INDEX tipo_norma_nome_uq
+  //   ON normas.tipo_norma (lower(public.immutable_unaccent(trim(nom_tipo_norma))));
+  try {
+    await db.table('normas.tipo_norma').insert(item.toMap());
+  } on UniqueConstraintViolationException catch (e) {
+    if (e.constraint != 'tipo_norma_nome_uq') rethrow;
+    throw TipoNormaOperacaoException('Já existe um tipo de norma com esse nome.',
+        statusCode: 409);
+  }
+  ```
+
+- `createOrFirst(attributes, [values])` / `firstOrCreate(attributes,
+  [values])` on `QueryBuilder` and `QueryBuilder2` (Laravel's semantics, the
+  row as a `Map`): insert, or return the row of `attributes` when a unique
+  index refuses it, with no lock and no race. On PostgreSQL the insert is
+  `insert ... on conflict do nothing returning *`, so a conflict is not an
+  error and a surrounding transaction stays usable on every adapter (postgres
+  and postgres_v3 end the transaction on any SQL error, even in a SAVEPOINT);
+  on MySQL it runs in a SAVEPOINT inside a transaction. If the row of
+  `attributes` is not found after a conflict (another unique index refused
+  it), the `UniqueConstraintViolationException` is thrown.
+- `db.advisoryLock(key)` / `db.tryAdvisoryLock(key)` (PostgreSQL,
+  `pg_advisory_xact_lock` / `pg_try_advisory_xact_lock`): serializes the
+  transactions that ask for the same key until they commit or roll back,
+  without blocking reads, other writes or foreign key checks as `LOCK TABLE`
+  does. The key is a String (hashed with `hashtextextended`) or a bigint.
+  `StateError` outside a transaction, `UnsupportedError` on MySQL (whose
+  `GET_LOCK` is per session, not per transaction). Not in Laravel, which
+  uses cache locks (`Cache::lock`) outside the database transaction.
+- `lockTable(TableLockMode mode, {noWait, timeout})` on `QueryBuilder` and
+  `QueryBuilder2`: `lock table "schema"."table" in <mode> mode [nowait]`,
+  with the mode from an enum (no SQL text) and the table quoted.
+  `StateError` outside a transaction, `ArgumentError` for an alias or
+  subquery, `UnsupportedError` on MySQL (`LOCK TABLES` commits the current
+  transaction). Laravel has no equivalent (`DB::statement('LOCK TABLE ...')`).
+- `QueryGrammar.supportsReturning` and `compileLockTable`.
+
+Which one to use:
+
+| Need | Tool |
+|---|---|
+| A value must be unique (name, code per year) | Unique index + `UniqueConstraintViolationException` or `createOrFirst` |
+| Lock the rows that will be changed | `lockForUpdate()` |
+| One transaction at a time in a piece of code (max + 1 plus checks) | `advisoryLock(key)`, or `nextValue()` for the max + 1 alone |
+| Block writes to the whole table (maintenance, bulk reload) | `lockTable(...)` |
+
 ## QueryBuilder2 additions
 
 `whereAny`/`whereAll`/`whereNone`, `whereDate`/`whereTime`/`whereDay`/
@@ -943,7 +1024,8 @@ await db.transactionScope((ctx) async {
 in the sections above (`whereSearch`, `orderByInput`, `whereInTuple`,
 `whereAnyArray`, between columns, `cursorPaginate`,
 `paginateWithWindowCount`, `explain`, `afterQuery`, `updateFrom`,
-`copyInto`, `insertUnnest`, `nextValue`).
+`copyInto`, `insertUnnest`, `nextValue`, `createOrFirst`, `firstOrCreate`,
+`lockTable`).
 
 ## Ported from Laravel 12
 

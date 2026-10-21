@@ -42,6 +42,30 @@ abstract class Migration {
     return await db!.schema(connectionName); // <--- Usa await
   }
 
+  /// The connection of this migration: the transaction's while the migrator
+  /// runs it in one, otherwise the connection named [connectionName].
+  Future<Connection> get connection async {
+    final override = connectionOverride;
+    if (override != null) return override;
+    if (db == null) {
+      throw StateError('DatabaseManager (db) is not set on this migration.');
+    }
+    return await db!.connection(connectionName);
+  }
+
+  /// Runs one SQL statement (DDL, `comment on`, a data fix, a function) on
+  /// [connection]. Statements that cannot run in a transaction
+  /// (`create index concurrently`, `vacuum`) need
+  /// `withinTransaction = false`.
+  ///
+  /// ```dart
+  /// await statement('create unique index tipo_norma_nome_uq on '
+  ///     'normas.tipo_norma (lower(public.immutable_unaccent(trim(nom_tipo_norma))))');
+  /// ```
+  Future<void> statement(String sql, [List bindings = const []]) async {
+    await (await connection).statement(sql, bindings);
+  }
+
   /// Runs the migration "up" - applying schema changes.
   /// Must be implemented by subclasses.
   Future<void> up();

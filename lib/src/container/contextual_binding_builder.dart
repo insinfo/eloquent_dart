@@ -1,56 +1,30 @@
 import 'container.dart';
 
+/// Builds a contextual binding: `container.when(concrete).needs(abstract)
+/// .give(implementation)`.
 class ContextualBindingBuilder {
-/**
-     * The underlying container instance.
-     *
-     * @var \Illuminate\Container\Container
-     */
+  /// The container that receives the binding.
   Container container;
 
-  /**
-     * The concrete instance.
-     *
-     * @var string
-     */
+  /// The abstract whose factory gets the implementation.
   String? concrete;
 
-  /**
-     * The abstract target.
-     *
-     * @var string
-     */
+  /// The abstract that resolves to the implementation, set by [needs].
   String? needsProp;
 
-  /**
-     * Create a new contextual binding builder.
-     *
-     * @param  \Illuminate\Container\Container  $container
-     * @param  string  $concrete
-     * @return void
-     */
   ContextualBindingBuilder(this.container, this.concrete);
 
-  /**
-     * Define the abstract target that depends on the context.
-     *
-     * @param  string  $abstract
-     * @return $this
-     */
+  /// Sets the abstract that [concrete] needs.
   ContextualBindingBuilder needs(String abstract) {
     this.needsProp = abstract;
     return this;
   }
 
-  /**
-     * Define the implementation for the contextual binding.
-     *
-     * @param  \Closure|string  $implementation
-     * @return void
-     */
+  /// Registers [implementation] (a factory or a name) as what [needsProp]
+  /// resolves to while [concrete] is being built.
   void give(dynamic implementation) {
     this
         .container
-        .addContextualBinding(this.concrete, this.needs, implementation);
+        .addContextualBinding(this.concrete, this.needsProp, implementation);
   }
 }

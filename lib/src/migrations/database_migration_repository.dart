@@ -1,6 +1,13 @@
 // lib/src/migrations/database_migration_repository.dart
 import 'dart:async';
-import 'package:eloquent/eloquent.dart'; // Access to QueryBuilder, ConnectionResolverInterface, etc.
+
+import 'package:eloquent/src/connection.dart';
+import 'package:eloquent/src/connection_interface.dart';
+import 'package:eloquent/src/connection_resolver_interface.dart';
+import 'package:eloquent/src/migrations/migration_repository_interface.dart';
+import 'package:eloquent/src/query/query_builder.dart';
+import 'package:eloquent/src/schema/blueprint.dart';
+import 'package:eloquent/src/schema/schema_builder.dart';
 
 /// Database-backed implementation of the migration repository.
 ///
@@ -94,13 +101,8 @@ class DatabaseMigrationRepository implements MigrationRepositoryInterface {
   /// Get the last migration batch number.
   Future<int> getLastBatchNumber() async {
     final query = await _table();
-    final maxBatch =
-        await query.max('batch'); // max() might return num? or String?
-    if (maxBatch == null) return 0;
-    if (maxBatch is int) return maxBatch;
-    if (maxBatch is double) return maxBatch.toInt(); // Handle potential double
-    if (maxBatch is String) return (maxBatch as int?) ?? 0;
-    return 0; // Default if type is unexpected
+    // max() parses a numeric text (numeric/bigint on some drivers).
+    return (await query.max('batch'))?.toInt() ?? 0;
   }
 
   /// Create the migration repository data store.
@@ -109,6 +111,8 @@ class DatabaseMigrationRepository implements MigrationRepositoryInterface {
     final schema = await _getSchemaBuilder();
 
     await schema.create(table, (Blueprint blueprint) {
+      // As in Laravel 5.3+, an id primary key.
+      blueprint.increments('id');
       // Corresponds to $table->string('migration');
       blueprint.string('migration');
       // Corresponds to $table->integer('batch');

@@ -49,3 +49,41 @@ class QueryLock {
       'QueryLock(forUpdate: $forUpdate, skipLocked: $skipLocked, '
       'noWait: $noWait, of: $of)';
 }
+
+/// Mode of a PostgreSQL `LOCK TABLE` (`QueryBuilder.lockTable`), from the
+/// weakest to the strongest. See the "Table-Level Locks" table of the
+/// PostgreSQL manual for what each one conflicts with.
+enum TableLockMode {
+  /// `ACCESS SHARE`: the lock of a plain SELECT; conflicts only with
+  /// [accessExclusive].
+  accessShare('access share'),
+
+  /// `ROW SHARE`: the lock of `SELECT ... FOR UPDATE/SHARE` and of foreign
+  /// key checks.
+  rowShare('row share'),
+
+  /// `ROW EXCLUSIVE`: the lock of INSERT, UPDATE and DELETE.
+  rowExclusive('row exclusive'),
+
+  /// `SHARE UPDATE EXCLUSIVE`: VACUUM, ANALYZE, `CREATE INDEX CONCURRENTLY`.
+  shareUpdateExclusive('share update exclusive'),
+
+  /// `SHARE`: blocks writes, allows reads and other SHARE locks.
+  share('share'),
+
+  /// `SHARE ROW EXCLUSIVE`: blocks writes; one holder at a time.
+  shareRowExclusive('share row exclusive'),
+
+  /// `EXCLUSIVE`: only plain reads (ACCESS SHARE) go on; also blocks
+  /// `FOR UPDATE/SHARE` and foreign key checks of other tables.
+  exclusive('exclusive'),
+
+  /// `ACCESS EXCLUSIVE`: blocks everything, reads included (the default of
+  /// a bare `LOCK TABLE`).
+  accessExclusive('access exclusive');
+
+  const TableLockMode(this.sql);
+
+  /// The mode as written in `LOCK TABLE ... IN <sql> MODE`.
+  final String sql;
+}

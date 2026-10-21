@@ -1,28 +1,45 @@
 import 'package:eloquent/eloquent.dart';
 import 'package:eloquent/src/container/container.dart';
 
-//with CapsuleManagerTrait
+/// Entry point for using the database outside a framework (Laravel's
+/// "capsule"): registers connections and hands out [Connection]s, query
+/// builders and schema builders.
+///
+/// ```dart
+/// final manager = Manager()
+///   ..addConnection({
+///     'driver': 'pgsql',
+///     'host': 'localhost',
+///     'port': '5432',
+///     'database': 'banco',
+///     'username': 'dart',
+///     'password': 'dart',
+///   });
+/// final db = await manager.connection();
+/// ```
 class Manager {
-  ///
-  /// The current globally used instance.
-  ///
-  /// @var object
-  ///
+  /// The manager made global by [setAsGlobal], if any.
   static Manager? instance;
 
-  ///
-  /// The container instance.
-  ///
-  /// @var \Illuminate\Contracts\Container\Container
-  ///
+  /// The IoC container that holds the `config` and `events` bindings.
   late Container container;
 
-  ///
-  /// Setup the IoC container instance.
-  ///
-  /// @param  \Illuminate\Contracts\Container\Container  $container
-  /// @return void
-  ///
+  /// The database manager that creates and caches the connections.
+  late DatabaseManager manager;
+
+  /// Creates a manager on [container] (a new [Container] by default), with
+  /// `default` as the default connection name.
+  Manager([Container? container]) {
+    this.setupContainer(container ?? Container());
+
+    // The database manager reads its settings from the container's "config"
+    // binding, so the defaults must be in place before it is created.
+    this.setupDefaultConfiguration();
+    this.setupManager();
+  }
+
+  /// Uses [containerP] and binds an empty [Fluent] as its `config` when it
+  /// has none.
   void setupContainer(Container containerP) {
     this.container = containerP;
 
@@ -31,131 +48,62 @@ class Manager {
     }
   }
 
-  ///
-  /// Make this capsule instance available globally.
-  ///
-  /// @return void
-  ///
+  /// Makes this manager available as [Manager.instance].
   void setAsGlobal() {
     instance = this;
   }
 
-  ///
-  /// Get the IoC container instance.
-  ///
-  /// @return \Illuminate\Contracts\Container\Container
-  ///
+  /// The IoC container.
   Container? getContainer() {
     return this.container;
   }
 
-  ///
-  /// Set the IoC container instance.
-  ///
-  /// @param  \Illuminate\Contracts\Container\Container  $container
-  /// @return void
-  ///
+  /// Replaces the IoC container. The database manager keeps the container
+  /// it was created with.
   void setContainer(Container containerP) {
     this.container = containerP;
   }
 
-  ///
-  ///  The database manager instance.
-  ///
-  ///  @var \Illuminate\Database\DatabaseManager
-  ///
-  late DatabaseManager manager;
-
-  ///
-  ///  Create a new database capsule manager.
-  ///
-  ///  @param  \Illuminate\Container\Container|null  $container
-  ///  @return void
-  ///
-  Manager([Container? container]) {
-    this.setupContainer(container ?? Container());
-
-    // Once we have the container setup, we will setup the default configuration
-    // options in the container "config" binding. This will make the database
-    // manager behave correctly since all the correct binding are in place.
-    this.setupDefaultConfiguration();
-    this.setupManager();
-  }
-
-  ///
-  ///  Setup the default database configuration options.
-  ///
-  ///  @return void
-  ///
+  /// Sets `default` as the default connection name.
   void setupDefaultConfiguration() {
-    //this.container['config']['database.fetch'] = PDO_FETCH_ASSOC;
     this.container['config']['database.default'] = 'default';
   }
 
-  ///
-  ///  Build the database manager instance.
-  ///
-  ///  @return void
-  ///
+  /// Creates the [DatabaseManager] and its [ConnectionFactory].
   void setupManager() {
     var factory = ConnectionFactory(this.container);
     this.manager = DatabaseManager(this.container, factory);
   }
 
-  ///
-  ///  Get a connection instance from the global manager.
-  ///
-  ///  @param  string  $connection
-  ///  @return \Illuminate\Database\Connection
-  ///
+  /// The connection named [connection] (the default one when null).
   Future<Connection> connection([String? connection]) async {
-    return await instance!.getConnection(connection);
+    return await this.getConnection(connection);
   }
 
-  ///
-  ///  Get a fluent query builder instance.
-  ///
-  ///  @param  string  $table
-  ///  @param  string  $connection
-  ///  @return \Illuminate\Database\Query\Builder
-  ///
+  /// A query builder for [table] on the connection named [connectionP].
   Future<QueryBuilder> table(String table, [String? connectionP]) async {
-    final com = await instance!.connection(connectionP);
+    final com = await this.connection(connectionP);
     return com.table(table);
   }
 
-  ///
-  ///  Get a schema builder instance.
-  ///
-  ///  @param  string  $connection
-  ///  @return \Illuminate\Database\Schema\Builder
-  ///
+  /// The schema builder of the connection named [connectionP].
   Future<SchemaBuilder> schema([String? connectionP]) async {
-    final com = await instance!.connection(connectionP);
+    final com = await this.connection(connectionP);
     return com.getSchemaBuilder();
   }
 
-  ///
-  ///  Get a registered connection instance.
-  ///
-  ///  @param  string  $name
-  ///  @return \Illuminate\Database\Connection
-  ///
+  /// The connection named [name] (the default one when null), connecting on
+  /// first use.
   Future<Connection> getConnection([String? name]) async {
     return await this.manager.connection(name);
   }
 
-  ///
-  ///  Register a connection with the manager.
-  ///
-  ///  @param  array   $config
-  ///  @param  string  $name
-  ///  @return void
+  /// Registers a connection [config] under [name].
   ///
   /// ```dart
-  ///
+  /// manager.addConnection({'driver': 'mysql', 'database': 'banco'}, 'mysql');
+  /// final db = await manager.connection('mysql');
   /// ```
-  ///
   void addConnection(Map<String, dynamic> config, [String name = 'default']) {
     var connections = this.container['config']['database.connections'];
     if (connections == null) {
@@ -166,72 +114,21 @@ class Manager {
     this.container['config']['database.connections'] = connections;
   }
 
-  ///
-  ///  Bootstrap Eloquent so it is ready for usage.
-  ///
-  ///  @return void
-  ///
-  void bootEloquent() {
-    //Eloquent::setConnectionResolver(this.manager);
-
-    // If we have an event dispatcher instance, we will go ahead and register it
-    // with the Eloquent ORM, allowing for model callbacks while creating and
-    // updating "model" instances; however, if it not necessary to operate.
-    // if ($dispatcher = this.getEventDispatcher()) {
-    //     Eloquent::setEventDispatcher($dispatcher);
-    // }
-  }
-
-  ///
-  ///  Set the fetch mode for the database connections.
-  ///
-  ///  @param  int  $fetchMode
-  ///  @return $this
-  ///
-  Manager setFetchMode(int fetchMode) {
-    this.container['config']['database.fetch'] = fetchMode;
-    return this;
-  }
-
-  ///
-  ///  Get the database manager instance.
-  ///
-  ///  @return \Illuminate\Database\DatabaseManager
-  ///
+  /// The database manager.
   DatabaseManager getDatabaseManager() {
     return this.manager;
   }
 
-  ///
-  ///  Get the current event dispatcher instance.
-  ///
-  ///  @return \Illuminate\Contracts\Events\Dispatcher|null
-  ///
+  /// The event dispatcher given to the connections, or null.
   dynamic getEventDispatcher() {
     if (this.container.bound('events')) {
       return this.container['events'];
     }
+    return null;
   }
 
-  ///
-  ///  Set the event dispatcher instance to be used by connections.
-  ///
-  ///  @param  \Illuminate\Contracts\Events\Dispatcher  $dispatcher
-  ///  @return void
-  ///
-  void setEventDispatcher($dispatcher) {
-    this.container.instance('events', $dispatcher);
+  /// Sets the event dispatcher given to the connections created from now on.
+  void setEventDispatcher(dynamic dispatcher) {
+    this.container.instance('events', dispatcher);
   }
-
-  ///
-  ///  Dynamically pass methods to the default connection.
-  ///
-  ///  @param  string  $method
-  ///  @param  array   $parameters
-  ///  @return mixed
-  ///
-  // public static function __callStatic($method, $parameters)
-  // {
-  //     return call_user_func_array([static::connection(), $method], $parameters);
-  // }
 }

@@ -53,80 +53,34 @@ class Blueprint {
       final commandName = command['name'] as String;
       final method = 'compile${Utils.ucfirst(commandName)}';
 
-      List<String>? sql;
-      try {
-        // Chama o método correspondente na gramática
-        switch (method) {
-          case 'compileCreate':
-            sql = grammar.compileCreate(this, command, connection);
-            break;
-          case 'compileAdd':
-            sql = grammar.compileAdd(this, command);
-            break;
-          case 'compilePrimary':
-            sql = grammar.compilePrimary(this, command);
-            break;
-          case 'compileUnique':
-            sql = grammar.compileUnique(this, command);
-            break;
-          case 'compileIndex':
-            sql = grammar.compileIndex(this, command);
-            break;
-          case 'compileSpatialIndex':
-            sql = grammar.compileSpatialIndex(this, command);
-            break;
-          case 'compileForeign':
-            sql = grammar.compileForeign(this, command);
-            break;
-          case 'compileDrop':
-            sql = grammar.compileDrop(this, command);
-            break;
-          case 'compileDropIfExists':
-            sql = grammar.compileDropIfExists(this, command);
-            break;
-          case 'compileDropColumn':
-            sql = grammar.compileDropColumn(this, command);
-            break;
-          case 'compileDropPrimary':
-            sql = grammar.compileDropPrimary(this, command);
-            break;
-          case 'compileDropUnique':
-            sql = grammar.compileDropUnique(this, command);
-            break;
-          case 'compileDropIndex':
-            sql = grammar.compileDropIndex(this, command);
-            break;
-          case 'compileDropSpatialIndex':
-            sql = grammar.compileDropSpatialIndex(this, command);
-            break;
-          case 'compileDropForeign':
-            sql = grammar.compileDropForeign(this, command);
-            break;
-          case 'compileRename':
-            sql = grammar.compileRename(this, command);
-            break;
-          case 'compileRenameIndex':
-            sql = grammar.compileRenameIndex(this, command);
-            break;
-          case 'compileRenameColumn':
-            sql = grammar.compileRenameColumn(this, command, connection);
-            break;
-          case 'compileChange':
-            sql = grammar.compileChange(this, command, connection);
-            break;
-          // Adicionar compileDropRememberToken se necessário
-          default:
-            print(
-                "Warning: Unknown command type '$commandName' in Blueprint.toSql");
-        }
-      } catch (e) {
-        // Captura erros (especialmente UnimplementedError de gramáticas)
-        print("Error compiling command '$commandName': $e");
-      }
-
-      if (sql != null && sql.isNotEmpty) {
-        statements.addAll(sql);
-      }
+      // A command that does not compile throws: skipping it would let a
+      // migration "succeed" without its DDL.
+      final sql = switch (method) {
+        'compileCreate' => grammar.compileCreate(this, command, connection),
+        'compileAdd' => grammar.compileAdd(this, command),
+        'compilePrimary' => grammar.compilePrimary(this, command),
+        'compileUnique' => grammar.compileUnique(this, command),
+        'compileIndex' => grammar.compileIndex(this, command),
+        'compileSpatialIndex' => grammar.compileSpatialIndex(this, command),
+        'compileForeign' => grammar.compileForeign(this, command),
+        'compileDrop' => grammar.compileDrop(this, command),
+        'compileDropIfExists' => grammar.compileDropIfExists(this, command),
+        'compileDropColumn' => grammar.compileDropColumn(this, command),
+        'compileDropPrimary' => grammar.compileDropPrimary(this, command),
+        'compileDropUnique' => grammar.compileDropUnique(this, command),
+        'compileDropIndex' => grammar.compileDropIndex(this, command),
+        'compileDropSpatialIndex' =>
+          grammar.compileDropSpatialIndex(this, command),
+        'compileDropForeign' => grammar.compileDropForeign(this, command),
+        'compileRename' => grammar.compileRename(this, command),
+        'compileRenameIndex' => grammar.compileRenameIndex(this, command),
+        'compileRenameColumn' =>
+          grammar.compileRenameColumn(this, command, connection),
+        'compileChange' => grammar.compileChange(this, command, connection),
+        _ => throw UnsupportedError(
+            "Unknown command '$commandName' in Blueprint.toSql."),
+      };
+      statements.addAll(sql);
     }
     return statements;
   }
@@ -393,21 +347,27 @@ class Blueprint {
   Fluent json(String column) => addColumn('json', column);
   Fluent jsonb(String column) => addColumn('jsonb', column);
   Fluent date(String column) => addColumn('date', column);
-  Fluent dateTime(String column, {int precision = 0}) =>
-      addColumn('dateTime', column, {'precision': precision});
-  Fluent dateTimeTz(String column, {int precision = 0}) =>
-      addColumn('dateTimeTz', column, {'precision': precision});
-  Fluent time(String column, {int precision = 0}) =>
-      addColumn('time', column, {'precision': precision});
-  Fluent timeTz(String column, {int precision = 0}) =>
-      addColumn('timeTz', column, {'precision': precision});
-  Fluent timestamp(String column, {int precision = 0}) =>
-      addColumn('timestamp', column, {'precision': precision});
-  Fluent timestampTz(String column, {int precision = 0}) =>
-      addColumn('timestampTz', column, {'precision': precision});
+  // The time columns take [precision] (fractional second digits); without
+  // it, SchemaBuilder.defaultTimePrecision (null: none, microseconds on
+  // PostgreSQL).
+  Fluent dateTime(String column, {int? precision}) =>
+      addColumn('dateTime', column, _timePrecision(precision));
+  Fluent dateTimeTz(String column, {int? precision}) =>
+      addColumn('dateTimeTz', column, _timePrecision(precision));
+  Fluent time(String column, {int? precision}) =>
+      addColumn('time', column, _timePrecision(precision));
+  Fluent timeTz(String column, {int? precision}) =>
+      addColumn('timeTz', column, _timePrecision(precision));
+  Fluent timestamp(String column, {int? precision}) =>
+      addColumn('timestamp', column, _timePrecision(precision));
+  Fluent timestampTz(String column, {int? precision}) =>
+      addColumn('timestampTz', column, _timePrecision(precision));
+
+  Map<String, dynamic> _timePrecision(int? precision) =>
+      {'precision': precision ?? SchemaBuilder.defaultTimePrecision};
 
   /// Adiciona colunas 'created_at' e 'updated_at' nullable.
-  void nullableTimestamps({int precision = 0}) {
+  void nullableTimestamps({int? precision}) {
     timestamp('created_at', precision: precision);
     this.nullable();
     timestamp('updated_at', precision: precision);
@@ -415,25 +375,25 @@ class Blueprint {
   }
 
   /// Adiciona colunas 'created_at' e 'updated_at'.
-  void timestamps({int precision = 0}) {
+  void timestamps({int? precision}) {
     timestamp('created_at', precision: precision);
     timestamp('updated_at', precision: precision);
   }
 
   /// Adiciona colunas 'created_at' e 'updated_at' com timezone.
-  void timestampsTz({int precision = 0}) {
+  void timestampsTz({int? precision}) {
     timestampTz('created_at', precision: precision);
     timestampTz('updated_at', precision: precision);
   }
 
   /// Adiciona coluna 'deleted_at' nullable para soft deletes.
-  Fluent softDeletes({String column = 'deleted_at', int precision = 0}) {
+  Fluent softDeletes({String column = 'deleted_at', int? precision}) {
     timestamp(column, precision: precision);
     return this.nullable();
   }
 
   /// Adiciona coluna 'deleted_at' nullable com timezone para soft deletes.
-  Fluent softDeletesTz({String column = 'deleted_at', int precision = 0}) {
+  Fluent softDeletesTz({String column = 'deleted_at', int? precision}) {
     timestampTz(column, precision: precision);
     return this.nullable();
   }

@@ -491,6 +491,67 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
     }
   }
 
+  // ------------------------------------------------------ advisory locks
+
+  ///
+  /// PostgreSQL transaction-level advisory lock on [key]
+  /// (`pg_advisory_xact_lock`): waits until no other transaction holds the
+  /// same key, and keeps it until this transaction commits or rolls back
+  /// (there is no unlock). It serializes only the code that asks for the
+  /// same key: unlike `LOCK TABLE`, reads, other writes to the table and
+  /// foreign key checks go on.
+  ///
+  /// [key] is a String (hashed with `hashtextextended`; use a name such as
+  /// `'normas.tipo_norma'` or `'tipo_norma:nome:$nome'`) or an int (a
+  /// bigint key used as is). Needs a transaction ([StateError] outside one,
+  /// where the lock would end with the statement) and PostgreSQL
+  /// ([UnsupportedError] on other drivers).
+  ///
+  /// ```dart
+  /// await db.transaction((ctx) async {
+  ///   await ctx.advisoryLock('normas.tipo_norma');
+  ///   // check the name, insert: one transaction at a time
+  /// });
+  /// ```
+  ///
+  Future<void> advisoryLock(Object key, [int? timeoutInSeconds]) async {
+    await this.select(
+        'select 1 from pg_advisory_xact_lock(${_advisoryKey(key, 'advisoryLock')})',
+        [key],
+        false,
+        timeoutInSeconds);
+  }
+
+  ///
+  /// [advisoryLock] without waiting (`pg_try_advisory_xact_lock`): true when
+  /// the lock was taken (held until the transaction ends), false when
+  /// another transaction holds [key].
+  ///
+  Future<bool> tryAdvisoryLock(Object key) async {
+    final rows = await this.select(
+        'select pg_try_advisory_xact_lock(${_advisoryKey(key, 'tryAdvisoryLock')}) as locked',
+        [key],
+        false);
+    final locked = rows.first['locked'];
+    return locked == true || locked == 't' || locked == 1;
+  }
+
+  /// The SQL key expression of [key] after checking driver and transaction.
+  String _advisoryKey(Object key, String method) {
+    if (_resolvedDriverName() != 'pgsql') {
+      throw UnsupportedError('$method() needs PostgreSQL '
+          '(pg_advisory_xact_lock); driver "${getDriverName()}".');
+    }
+    if (!isInTransaction) {
+      throw StateError('$method() needs a transaction: the lock is released '
+          'when the transaction ends, so outside one it would end with the '
+          'statement.');
+    }
+    if (key is String) return 'hashtextextended(?::text, 0)';
+    if (key is int) return '?::bigint';
+    throw ArgumentError.value(key, 'key', 'Expected a String or an int.');
+  }
+
   ///
   /// Get the PDO connection to use for a select query.
   ///
@@ -726,8 +787,20 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
     if (isInTransaction) {
       return _savepointTransaction(callback, timeoutInSeconds);
     }
-    return pdo.pdoInstance.runInTransaction<T>(
-        (pdoCtx) => callback(_childConnection(pdoCtx)), timeoutInSeconds);
+    return _withMappedErrors(pdo.pdoInstance.runInTransaction<T>(
+        (pdoCtx) => callback(_childConnection(pdoCtx)), timeoutInSeconds));
+  }
+
+  /// [future], with a driver error the callback already saw as a
+  /// [UniqueConstraintViolationException] rethrown as that exception.
+  static Future<T> _withMappedErrors<T>(Future<T> future) async {
+    try {
+      return await future;
+    } catch (e, stackTrace) {
+      final mapped = UniqueConstraintViolationException.mappedFrom(e);
+      if (mapped == null || identical(mapped, e)) rethrow;
+      Error.throwWithStackTrace(mapped, stackTrace);
+    }
   }
 
   /// Runs [callback] in a transaction, reusing the current one (no SAVEPOINT)
@@ -1050,6 +1123,9 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
           .runQueryCallback(query, bindings, callback, timeoutInSeconds);
       //print('Connection@run $result');
     } catch (e, stackTrace) {
+      final unique = UniqueConstraintViolationException.fromDriverError(
+          e, query, bindings);
+      if (unique != null) Error.throwWithStackTrace(unique, stackTrace);
       return await this.tryAgainIfCausedByLostConnection(
           e, query, bindings, callback, timeoutInSeconds,
           stackTrace: stackTrace);

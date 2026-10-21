@@ -857,6 +857,10 @@ class QueryGrammar extends BaseGrammar {
   /// (`QueryBuilder.whereAnyArray`); grammars without it get `in (...)`.
   bool get supportsArrayBindings => false;
 
+  /// Whether `insert/update/delete ... returning` is compiled
+  /// (`QueryBuilder.returning`).
+  bool get supportsReturning => false;
+
   /// `column = any(?)` with one array parameter. Only grammars with
   /// [supportsArrayBindings] produce this clause.
   String whereAnyArray(QueryBuilder query, Map<String, dynamic> where) {
@@ -1330,6 +1334,16 @@ class QueryGrammar extends BaseGrammar {
   ///
   String compileLock(QueryBuilder query, dynamic value) {
     return Utils.is_string(value) ? value : '';
+  }
+
+  /// `LOCK TABLE` of the query's table (`QueryBuilder.lockTable`). Only
+  /// PostgreSQL has it in a transaction: MySQL's `LOCK TABLES` commits the
+  /// current transaction and locks per session.
+  String compileLockTable(QueryBuilder query, TableLockMode mode,
+      {bool noWait = false}) {
+    throw UnsupportedError('lockTable() needs PostgreSQL: MySQL LOCK TABLES '
+        'commits the current transaction. Lock rows with lockForUpdate() or '
+        'use an advisory lock instead.');
   }
 
   ///

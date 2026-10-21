@@ -89,6 +89,7 @@ export 'src/support/fluent.dart';
 
 export 'src/exceptions/logic_exception.dart';
 export 'src/exceptions/query_exception.dart';
+export 'src/exceptions/unique_constraint_violation_exception.dart';
 export 'src/exceptions/unsupported_nested_transaction_exception.dart';
 export 'src/exceptions/records_not_found_exception.dart';
 export 'src/events/query_executed.dart';

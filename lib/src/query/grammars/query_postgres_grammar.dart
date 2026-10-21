@@ -197,6 +197,21 @@ class QueryPostgresGrammar extends QueryGrammar {
     return value;
   }
 
+  /// `lock table "schema"."table" in <mode> mode [nowait]`.
+  @override
+  String compileLockTable(QueryBuilder query, TableLockMode mode,
+      {bool noWait = false}) {
+    final table = query.fromProp;
+    if (table is! String ||
+        table.trim().isEmpty ||
+        table.toLowerCase().contains(' as ')) {
+      throw ArgumentError.value(table, 'table',
+          'lockTable() needs a table name without an alias or subquery.');
+    }
+    return 'lock table ${wrapTable(table)} in ${mode.sql} mode'
+        '${noWait ? ' nowait' : ''}';
+  }
+
   ///
   ///  Compile an insert statement into SQL.
   ///
@@ -311,6 +326,9 @@ class QueryPostgresGrammar extends QueryGrammar {
 
   @override
   bool get supportsArrayBindings => true;
+
+  @override
+  bool get supportsReturning => true;
 
   /// `"column" = any(?)` / `"column" <> all(?)`, `?::type[]` with an
   /// element type; an empty list is `0 = 1` / `1 = 1`.

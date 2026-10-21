@@ -77,7 +77,10 @@ class SchemaPostgresGrammar extends SchemaGrammar {
     }).join(', ');
 
     final temporary = blueprint.temporaryV ? 'create temporary' : 'create';
-    return ['$temporary table ${wrapTable(blueprint)} ($defs)'];
+    return [
+      '$temporary table ${wrapTable(blueprint)} ($defs)',
+      ..._compileColumnComments(blueprint, blueprint.getAddedColumns()),
+    ];
   }
 
   /// Compila um comando "add" (ALTER TABLE ... ADD COLUMN ...).
@@ -85,7 +88,10 @@ class SchemaPostgresGrammar extends SchemaGrammar {
   List<String> compileAdd(Blueprint blueprint, Fluent command) {
     final adds =
         getColumns(blueprint).map((column) => 'add column $column').join(', ');
-    return ['alter table ${wrapTable(blueprint)} $adds'];
+    return [
+      'alter table ${wrapTable(blueprint)} $adds',
+      ..._compileColumnComments(blueprint, blueprint.getAddedColumns()),
+    ];
   }
 
   /// Compila um comando "drop" (DROP TABLE ...).
@@ -400,9 +406,23 @@ class SchemaPostgresGrammar extends SchemaGrammar {
               .add('alter table $table alter column $colName drop default');
         }
       }
-      // Comentário não é tratado aqui, precisaria de COMMENT ON
     }
+    statements.addAll(
+        _compileColumnComments(blueprint, blueprint.getChangedColumns()));
     return statements;
+  }
+
+  /// `comment on column table.column is '...'` for each of [columns] with a
+  /// `comment(...)`: PostgreSQL has no inline column comment.
+  List<String> _compileColumnComments(
+      Blueprint blueprint, Iterable<Fluent> columns) {
+    final table = wrapTable(blueprint);
+    return [
+      for (final column in columns)
+        if (column['comment'] != null)
+          'comment on column $table.${wrap(column)} is '
+              "'${column['comment'].toString().replaceAll("'", "''")}'",
+    ];
   }
 
   /// Compila o comando SQL para habilitar restrições de chave estrangeira no PostgreSQL.
@@ -482,22 +502,29 @@ class SchemaPostgresGrammar extends SchemaGrammar {
   String typeDate(Fluent column) => 'date';
   @override
   String typeDateTime(Fluent column) =>
-      'timestamp(${column['precision'] ?? 0}) without time zone';
+      'timestamp${_precision(column)} without time zone';
   @override
   String typeDateTimeTz(Fluent column) =>
-      'timestamp(${column['precision'] ?? 0}) with time zone';
+      'timestamp${_precision(column)} with time zone';
   @override
   String typeTime(Fluent column) =>
-      'time(${column['precision'] ?? 0}) without time zone';
+      'time${_precision(column)} without time zone';
   @override
   String typeTimeTz(Fluent column) =>
-      'time(${column['precision'] ?? 0}) with time zone';
+      'time${_precision(column)} with time zone';
   @override
   String typeTimestamp(Fluent column) =>
-      'timestamp(${column['precision'] ?? 0}) without time zone${column['useCurrent'] == true ? ' default CURRENT_TIMESTAMP' : ''}'; // Adicionado default
+      'timestamp${_precision(column)} without time zone${column['useCurrent'] == true ? ' default CURRENT_TIMESTAMP' : ''}';
   @override
   String typeTimestampTz(Fluent column) =>
-      'timestamp(${column['precision'] ?? 0}) with time zone${column['useCurrent'] == true ? ' default CURRENT_TIMESTAMP' : ''}'; // Adicionado default
+      'timestamp${_precision(column)} with time zone${column['useCurrent'] == true ? ' default CURRENT_TIMESTAMP' : ''}';
+
+  /// `(n)` for a column with a precision; nothing (microseconds) without.
+  String _precision(Fluent column) {
+    final precision = column['precision'];
+    return precision == null ? '' : '($precision)';
+  }
+
   @override
   String typeYear(Fluent column) {
     print("Warning: PostgreSQL does not have a YEAR type. Using INTEGER.");
