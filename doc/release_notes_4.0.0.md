@@ -868,7 +868,9 @@ await db.transactionScope((ctx) async {
   the same rows, but an expression index can serve it, e.g. with an
   IMMUTABLE wrapper set as `unaccentFunction`:
   `create index on cgm (lower(f_unaccent(nom_cgm::text)) text_pattern_ops)`
-  for `match: SearchMatch.startsWith`. On MySQL it ignores case even with a
+  for `match: SearchMatch.startsWith`. Name the schema inside the wrapper
+  (`select public.unaccent($1)`): since PostgreSQL 17, CREATE INDEX runs
+  index functions with `search_path = pg_catalog, pg_temp`. On MySQL it ignores case even with a
   `_bin`/`_cs` collation. It cannot be combined with `caseSensitive`.
 - `whereAnyLike(columns, pattern)`: the same group with the pattern as given;
   `whereLike(..., unaccent: true, lower: true)`;

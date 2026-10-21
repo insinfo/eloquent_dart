@@ -173,10 +173,17 @@ void main() {
                   .whereSearch(['nome'], 'JOSÉ', unaccent: true, lower: true)),
               [1, 2]);
           // An expression index on lower(unaccent(...)) needs an IMMUTABLE
-          // function: the wrapper the grammar can be told to use.
-          await db.execute(
-              'CREATE OR REPLACE FUNCTION eloquent_f_unaccent(text) '
-              "RETURNS text LANGUAGE sql IMMUTABLE AS \$\$ SELECT unaccent(\$1) \$\$");
+          // function: the wrapper the grammar can be told to use. Its body
+          // names the schema: since PostgreSQL 17, CREATE INDEX runs index
+          // functions with search_path = pg_catalog, pg_temp.
+          final schema =
+              (await db.select('select extnamespace::regnamespace::text as s '
+                      "from pg_extension where extname = 'unaccent'"))
+                  .first['s'];
+          await db
+              .execute('CREATE OR REPLACE FUNCTION eloquent_f_unaccent(text) '
+                  'RETURNS text LANGUAGE sql IMMUTABLE AS '
+                  "\$\$ SELECT $schema.unaccent(\$1) \$\$");
           await db.execute('CREATE INDEX eloquent_search_feat_nome_idx ON '
               '$_table (lower(eloquent_f_unaccent(nome::text)) text_pattern_ops)');
           final grammar = db.getQueryGrammar() as QueryPostgresGrammar;
