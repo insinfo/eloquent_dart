@@ -24,6 +24,8 @@ mixin DetectsLostConnections {
     'connection closed',
     // dpgsql: the socket ended in the middle of a read
     'eof antes de ler',
+    // dpgsql 1.0.3: a command on a connection the server already closed
+    'the connection to the server was lost',
     // dargres / pools
     "can't create a connection",
     // Laravel (PostgreSQL and MySQL)

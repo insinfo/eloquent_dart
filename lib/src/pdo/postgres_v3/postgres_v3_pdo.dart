@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:eloquent/src/pdo/core/operation_lock.dart';
 import 'package:eloquent/src/pdo/core/pdo_config.dart';
 import 'package:eloquent/src/pdo/core/pdo_interface.dart';
 import 'package:eloquent/src/pdo/core/pdo_notification_connection.dart';
@@ -7,6 +8,7 @@ import 'package:eloquent/src/pdo/core/pdo_result.dart';
 import 'package:eloquent/src/utils/codecs/windows.dart';
 import 'package:postgres/postgres.dart';
 import 'postgres_v3_pdo_transaction.dart';
+import 'postgres_v3_values.dart';
 
 class PostgresV3PDO extends PDOInterface {
   /// default query Timeout =  30 seconds
@@ -47,6 +49,12 @@ class PostgresV3PDO extends PDOInterface {
     }
   }
 
+  /// The per-query timeout when the caller gives none:
+  /// [defaultTimeoutInSeconds], or `driver_options` `queryTimeout`. Each
+  /// query passes it to the driver, so the connection's own default never
+  /// applied.
+  int queryTimeoutInSeconds = defaultTimeoutInSeconds;
+
   //called from postgres_connector.dart
   Future<PostgresV3PDO> connect() async {
     final endpoint = Endpoint(
@@ -60,6 +68,26 @@ class PostgresV3PDO extends PDOInterface {
     final sslMode = config.sslmode?.toString() == 'require'
         ? SslMode.require
         : SslMode.disable;
+    // driver_options: ConnectionSettings / PoolSettings fields (durations as
+    // Duration or seconds; queryMode 'extended' or 'simple').
+    final options = config.driverOptionsFor('postgres_v3', {
+      'connectTimeout',
+      'queryTimeout',
+      'queryMode',
+      'ignoreSuperfluousParameters',
+      if (config.pool == true) ...{
+        'maxConnectionAge',
+        'maxSessionUse',
+        'maxQueryCount',
+      },
+    });
+    final queryMode = _queryMode(options.text('queryMode'));
+    final queryTimeout = options.duration('queryTimeout');
+    if (queryTimeout != null) {
+      queryTimeoutInSeconds =
+          (queryTimeout.inMicroseconds / Duration.microsecondsPerSecond)
+              .ceil();
+    }
 
     if (config.pool == true) {
       connection = Pool.withEndpoints(
@@ -73,6 +101,15 @@ class PostgresV3PDO extends PDOInterface {
           maxConnectionCount: config.poolSize,
           encoding: _getEncoding(config.charset ?? 'utf8'),
           sslMode: sslMode,
+          typeRegistry: postgresV3TypeRegistry(config),
+          connectTimeout: options.duration('connectTimeout'),
+          queryTimeout: options.duration('queryTimeout'),
+          queryMode: queryMode,
+          ignoreSuperfluousParameters:
+              options.flag('ignoreSuperfluousParameters'),
+          maxConnectionAge: options.duration('maxConnectionAge'),
+          maxSessionUse: options.duration('maxSessionUse'),
+          maxQueryCount: options.integer('maxQueryCount'),
         ),
       );
     } else {
@@ -85,10 +122,25 @@ class PostgresV3PDO extends PDOInterface {
             },
             encoding: _getEncoding(config.charset ?? 'utf8'),
             sslMode: sslMode,
+            typeRegistry: postgresV3TypeRegistry(config),
+            connectTimeout: options.duration('connectTimeout'),
+            queryTimeout: options.duration('queryTimeout'),
+            queryMode: queryMode,
+            ignoreSuperfluousParameters:
+                options.flag('ignoreSuperfluousParameters'),
           ));
     }
 
     return this;
+  }
+
+  static QueryMode? _queryMode(String? name) {
+    if (name == null) return null;
+    for (final mode in QueryMode.values) {
+      if (mode.name == name) return mode;
+    }
+    throw ArgumentError.value(
+        name, 'driver_options.queryMode', "Expected 'extended' or 'simple'");
   }
 
   @override
@@ -115,6 +167,7 @@ class PostgresV3PDO extends PDOInterface {
           sslMode: config.sslmode?.toString() == 'require'
               ? SslMode.require
               : SslMode.disable,
+          typeRegistry: postgresV3TypeRegistry(config),
         ));
     return PDONotificationConnection(
       notifications: conn.channels.all.map(
@@ -147,11 +200,25 @@ class PostgresV3PDO extends PDOInterface {
     }
   }
 
+  /// Serializes callers of the single (non-pool) connection: postgres 3.x
+  /// rejects a query on a connection that is inside `runTx` ("Attempting to
+  /// execute query on connection while inside a `runTx` call"), so a request
+  /// that arrived during another one's transaction failed.
+  final OperationLock _singleConnectionLock = OperationLock();
+
+  Future<R> _single<R>(Future<R> Function() operation) =>
+      connection is Pool ? operation() : _singleConnectionLock.run(operation);
+
   Future<T> runInTransaction<T>(
+          Future<T> operation(PostgresV3PDOTransaction ctx),
+          [int? timeoutInSeconds]) =>
+      _single(() => _runInTransaction(operation, timeoutInSeconds));
+
+  Future<T> _runInTransaction<T>(
       Future<T> operation(PostgresV3PDOTransaction ctx),
       [int? timeoutInSeconds]) async {
     if (timeoutInSeconds == null) {
-      timeoutInSeconds = defaultTimeoutInSeconds;
+      timeoutInSeconds = queryTimeoutInSeconds;
     }
 
     final res = await connection.runTx((transaCtx) async {
@@ -165,9 +232,12 @@ class PostgresV3PDO extends PDOInterface {
   }
 
   /// Executa uma instrução SQL e retornar o número de linhas afetadas
-  Future<int> execute(String statement, [int? timeoutInSeconds]) async {
+  Future<int> execute(String statement, [int? timeoutInSeconds]) =>
+      _single(() => _execute(statement, timeoutInSeconds));
+
+  Future<int> _execute(String statement, [int? timeoutInSeconds]) async {
     if (timeoutInSeconds == null) {
-      timeoutInSeconds = PostgresV3PDO.defaultTimeoutInSeconds;
+      timeoutInSeconds = queryTimeoutInSeconds;
     }
     final res = await connection.execute(
       statement,
@@ -178,9 +248,13 @@ class PostgresV3PDO extends PDOInterface {
 
   /// Prepares and executes an SQL statement with placeholders
   Future<PDOResults> query(String query,
+          [dynamic params, int? timeoutInSeconds]) =>
+      _single(() => _query(query, params, timeoutInSeconds));
+
+  Future<PDOResults> _query(String query,
       [dynamic params, int? timeoutInSeconds]) async {
     if (timeoutInSeconds == null) {
-      timeoutInSeconds = PostgresV3PDO.defaultTimeoutInSeconds;
+      timeoutInSeconds = queryTimeoutInSeconds;
     }
 
     // final conn = connection is Pool ? connection as Pool : connection as Connection;
@@ -191,22 +265,7 @@ class PostgresV3PDO extends PDOInterface {
       timeout: Duration(seconds: timeoutInSeconds),
     );
 
-    final rows = rs.map((row) => row.toColumnMap()).toList();
-    final maps = <Map<String, dynamic>>[];
-    if (rows.isNotEmpty) {
-      for (final row in rows) {
-        final map = <String, dynamic>{};
-        for (final col in row.entries) {
-          final key = col.key;
-          final value =
-              col.value is UndecodedBytes ? col.value.asString : col.value;
-          map.addAll({key: value});
-        }
-        maps.add(map);
-      }
-    }
-
-    final pdoResult = PDOResults(maps, rs.affectedRows);
+    final pdoResult = PDOResults(postgresV3Rows(config, rs), rs.affectedRows);
     return pdoResult;
   }
 

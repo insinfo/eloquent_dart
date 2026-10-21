@@ -37,7 +37,7 @@ class DpgsqlPDOTransaction extends PDOTransactionContext {
     final timeout = Duration(
       seconds: timeoutInSeconds ?? DpgsqlPDO.defaultTimeoutInSeconds,
     );
-    return DpgsqlPDO.runQuery(connection, query, params, timeout);
+    return DpgsqlPDO.runQuery(connection, query, params, timeout, getConfig());
   }
 
   @override

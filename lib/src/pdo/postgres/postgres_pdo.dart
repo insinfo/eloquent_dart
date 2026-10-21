@@ -48,7 +48,36 @@ class PostgresV2PDO extends PDOInterface {
   }
 
   //called from postgres_connector.dart
+  /// The per-query timeout when the caller gives none:
+  /// [defaultTimeoutInSeconds], or `driver_options` `queryTimeoutInSeconds`
+  /// (`queryTimeout` with pool). Each query passes it to the driver, so the
+  /// connection's own default never applied.
+  int queryTimeoutInSeconds = defaultTimeoutInSeconds;
+
   Future<PostgresV2PDO> connect() async {
+    final pool = config.pool == true;
+    // driver_options: PostgreSQLConnection parameters, or PgPoolSettings
+    // fields with pool (durations as Duration or seconds).
+    final options = config.driverOptionsFor(
+        'postgres',
+        pool
+            ? const {
+                'connectTimeout',
+                'queryTimeout',
+                'idleTestThreshold',
+                'maxConnectionAge',
+                'maxSessionUse',
+                'maxErrorCount',
+                'maxQueryCount',
+              }
+            : const {
+                'timeoutInSeconds',
+                'queryTimeoutInSeconds',
+                'useSSL',
+                'allowClearTextPassword',
+                'isUnixSocket',
+                'cancelQueryOnTimeout',
+              });
     final timeZone = TimeZoneSettings(config.timezone ?? 'UTC');
     timeZone.forceDecodeTimestamptzAsUTC = config.forceDecodeTimestamptzAsUTC;
     timeZone.forceDecodeTimestampAsUTC = config.forceDecodeTimestampAsUTC;
@@ -70,6 +99,26 @@ class PostgresV2PDO extends PDOInterface {
         await _onOpen(conn, config);
       };
       settings.timeZone = timeZone;
+      settings.decodingSettings = _decodingSettings(config);
+      final connectTimeout = options.duration('connectTimeout');
+      if (connectTimeout != null) settings.connectTimeout = connectTimeout;
+      final queryTimeout = options.duration('queryTimeout');
+      if (queryTimeout != null) {
+        settings.queryTimeout = queryTimeout;
+        queryTimeoutInSeconds = _seconds(queryTimeout);
+      }
+      final idleTestThreshold = options.duration('idleTestThreshold');
+      if (idleTestThreshold != null) {
+        settings.idleTestThreshold = idleTestThreshold;
+      }
+      final maxConnectionAge = options.duration('maxConnectionAge');
+      if (maxConnectionAge != null) settings.maxConnectionAge = maxConnectionAge;
+      final maxSessionUse = options.duration('maxSessionUse');
+      if (maxSessionUse != null) settings.maxSessionUse = maxSessionUse;
+      final maxErrorCount = options.integer('maxErrorCount');
+      if (maxErrorCount != null) settings.maxErrorCount = maxErrorCount;
+      final maxQueryCount = options.integer('maxQueryCount');
+      if (maxQueryCount != null) settings.maxQueryCount = maxQueryCount;
       connection = PgPool(endpoint, settings: settings);
     } else {
       connection = PostgreSQLConnection(
@@ -80,6 +129,15 @@ class PostgresV2PDO extends PDOInterface {
         password: config.password,
         timeZone: timeZone,
         encoding: _getEncoding(config.charset ?? 'utf8'),
+        decodingSettings: _decodingSettings(config),
+        timeoutInSeconds: options.integer('timeoutInSeconds') ?? 30,
+        queryTimeoutInSeconds: queryTimeoutInSeconds =
+            options.integer('queryTimeoutInSeconds') ?? queryTimeoutInSeconds,
+        useSSL: options.flag('useSSL') ?? false,
+        allowClearTextPassword:
+            options.flag('allowClearTextPassword') ?? false,
+        isUnixSocket: options.flag('isUnixSocket') ?? false,
+        cancelQueryOnTimeout: options.flag('cancelQueryOnTimeout') ?? false,
       );
       final conn = connection as PostgreSQLConnection;
       await conn.open();
@@ -88,6 +146,9 @@ class PostgresV2PDO extends PDOInterface {
 
     return this;
   }
+
+  static int _seconds(Duration duration) =>
+      (duration.inMicroseconds / Duration.microsecondsPerSecond).ceil();
 
   @override
   bool get supportsNotifications => true;
@@ -146,7 +207,7 @@ class PostgresV2PDO extends PDOInterface {
   Future<T> runInTransaction<T>(Future<T> operation(PostgresPDOTransaction ctx),
       [int? timeoutInSeconds]) async {
     if (timeoutInSeconds == null) {
-      timeoutInSeconds = defaultTimeoutInSeconds;
+      timeoutInSeconds = queryTimeoutInSeconds;
     }
     if (connection is PostgreSQLConnection) {
       final res = await (connection as PostgreSQLConnection).transaction(
@@ -169,7 +230,7 @@ class PostgresV2PDO extends PDOInterface {
   /// Executa uma instrução SQL e retornar o número de linhas afetadas
   Future<int> execute(String statement, [int? timeoutInSeconds]) async {
     if (timeoutInSeconds == null) {
-      timeoutInSeconds = defaultTimeoutInSeconds;
+      timeoutInSeconds = queryTimeoutInSeconds;
     }
     if (connection is PostgreSQLConnection) {
       final result = await (connection as PostgreSQLConnection).execute(
@@ -193,7 +254,7 @@ class PostgresV2PDO extends PDOInterface {
     // formatted as grammar date strings, matching Laravel/PDO behavior and
     // avoiding driver-specific binary timestamp/UTC conversions.
     if (timeoutInSeconds == null) {
-      timeoutInSeconds = defaultTimeoutInSeconds;
+      timeoutInSeconds = queryTimeoutInSeconds;
     }
     if (connection is PostgreSQLConnection) {
       final rs = await (connection as PostgreSQLConnection).query(
@@ -219,6 +280,19 @@ class PostgresV2PDO extends PDOInterface {
       return pdoResult;
     }
   }
+
+  /// `pg_types: 'uniform'`: the driver decodes time, timetz, interval, inet,
+  /// cidr and point as the server's text and every array as `List<T?>`, as
+  /// the other adapters return them. Done by postgres_fork while it decodes
+  /// (no pass over the rows afterwards).
+  static DecodingSettings _decodingSettings(PDOConfig config) =>
+      config.uniformPgTypes
+          ? const DecodingSettings(
+              interval: IntervalDecoding.text,
+              extendedTypes: ExtendedTypeDecoding.text,
+              nullableArrays: true,
+            )
+          : const DecodingSettings();
 
   @override
   Future close() async {

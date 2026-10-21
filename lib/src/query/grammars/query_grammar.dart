@@ -1352,8 +1352,7 @@ class QueryGrammar extends BaseGrammar {
     if (value is QueryExpression) return value.getValue().toString();
     if (value is Uint8List) return this.escapeRawBinary(value);
     if (value is DateTime) {
-      return this.quoteRawString(
-          Utils.formatDate(value, this.getDateFormat()));
+      return this.quoteRawString(this.formatDateTime(value));
     }
     if (value is Map || value is List) {
       return this.quoteRawString(jsonEncode(value));

@@ -181,6 +181,12 @@ abstract class BaseGrammar {
     return 'yyyy-MM-dd HH:mm:ss';
   }
 
+  /// [value] as the date string sent for a DateTime binding (with
+  /// `datetime_bindings: 'string'`, the default) and written by
+  /// `toRawSql()`: [getDateFormat], wall-clock fields, no offset.
+  String formatDateTime(DateTime value) =>
+      Utils.formatDate(value, getDateFormat());
+
   ///
   /// Get the grammar's table prefix.
   ///

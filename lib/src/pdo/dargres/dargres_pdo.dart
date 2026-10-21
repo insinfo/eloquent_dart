@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:dargres/dargres.dart' as dargres;
 import 'package:eloquent/eloquent.dart';
+import '../core/operation_lock.dart';
 import 'dargres_pdo_transaction.dart';
 
 class DargresPDO extends PDOInterface {
@@ -43,6 +44,18 @@ class DargresPDO extends PDOInterface {
       forceDecodeTimestampAsUTC: config.forceDecodeTimestampAsUTC,
       forceDecodeDateAsUTC: config.forceDecodeDateAsUTC,
     );
+    // driver_options: ConnectionSettings fields (durations as Duration or
+    // seconds).
+    final options = config.driverOptionsFor('dargres', const {
+      'connectionTimeout',
+      'commandTimeout',
+      'cancelGracePeriod',
+      'tcpKeepalive',
+      'statementCacheCapacity',
+      'queueConcurrentCalls',
+      'numericAsString',
+      'sourceAddress',
+    });
     return dargres.ConnectionSettings(
       user: config.username ?? '',
       database: config.database,
@@ -53,11 +66,20 @@ class DargresPDO extends PDOInterface {
       applicationName: config.applicationName,
       allowAttemptToReconnect: allowAttemptToReconnect,
       timeZone: timeZone,
-      commandTimeout: defaultTimeout,
+      commandTimeout: _commandTimeout =
+          options.duration('commandTimeout') ?? defaultTimeout,
+      connectionTimeout: options.duration('connectionTimeout') ??
+          const Duration(seconds: 180),
+      cancelGracePeriod: options.duration('cancelGracePeriod') ??
+          const Duration(seconds: 5),
+      tcpKeepalive: options.flag('tcpKeepalive') ?? false,
+      statementCacheCapacity: options.integer('statementCacheCapacity') ?? 64,
+      queueConcurrentCalls: options.flag('queueConcurrentCalls') ?? true,
+      sourceAddress: options.text('sourceAddress') ?? '',
       searchPath: config.schema,
       sessionStatements: config.postgresTimeoutStatements(),
       // postgres_fork (the default driver) returns numeric as an exact String.
-      numericAsString: true,
+      numericAsString: options.flag('numericAsString') ?? true,
     );
   }
 
@@ -95,8 +117,12 @@ class DargresPDO extends PDOInterface {
     return this;
   }
 
-  static Duration _timeout(int? timeoutInSeconds) => timeoutInSeconds == null
-      ? defaultTimeout
+  /// [defaultTimeout], or `driver_options` `commandTimeout`: also the pool's
+  /// per-call timeout when the caller gives none.
+  Duration _commandTimeout = defaultTimeout;
+
+  Duration _timeout(int? timeoutInSeconds) => timeoutInSeconds == null
+      ? _commandTimeout
       : Duration(seconds: timeoutInSeconds);
 
   Future<T> runInTransaction<T>(Future<T> operation(DargresPDOTransaction ctx),
@@ -113,10 +139,21 @@ class DargresPDO extends PDOInterface {
     return _onCore((core) => core.runInTransaction<T>(body), timeoutInSeconds);
   }
 
+  /// Serializes callers of the single connection: while one caller's
+  /// transaction runs, dargres rejects other queries on the connection ("A
+  /// transaction is active; execute this query through its
+  /// TransactionContext").
+  final OperationLock _singleConnectionLock = OperationLock();
+
   /// Runs [action] on the single connection. A per-call timeout cancels the
   /// command on the server (CancelRequest) and waits for it to settle; without
   /// one, the connection's 30 s command timeout applies.
   Future<R> _onCore<R>(Future<R> Function(dargres.CoreConnection core) action,
+          int? timeoutInSeconds) =>
+      _singleConnectionLock.run(() => _onCoreUnlocked(action, timeoutInSeconds));
+
+  Future<R> _onCoreUnlocked<R>(
+      Future<R> Function(dargres.CoreConnection core) action,
       int? timeoutInSeconds) async {
     final core = connection as dargres.CoreConnection;
     final future = action(core);

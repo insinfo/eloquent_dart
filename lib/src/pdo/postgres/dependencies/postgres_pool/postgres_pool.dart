@@ -286,6 +286,9 @@ class PgPoolSettings {
 
   Encoding encoding = utf8;
 
+  /// How the pooled connections decode values (see [DecodingSettings]).
+  DecodingSettings decodingSettings = const DecodingSettings();
+
   /// This callback function will be called after opening the connection.
   Future<void> Function(PostgreSQLExecutionContext connection)? onOpen;
 
@@ -514,6 +517,7 @@ class PgPool implements PostgreSQLExecutionContext {
             queryTimeoutInSeconds: settings.queryTimeout.inSeconds,
             timeZone: settings.timeZone,
             encoding: settings.encoding,
+            decodingSettings: settings.decodingSettings,
           );
           await c.open();
 

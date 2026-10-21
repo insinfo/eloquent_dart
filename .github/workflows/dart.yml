@@ -17,11 +17,27 @@ on:
 
 jobs:
   build:
+    name: PostgreSQL ${{ matrix.postgres-version }}, MariaDB ${{ matrix.mariadb-version }} (Dart ${{ matrix.sdk }})
     runs-on: ubuntu-22.04
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-22.04]
         sdk: [3.6.0]
+        postgres-version: ['14', '15', '16', '17', '18']
+        # One MariaDB per job (the MySQL tests are few, and mysql_dart covers
+        # the MySQL/MariaDB matrix in its own CI).
+        include:
+          - postgres-version: '14'
+            mariadb-version: '10.11'
+          - postgres-version: '15'
+            mariadb-version: '10.11'
+          - postgres-version: '16'
+            mariadb-version: '11.4'
+          - postgres-version: '17'
+            mariadb-version: '11.8'
+          - postgres-version: '18'
+            mariadb-version: '11.8'
 
     # services:
     #   mysql:
@@ -56,7 +72,7 @@ jobs:
       #- name: Start mariadb on Ubuntu
       - uses: ankane/setup-mariadb@v1
         with:
-          mariadb-version: "10.11"
+          mariadb-version: ${{ matrix.mariadb-version }}
           database: banco_teste
       - name: get mysql version  
         run: |
@@ -79,10 +95,25 @@ jobs:
       - name: FLUSH PRIVILEGES;
         run: mysql -e "FLUSH PRIVILEGES;" -u root   
 
-      - name: Start PostgreSQL on Ubuntu
+      # The runner comes with PostgreSQL 14: the other versions come from the
+      # PGDG repository, in a cluster on port 5432 in place of the 14 one.
+      - name: Install PostgreSQL ${{ matrix.postgres-version }}
+        env:
+          PG_VERSION: ${{ matrix.postgres-version }}
         run: |
           sudo lsb_release -a
-          sudo systemctl start postgresql.service          
+          if [ "$PG_VERSION" != "14" ]; then
+            sudo pg_dropcluster --stop 14 main
+            sudo apt-get install -y postgresql-common
+            sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+            sudo apt-get install -y postgresql-$PG_VERSION
+            if ! pg_lsclusters -h | grep -q "^$PG_VERSION main"; then
+              sudo pg_createcluster $PG_VERSION main -p 5432 -e UTF8 --locale=C.UTF-8
+            fi
+          fi
+          sudo systemctl start postgresql.service
+          sudo systemctl restart postgresql@$PG_VERSION-main
+          pg_lsclusters
           pg_isready
       - name: Create additional user
         run: |
@@ -101,46 +132,20 @@ jobs:
           sudo -u postgres createdb sistemas --owner=sisadmin
           sudo -u postgres createdb dart_test --owner=dart
           PGPASSWORD=s1sadm1n
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - name: Copy pg_hba
         run: |          
           sudo ls          
-          sudo cp ci/pg_hba.conf /etc/postgresql/14/main/pg_hba.conf
-          sudo systemctl restart postgresql.service
+          sudo cp ci/pg_hba.conf /etc/postgresql/${{ matrix.postgres-version }}/main/pg_hba.conf
+          sudo systemctl restart postgresql@${{ matrix.postgres-version }}-main
           pg_isready
+          sudo -u postgres psql -c 'SELECT version();'
 
-      - uses: dart-lang/setup-dart@v1.3
+      - uses: dart-lang/setup-dart@v1
         with:
           sdk: ${{ matrix.sdk }}
-      # dargres 4.0.1, dpgsql 1.0.3 and mysql_dart 3.0.1 are not on pub.dev
-      # yet: test against the main branches of the drivers until they are
-      # published (remove this step then).
-      - name: Use the unpublished driver versions
-        run: |
-          git clone --depth 1 https://github.com/insinfo/pg8000.git .deps/dargres
-          git clone --depth 1 https://github.com/insinfo/dpgsql.git .deps/dpgsql
-          git clone --depth 1 https://github.com/insinfo/mysql.dart.git .deps/mysql.dart
-          {
-            echo "dependency_overrides:"
-            echo "  dargres:"
-            echo "    path: .deps/dargres"
-            echo "  dpgsql:"
-            echo "    path: .deps/dpgsql"
-            echo "  mysql_dart:"
-            echo "    path: .deps/mysql.dart"
-          } > pubspec_overrides.yaml
-          {
-            echo "dependency_overrides:"
-            echo "  dargres:"
-            echo "    path: ../.deps/dargres"
-            echo "  dpgsql:"
-            echo "    path: ../.deps/dpgsql"
-            echo "  mysql_dart:"
-            echo "    path: ../.deps/mysql.dart"
-          } > example/pubspec_overrides.yaml
-          cat pubspec_overrides.yaml example/pubspec_overrides.yaml
       - name: Install dependencies
         run: dart pub get
     
-      - name: Run tests
+      - name: Run tests on PostgreSQL ${{ matrix.postgres-version }}, MariaDB ${{ matrix.mariadb-version }}
         run: dart run test --concurrency 1 --chain-stack-traces --platform vm

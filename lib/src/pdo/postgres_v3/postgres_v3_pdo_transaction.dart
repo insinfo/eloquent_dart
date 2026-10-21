@@ -4,6 +4,7 @@ import 'package:eloquent/src/pdo/core/pdo_interface.dart';
 import 'package:eloquent/src/pdo/core/pdo_result.dart';
 import 'package:postgres/postgres.dart';
 import 'postgres_v3_pdo.dart';
+import 'postgres_v3_values.dart';
 
 class PostgresV3PDOTransaction extends PDOTransactionContext {
   final TxSession transactionContext;
@@ -19,7 +20,8 @@ class PostgresV3PDOTransaction extends PDOTransactionContext {
 
   Future<int> execute(String statement, [int? timeoutInSeconds]) async {
     if (timeoutInSeconds == null) {
-      timeoutInSeconds = PostgresV3PDO.defaultTimeoutInSeconds;
+      timeoutInSeconds =
+          (pdoInstance as PostgresV3PDO).queryTimeoutInSeconds;
     }
     final res = await transactionContext.execute(
       statement,
@@ -32,7 +34,8 @@ class PostgresV3PDOTransaction extends PDOTransactionContext {
   Future<PDOResults> query(String query,
       [dynamic params, int? timeoutInSeconds]) async {
     if (timeoutInSeconds == null) {
-      timeoutInSeconds = PostgresV3PDO.defaultTimeoutInSeconds;
+      timeoutInSeconds =
+          (pdoInstance as PostgresV3PDO).queryTimeoutInSeconds;
     }
 
     final rs = await transactionContext.execute(
@@ -41,22 +44,8 @@ class PostgresV3PDOTransaction extends PDOTransactionContext {
       timeout: Duration(seconds: timeoutInSeconds),
     );
 
-    final rows = rs.map((row) => row.toColumnMap()).toList();
-    final maps = <Map<String, dynamic>>[];
-    if (rows.isNotEmpty) {
-      for (final row in rows) {
-        final map = <String, dynamic>{};
-        for (final col in row.entries) {
-          final key = col.key;
-          final value =
-              col.value is UndecodedBytes ? col.value.asString : col.value;
-          map.addAll({key: value});
-        }
-        maps.add(map);
-      }
-    }
-
-    final pdoResult = PDOResults(maps, rs.affectedRows);
+    final pdoResult =
+        PDOResults(postgresV3Rows(getConfig(), rs), rs.affectedRows);
     return pdoResult;
   }
 }

@@ -63,6 +63,16 @@ class DpgsqlPDO extends PDOInterface {
     final connection = await _openConnectionForOperation();
     DpgsqlTransaction? transaction;
     try {
+      if (_dataSource == null) {
+        // The driver's runInTransaction holds the shared connection: other
+        // callers' commands wait for the commit instead of running inside
+        // this transaction (with or without the adapter lock). It rolls back
+        // itself when the operation throws.
+        return await connection.runInTransaction((tx) {
+          final context = DpgsqlPDOTransaction(connection, tx, this);
+          return runWithTimeout(connection, () => operation(context), timeout);
+        });
+      }
       transaction = await connection.beginTransaction();
       final context = DpgsqlPDOTransaction(connection, transaction, this);
       final result =
@@ -111,13 +121,14 @@ class DpgsqlPDO extends PDOInterface {
       seconds: timeoutInSeconds ?? defaultTimeoutInSeconds,
     );
     return _withConnection(
-        (connection) => runQuery(connection, query, params, timeout));
+        (connection) => runQuery(connection, query, params, timeout, config));
   }
 
   /// Runs [query] on [connection] and maps the result. Shared with
   /// [DpgsqlPDOTransaction].
   static Future<PDOResults> runQuery(DpgsqlConnection connection,
-      String query, dynamic params, Duration timeout) {
+      String query, dynamic params, Duration timeout,
+      [PDOConfig? config]) {
     return runWithTimeout(connection, () async {
       // A CTE may wrap a SELECT or an UPDATE/DELETE without RETURNING: read
       // the rows, and fall back to the command's affected-row count.
@@ -221,11 +232,19 @@ class DpgsqlPDO extends PDOInterface {
     }
   }
 
+  /// Whether [sql] returns rows. EXPLAIN, VALUES, TABLE, FETCH and a
+  /// parenthesized SELECT (`(select ...) union (select ...)`) went through
+  /// executeNonQuery and their rows were lost.
   static bool expectsRows(String sql) {
     final lower = sql.trimLeft().toLowerCase();
     return lower.startsWith('select') ||
         lower.startsWith('with') ||
         lower.startsWith('show') ||
+        lower.startsWith('explain') ||
+        lower.startsWith('values') ||
+        lower.startsWith('table') ||
+        lower.startsWith('fetch') ||
+        lower.startsWith('(') ||
         _containsReturningKeyword(lower);
   }
 
@@ -437,7 +456,13 @@ class DpgsqlPDO extends PDOInterface {
       ..maxPoolSize = config.poolSize ?? 1
       ..maxAutoPrepare = 128
       ..autoPrepareMinUsages = 2
-      ..useExtendedQueryForUnparameterizedCommands = true;
+      ..useExtendedQueryForUnparameterizedCommands = true
+      // postgres_fork (the default driver), postgres_v3 and dargres return
+      // numeric as the exact server text; dpgsql's default is a double.
+      ..decodeNumericAsString = true
+      // pg_types: 'uniform': interval, ranges, geometric types... as the
+      // server's text, as on the other adapters.
+      ..decodeExtendedTypesAsText = config.uniformPgTypes;
 
     final username = config.username;
     if (username != null) {
@@ -490,8 +515,34 @@ class DpgsqlPDO extends PDOInterface {
     settings.forceDecodeTimestampAsUTC = config.forceDecodeTimestampAsUTC;
     settings.forceDecodeDateAsUTC = config.forceDecodeDateAsUTC;
 
-    return settings;
+    // driver_options: dpgsql connection-string keywords, over the ones set
+    // above.
+    final options = config.driverOptionsFor('dpgsql', _connectionKeywords);
+    if (options.values.isEmpty) return settings;
+    return DpgsqlConnectionStringBuilder([
+      settings.toString(),
+      for (final entry in options.values.entries) '${entry.key}=${entry.value}',
+    ].join(';'));
   }
+
+  static const _connectionKeywords = {
+    'Client Encoding', 'Encoding', 'TimeZone',
+    'Force Decode Timestamptz As UTC', 'Force Decode Timestamp As UTC',
+    'Force Decode Date As UTC', 'Use Current Offset For Local Timestamp',
+    'Use IANA Time Zone Database', 'IANA Time Zone Database Scope',
+    'Throw On DateTime Infinity', 'Host', 'Port', 'Username', 'Password',
+    'Database', 'SSL Mode', 'Trust Server Certificate', 'Pooling',
+    'Minimum Pool Size', 'Maximum Pool Size', 'Timeout',
+    'Connection Idle Lifetime', 'Connection Lifetime',
+    'Connection Pruning Interval', 'Max Auto Prepare',
+    'Auto Prepare Min Usages', 'No Reset On Close', 'Search Path',
+    'Application Name', 'Statement Timeout', 'Lock Timeout',
+    'Idle In Transaction Session Timeout', 'Decode Network Types As String',
+    'Decode Uuid As String', 'Decode Json As String',
+    'Decode Numeric As String', 'Use Custom Decimal',
+    'Decode Extended Types As Text', 'Infer String Parameters As Unknown',
+    'Use Extended Query For Unparameterized Commands',
+  };
 
   static SslMode _sslMode(String raw) {
     switch (raw.trim().toLowerCase().replaceAll('-', '')) {

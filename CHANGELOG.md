@@ -20,9 +20,27 @@ Details and migration notes: [doc/release_notes_4.0.0.md](doc/release_notes_4.0.
   semantics.
 - PostgreSQL `update`/`delete` with a left join and `recursionLimit()` on
   PostgreSQL/MySQL throw instead of producing wrong or ignored SQL.
+- PostgreSQL values are the same Dart types on the four adapters
+  (`pg_types: 'uniform'`, the default): the types without a natural Dart type
+  (`time`, `timetz`, `interval`, `inet`, `cidr`, `macaddr`, geometric types,
+  `bit`, `tsvector`, ranges) are the server's text (postgres_fork returned
+  `PgTime`, `PgInterval`, `PgInet`, `PgPoint`; postgres_v3 `Time`,
+  `Interval`, `IntRange`...; dpgsql `DpgsqlInterval`, `DpgsqlRange`...),
+  `money` the decimal amount, arrays `List<T?>`, arrays of user-defined types
+  (`enum[]`) the array literal. `pg_types: 'driver'` keeps each driver's
+  types. See the release notes.
 
 ### Added
 
+- `pg_types` (`'uniform'` | `'driver'`) and `driver_options` (settings passed
+  to the driver; an unknown key throws with the list of known ones) config
+  keys; `PDOConfig.fromMap` reads snake_case and camelCase spellings
+  (`application_name`/`applicationName`, `poolsize`/`poolSize`,
+  `allowreconnect`/`allowReconnect`, `is_unix_socket`/`isUnixSocket`), so
+  `PDOConfig.fromMap(config.toMap())` round-trips.
+- `test/pg_type_parity_integration_test.dart`: ~55 PostgreSQL types read cold,
+  warm, in one row and inside a transaction must give the same Dart type and
+  value on the four adapters.
 - `QueryBuilder2` (`db.table2()`): Dart 3 API with fixed-meaning arguments
   (`where(column, value, {operator})`), `ComparisonOperator`/`SortDirection`
   enums, typed group/join builders, `whereSqlOperator` validated per dialect
@@ -33,6 +51,11 @@ Details and migration notes: [doc/release_notes_4.0.0.md](doc/release_notes_4.0.
 - `datetime_bindings: 'native'` sends DateTime bindings to the driver
   unchanged (microseconds kept, correct instant for `timestamptz`); the
   default `'string'` keeps Laravel's `yyyy-MM-dd HH:mm:ss` formatting.
+- PostgreSQL, `datetime_bindings: 'string'` (default): a DateTime with
+  fractional seconds keeps them (`2024-03-10 12:34:56.789123`; 10:20:30.123
+  was stored as 10:20:30). Whole seconds are formatted as before. MySQL keeps
+  whole seconds (its `DATETIME` would round a fraction instead of truncating
+  it). New `Grammar.formatDateTime`, also used by `toRawSql()`.
 - PostgreSQL LISTEN/NOTIFY on every PostgreSQL adapter: `db.notify()`
   (transactional, via `pg_notify`), `db.notifications(channel)` and
   `PostgresNotificationListener` (one dedicated connection, reconnection,
@@ -79,6 +102,19 @@ Details and migration notes: [doc/release_notes_4.0.0.md](doc/release_notes_4.0.
 
 ### Fixed
 
+- dpgsql: `EXPLAIN`, `VALUES`, `TABLE`, `FETCH` and parenthesized `SELECT`s
+  returned no rows (they were run as statements without a result).
+- postgres_v3: `inet`, `cidr`, `macaddr` and `oid` came back as garbage
+  strings (binary bytes decoded as text) and `money`, `timetz`, `bit`,
+  `regclass`, `enum[]` and arrays of `numeric`, `money` and `interval` threw
+  `FormatException`.
+- postgres_fork: `driver_options` `queryTimeoutInSeconds` (or the pool's
+  `queryTimeout`) is the default per-query timeout; each query passed its own
+  30 s, so the connection's default never applied. Same for postgres_v3
+  `queryTimeout` and dargres `commandTimeout` (pool).
+- dpgsql: a statement on a connection the server closed is detected as a lost
+  connection and retried on a new one (dpgsql 1.0.3 reports it as "the
+  connection to the server was lost").
 - Query builder: `groupBy(raw)` ignored, `whereIn([])`, `exists()` read connection, `union(Function)`,
   `updateOrInsert`, `clone()`, `paginate` side effects, builder left without
   orders/limit after a failed count.
@@ -94,6 +130,19 @@ Details and migration notes: [doc/release_notes_4.0.0.md](doc/release_notes_4.0.
 - MySQL: `exists()` was always false (`1 == true`), so `updateOrInsert`
   always inserted.
 - `whereColumn([...])` bound the second column as a value.
+- MySQL `insertGetId` could return another request's id (a separate
+  `SELECT LAST_INSERT_ID()` ran on another pooled connection, or after
+  another caller's insert); the id now comes with the INSERT result
+  (`PDOResults.insertId`).
+- postgres_v3 and dargres without pool: a request that arrived during
+  another one's transaction failed; callers of the single connection are
+  serialized, like dpgsql and MySQL.
+- dpgsql: `numeric` comes back as the exact server text (`'150.50'`), as
+  on postgres, postgres_v3 and dargres; it was a `double` (`150.5`, digits
+  lost beyond ~15). Uses dpgsql 1.0.3's `Decode Numeric As String`.
+- dpgsql single connection: transactions run through
+  `DpgsqlConnection.runInTransaction` (dpgsql 1.0.3), which keeps other
+  callers' commands out of them even without the adapter's lock.
 - `union` + `orderByRaw` with bindings emitted them before the union parts'
   bindings; pagination counts of a union kept its limit.
 - MySQL `onConflict()` emitted PostgreSQL's `on conflict`; it is compiled as

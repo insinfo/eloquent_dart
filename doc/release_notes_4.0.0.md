@@ -25,6 +25,100 @@ of this release is in [PERFORMANCE_REWRITE_PLAN.md](PERFORMANCE_REWRITE_PLAN.md)
 
 ## Breaking changes and migration
 
+### PostgreSQL value types: the same on every adapter (`pg_types`)
+
+The four PostgreSQL adapters returned different Dart types for the same
+column: `time` was `PgTime` on postgres, `Time` on postgres_v3 and `String`
+on dargres and dpgsql; `numeric` was a `double` on dpgsql; `interval` threw
+on postgres and was `Interval`/`String`/`DpgsqlInterval` elsewhere; an `enum`
+was bytes on dpgsql. A model read with one driver could break with another.
+With `pg_types: 'uniform'` (the default) every adapter returns:
+
+| PostgreSQL | Dart |
+|---|---|
+| `int2`, `int4`, `int8`, `oid` | `int` |
+| `float4`, `float8` | `double` (float4 widened: `1.100000023841858`) |
+| `numeric` | `String`, exact (`'150.50'`) |
+| `bool` | `bool` |
+| `text`, `varchar`, `char`, `name`, `xml`, `uuid`, enums, domains over text | `String` |
+| `bytea` | `Uint8List` |
+| `json`, `jsonb` | `Map` / `List` / scalar |
+| `date`, `timestamp`, `timestamptz` | `DateTime` (UTC, see `forceDecode*AsUTC`) |
+| `time`, `timetz`, `interval`, `inet`, `cidr`, `macaddr`, `point`, `line`, `lseg`, `box`, `path`, `polygon`, `circle`, `bit`, `varbit`, `tsvector`, ranges | `String`: the server's text (`'10:20:30.5'`, `'1 day 02:03:04'`, `'10.0.0.1'`, `'(1,2)'`, `'[1,5)'`) |
+| `money` | `String`: the decimal amount (`'12.34'`), not the lc_monetary text |
+| arrays | `List<T?>` of the element values (`List<int?>`, `List<String?>`...) |
+| arrays of user-defined types (`enum[]`) | `String`: the array literal (`'{ok,sad}'`) |
+
+Exceptions:
+
+- `regclass`, `regtype` and the other reg* types are the oid (`int`) on
+  postgres and postgres_v3 (the binary form carries only the oid) and the
+  name on dargres and dpgsql. Cast them (`::text` or `::oid`).
+- A `tstzrange` bound is printed in UTC (`+00`) on postgres and postgres_v3;
+  the server prints it in the session time zone.
+- `money` assumes 2 fraction digits (lc_monetary's default).
+
+Migration: code that read `PgTime`, `PgInterval`, `PgInet`, `PgPoint`
+(postgres), `Time`, `Interval`, `IntRange`, `Point`... (postgres_v3) or
+`DpgsqlInterval`, `DpgsqlRange`... (dpgsql) gets a `String`. Parse it, or
+set `pg_types: 'driver'` to keep each driver's types:
+
+```dart
+manager.addConnection({
+  'driver': 'pgsql',
+  // ...
+  'pg_types': 'driver', // PgInterval, DpgsqlRange, Interval... as before
+});
+```
+
+`test/pg_type_parity_integration_test.dart` reads about 55 types cold, warm,
+in one row and inside a transaction on the four adapters and requires the
+same type and value: a driver that changes a decoder fails it.
+
+The drivers produce these types while they decode; the adapters do not walk
+the rows afterwards (a first version did, and cost about 12% on a 100-row
+result): postgres_fork with `DecodingSettings(interval: text, extendedTypes:
+text, nullableArrays: true)`, dpgsql with `Decode Extended Types As Text` and
+`Decode Numeric As String`, dargres by its text decoding, postgres_v3 with a
+`TypeRegistry` of codecs (its arrays get their list type in the pass the
+adapter already made). Measured in the SALI (same configuration as
+production, driver postgres, median of 3 rounds of 3000 queries), 4.0 against
+3.4.3: `select 1` 1.01x, 100 rows 0.98x, query builder with a join 0.99x,
+compiling a query 0.87x, insert + update in a transaction 0.91x.
+
+### `driver_options`
+
+Settings passed to the driver as they are. The keys are each driver's own
+names; an unknown key throws an `ArgumentError` listing the known ones.
+Durations take a `Duration` or a number of seconds.
+
+```dart
+manager.addConnection({
+  'driver': 'pgsql',
+  'driver_implementation': 'dargres',
+  // ...
+  'driver_options': {'statementCacheCapacity': 256, 'commandTimeout': 60},
+});
+```
+
+| Adapter | Keys |
+|---|---|
+| postgres | `timeoutInSeconds`, `queryTimeoutInSeconds`, `useSSL`, `allowClearTextPassword`, `isUnixSocket`, `cancelQueryOnTimeout`; with pool: `connectTimeout`, `queryTimeout`, `idleTestThreshold`, `maxConnectionAge`, `maxSessionUse`, `maxErrorCount`, `maxQueryCount` |
+| postgres_v3 | `connectTimeout`, `queryTimeout`, `queryMode` (`'extended'`/`'simple'`), `ignoreSuperfluousParameters`; with pool: `maxConnectionAge`, `maxSessionUse`, `maxQueryCount` |
+| dargres | `connectionTimeout`, `commandTimeout`, `cancelGracePeriod`, `tcpKeepalive`, `statementCacheCapacity`, `queueConcurrentCalls`, `numericAsString`, `sourceAddress` |
+| dpgsql | connection-string keywords (`'Max Auto Prepare'`, `'Statement Timeout'`, `'Decode Json As String'`...) |
+| mysql | `autoPreparedStatementCacheCapacity`, `allowPublicKeyRetrieval`, `serverPublicKey`, `queueConcurrentCalls`; with pool instead of `queueConcurrentCalls`: `timeoutMs`, `idleTestThreshold`, `maxConnectionAge`, `maxSessionUse`, `maxErrorCount` |
+
+The per-query timeout options (`queryTimeoutInSeconds`/`queryTimeout`,
+dargres `commandTimeout`) are also the adapter's default timeout for a query
+called without one. Options the adapter sets to keep the types uniform
+(`numericAsString`, `Decode Numeric As String`, `Decode Extended Types As
+Text`) can be overridden; the types are then the driver's.
+
+`PDOConfig.fromMap` reads the snake_case and camelCase spellings of
+`application_name`, `poolsize`, `allowreconnect` and `is_unix_socket`;
+`toMap()` wrote camelCase keys that `fromMap()` did not read.
+
 ### `ConnectionInterface` (transactions)
 
 Custom implementations of `ConnectionInterface` (test fakes included) must now
@@ -275,10 +369,14 @@ New config key `datetime_bindings`: `'string'` (default, unchanged) or
 `'native'`; anything else throws `ArgumentError`. It is also exposed as
 `PDOConfig.dateTimeBindings` (`DateTimeBindings.string`/`.native`).
 
-- `string` formats DateTime bindings as `yyyy-MM-dd HH:mm:ss` (Laravel). It
-  drops microseconds and the zone: with an `America/Sao_Paulo` session, a UTC
-  DateTime written to `timestamptz` is stored 3 hours off. The same shift
-  happens when you write back a `timestamptz` value that was read as UTC.
+- `string` formats DateTime bindings with the wall-clock fields and no zone
+  (`Grammar.formatDateTime`): `yyyy-MM-dd HH:mm:ss` (Laravel), plus the
+  fraction on PostgreSQL when there is one (`12:34:56.789123`; 3.x dropped
+  it). MySQL keeps whole seconds: `DATETIME` without fsp rounds a fraction,
+  so sending one would move values to the next second. Without the zone,
+  with an `America/Sao_Paulo` session, a UTC DateTime written to
+  `timestamptz` is stored 3 hours off. The same shift happens when you write
+  back a `timestamptz` value that was read as UTC.
 - `native` passes the DateTime to the driver. On postgres, postgres_v3 and
   dargres, a `timestamp` column gets the fields and a `timestamptz` column
   gets the instant, with microseconds. On MySQL microseconds are kept;
@@ -903,6 +1001,41 @@ The `on delete`/`on update` action is validated (`cascade`, `restrict`,
   on the old name, and printed "Error/TODO" for foreign keys.
 - `QueryBuilder.getProperty()` printed and returned the property name for an
   unknown property; it throws `ArgumentError`.
+
+## Stress test (REST API with isolates)
+
+`test/stress_rest_api_integration_test.dart` runs a small REST API on
+`dart:io` `HttpServer`, served by several isolates on one shared port
+(`shared: true`), each with its own `Connection`. Several client isolates use
+`HttpClient` against it, concurrently. Each client creates items (in a
+transaction that also bumps a counter row), reads them back, increments them
+in parallel, rereads them, and writes and reads notes created with
+`insertGetId` outside a transaction. At the end the test checks counts, sums
+and the counter in the database. It covers the five drivers, with and
+without pool. Size with `STRESS_SERVERS`, `STRESS_CLIENTS`, `STRESS_ITEMS`,
+`STRESS_INCREMENTS` and `STRESS_POOL_SIZE` (defaults 4/6/20/3/4; checked
+with 6/12/50/5).
+
+It found three bugs:
+
+| Bug | Fix |
+|---|---|
+| MySQL `insertGetId` returned another request's id: the processor ran `SELECT LAST_INSERT_ID()` as a second statement, which could use another pooled connection, or come after another caller's insert on the single connection | `PDOResults.insertId` from the OK packet; the SELECT is only a fallback |
+| postgres_v3 single connection: queries during another caller's `runTx` failed | `OperationLock` around query/execute/transaction |
+| dargres single connection: queries during another caller's transaction failed | `OperationLock` in `_onCore` |
+
+The drivers that are part of this project now queue concurrent callers of
+one connection themselves (dargres 4.0.1, dpgsql 1.0.3, mysql_dart 3.0.1):
+commands wait for their turn, and a transaction run through the driver's
+callback API holds the connection until it commits. The test runs dargres,
+dpgsql and mysql a third time, on a single connection with the adapter's
+lock off (`OperationLock.enabled`, tests only), and passes; with mysql_dart
+3.0.0 that run fails with "connection is busy". The adapters keep their lock:
+it measures each call's timeout from when the call starts running, and a
+timeout's cancel (dargres) or connection replacement (dpgsql) cannot hit
+another caller's command. The dpgsql adapter runs single-connection
+transactions through `DpgsqlConnection.runInTransaction`, so other callers'
+commands never run inside them.
 
 ## Performance
 

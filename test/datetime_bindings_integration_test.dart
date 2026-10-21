@@ -77,8 +77,8 @@ void main() {
       }
 
       tearDown(() async {
-        for (final name in manager.getDatabaseManager().connectionsProp.keys
-            .toList()) {
+        for (final name
+            in manager.getDatabaseManager().connectionsProp.keys.toList()) {
           final db = await manager.getConnection(name);
           await db.execute('DROP TABLE IF EXISTS $_table');
           await manager.getDatabaseManager().purge(name);
@@ -104,7 +104,8 @@ void main() {
         final read = (await db.table(_table).where('k', 'local').first())!;
         final tstz = read['tstz'] as DateTime;
         await db.table(_table).where('k', 'local').update({'tstz': tstz});
-        expect((await stored(db, 'local'))['tstz_utc'], _fields(_local.toUtc()));
+        expect(
+            (await stored(db, 'local'))['tstz_utc'], _fields(_local.toUtc()));
         // In a process running in UTC the local and UTC values are the same
         // instant (CI); elsewhere they differ.
         expect(await db.table(_table).where('tstz', tstz).count(),
@@ -113,15 +114,33 @@ void main() {
             reason: 'both rows store the same wall clock fields');
       });
 
-      test('string (default): grammar format, no micros, no zone', () async {
+      test('string (default): wall-clock fields with micros, no zone',
+          () async {
         final db = await open('string');
         await db
             .table(_table)
             .insert({'k': 'utc', 'ts': _utc, 'tstz': _utc, 'd': _utc});
         final row = await stored(db, 'utc');
-        expect(row['ts'], _fields(_utc, micros: false));
-        // "12:34:56" read in the session zone (-03), not 12:34:56 UTC.
-        expect(row['tstz_utc'], '2024-03-10 15:34:56.000000');
+        // The fraction used to be dropped (12:34:56).
+        expect(row['ts'], _fields(_utc));
+        // "12:34:56.789123" read in the session zone (-03), not as UTC.
+        expect(row['tstz_utc'], '2024-03-10 15:34:56.789123');
+
+        // Whole seconds are sent without a fraction; a where on the value
+        // matches what was written.
+        final whole = DateTime(2024, 3, 10, 8, 0, 0);
+        expect(
+            db.getQueryGrammar().formatDateTime(whole), '2024-03-10 08:00:00');
+        expect(
+            db
+                .getQueryGrammar()
+                .formatDateTime(DateTime(2024, 1, 1, 0, 0, 0, 5)),
+            '2024-01-01 00:00:00.005000');
+        await db.table(_table).insert({'k': 'whole', 'ts': whole});
+        expect(await db.table(_table).where('ts', _utc).count(), 1);
+        expect(await db.table(_table).where('ts', whole).count(), 1);
+        expect(db.table(_table).where('ts', _utc).toRawSql(),
+            contains("'2024-03-10 12:34:56.789123'"));
       });
     });
   }
@@ -145,12 +164,17 @@ void main() {
         await db.execute('DROP TABLE IF EXISTS $_table');
         await db.execute('CREATE TABLE $_table (k varchar(10), '
             'ts datetime(6), d date)');
-        await db.table(_table).insert({'k': 'local', 'ts': _local, 'd': _local});
+        await db
+            .table(_table)
+            .insert({'k': 'local', 'ts': _local, 'd': _local});
         final row = (await db.select(
                 'select cast(ts as char) ts, cast(d as char) d from $_table'))
             .single;
-        expect(row['ts'],
-            mode == 'native' ? _fields(_local) : '${_fields(_local, micros: false)}.000000');
+        expect(
+            row['ts'],
+            mode == 'native'
+                ? _fields(_local)
+                : '${_fields(_local, micros: false)}.000000');
         expect(row['d'], '2024-03-10');
         expect(await db.table(_table).where('ts', _local).count(), 1);
       });

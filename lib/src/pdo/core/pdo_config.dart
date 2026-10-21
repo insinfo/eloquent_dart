@@ -10,6 +10,22 @@ enum DateTimeBindings {
   native,
 }
 
+/// How PostgreSQL values are returned (`pg_types` config key).
+enum PgTypes {
+  /// The same Dart types on every PostgreSQL adapter: natural types (int,
+  /// double, bool, String, DateTime in UTC, Uint8List, Map/List from JSON,
+  /// typed lists) as Dart values; numeric as its exact text; the types
+  /// without a natural Dart type (interval, time, timetz, inet, cidr,
+  /// macaddr, geometric types, bit strings, tsvector, ranges, enums) as the
+  /// text the server prints for them, arrays of them as lists of texts, and
+  /// arrays of user-defined types as the array literal (`'{ok,sad}'`); money
+  /// as the decimal amount (`'12.34'`).
+  uniform,
+
+  /// Each driver's own types (PgInterval, DpgsqlRange, Interval...).
+  driver,
+}
+
 class PDOConfig {
   final String driver;
   final String host;
@@ -49,6 +65,16 @@ class PDOConfig {
 
   /// `datetime_bindings`: `'string'` (default) or `'native'`.
   DateTimeBindings dateTimeBindings = DateTimeBindings.string;
+
+  /// `pg_types`: `'uniform'` (default) or `'driver'`.
+  PgTypes pgTypes = PgTypes.uniform;
+
+  /// `pg_types: 'uniform'` (the default).
+  bool get uniformPgTypes => pgTypes == PgTypes.uniform;
+
+  /// `driver_options`: settings passed to the driver as they are; the keys
+  /// each adapter accepts are listed in its error for an unknown key.
+  Map<String, dynamic> driverOptions = const {};
 
   //
   String? statementTimeout;
@@ -98,6 +124,8 @@ class PDOConfig {
       'timezone': timezone,
       'schema': schema,
       'datetime_bindings': dateTimeBindings.name,
+      'pg_types': pgTypes.name,
+      'driver_options': driverOptions,
       'forceDecodeTimestamptzAsUTC': forceDecodeTimestamptzAsUTC,
       'forceDecodeTimestampAsUTC': forceDecodeTimestampAsUTC,
       'forceDecodeDateAsUTC': forceDecodeDateAsUTC,
@@ -109,6 +137,16 @@ class PDOConfig {
   }
 
   factory PDOConfig.fromMap(Map<String, dynamic> map) {
+    // snake_case and camelCase spellings: toMap() wrote `applicationName`,
+    // `isUnixSocket`, `allowReconnect` and `poolsize`, which fromMap() did
+    // not read back.
+    dynamic key(List<String> names) {
+      for (final name in names) {
+        if (map.containsKey(name)) return map[name];
+      }
+      return null;
+    }
+
     final co = PDOConfig(
       driver: map['driver'],
       host: map['host'],
@@ -116,12 +154,12 @@ class PDOConfig {
       database: map['database'],
       username: map['username'],
       password: map['password'],
-      isUnixSocket: map['is_unix_socket'],
+      isUnixSocket: key(['is_unix_socket', 'isUnixSocket']),
       charset: map['charset'],
       pool: map['pool'],
-      poolSize: map['poolsize'],
-      applicationName: map['application_name'],
-      allowReconnect: map['allowreconnect'],
+      poolSize: key(['poolsize', 'pool_size', 'poolSize']),
+      applicationName: key(['application_name', 'applicationName']),
+      allowReconnect: key(['allowreconnect', 'allow_reconnect', 'allowReconnect']),
       sslmode: map['sslmode'],
       timezone: map['timezone'],
       schema: map['schema'],
@@ -136,6 +174,15 @@ class PDOConfig {
       co.forceDecodeDateAsUTC = map['forceDecodeDateAsUTC'];
     }
     co.dateTimeBindings = parseDateTimeBindings(map['datetime_bindings']);
+    co.pgTypes = parsePgTypes(map['pg_types']);
+    final driverOptions = key(['driver_options', 'driverOptions']);
+    if (driverOptions != null) {
+      if (driverOptions is! Map) {
+        throw ArgumentError.value(
+            driverOptions, 'driver_options', 'Expected a Map.');
+      }
+      co.driverOptions = Map<String, dynamic>.from(driverOptions);
+    }
     // Both spellings are accepted; the snake_case keys were silently ignored.
     String? timeout(String camel, String snake) =>
         (map[camel] ?? map[snake])?.toString();
@@ -174,6 +221,25 @@ class PDOConfig {
 
   /// `SET statement_timeout/lock_timeout/idle_in_transaction_session_timeout`
   /// statements for the configured PostgreSQL session timeouts.
+  /// Parses the `pg_types` config value (`null` means `uniform`).
+  static PgTypes parsePgTypes(dynamic value) {
+    if (value == null) return PgTypes.uniform;
+    if (value is PgTypes) return value;
+    switch (value.toString().toLowerCase()) {
+      case 'uniform':
+        return PgTypes.uniform;
+      case 'driver':
+        return PgTypes.driver;
+    }
+    throw ArgumentError.value(
+        value, 'pg_types', "Expected 'uniform' or 'driver'.");
+  }
+
+  /// [driverOptions] checked against the keys an adapter accepts: an
+  /// unknown key (a typo) throws instead of being ignored.
+  DriverOptions driverOptionsFor(String driver, Set<String> known) =>
+      DriverOptions(driver, driverOptions, known);
+
   /// Parses the `datetime_bindings` config value (`null` means `string`).
   static DateTimeBindings parseDateTimeBindings(dynamic value) {
     if (value == null) return DateTimeBindings.string;
@@ -200,4 +266,55 @@ class PDOConfig {
     add('idle_in_transaction_session_timeout', idleInTransactionSessionTimeout);
     return statements;
   }
+}
+
+/// `driver_options` of one adapter, with typed accessors.
+class DriverOptions {
+  DriverOptions(this.driver, this.values, Set<String> known) {
+    final unknown = values.keys.where((key) => !known.contains(key)).toList();
+    if (unknown.isNotEmpty) {
+      throw ArgumentError.value(
+          unknown.join(', '),
+          'driver_options',
+          'Unknown option for $driver. Known options: '
+              '${(known.toList()..sort()).join(', ')}');
+    }
+  }
+
+  final String driver;
+  final Map<String, dynamic> values;
+
+  bool has(String key) => values.containsKey(key);
+
+  T? _typed<T>(String key, T? Function(Object value) convert) {
+    final value = values[key];
+    if (value == null) return null;
+    final converted = convert(value);
+    if (converted == null) {
+      throw ArgumentError.value(value, 'driver_options.$key',
+          'Invalid value for $driver (expected $T)');
+    }
+    return converted;
+  }
+
+  bool? flag(String key) => _typed(key, (v) {
+        if (v is bool) return v;
+        if (v == 'true') return true;
+        if (v == 'false') return false;
+        return null;
+      });
+
+  int? integer(String key) =>
+      _typed(key, (v) => v is int ? v : int.tryParse('$v'));
+
+  String? text(String key) => _typed(key, (v) => '$v');
+
+  /// A Duration, or a number of seconds.
+  Duration? duration(String key) => _typed(key, (v) {
+        if (v is Duration) return v;
+        final seconds = v is num ? v : num.tryParse('$v');
+        return seconds == null
+            ? null
+            : Duration(microseconds: (seconds * 1000000).round());
+      });
 }

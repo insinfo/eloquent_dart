@@ -2,6 +2,18 @@ import 'dart:typed_data';
 import 'package:eloquent/eloquent.dart';
 
 class QueryPostgresGrammar extends QueryGrammar {
+  /// Keeps fractional seconds when there are any: `timestamp` stores
+  /// microseconds, and `yyyy-MM-dd HH:mm:ss` alone dropped them
+  /// (10:20:30.123 was stored as 10:20:30). MySQL keeps whole seconds: its
+  /// `DATETIME` (fsp 0) would round a fraction instead of truncating it.
+  @override
+  String formatDateTime(DateTime value) {
+    final text = super.formatDateTime(value);
+    final micros = value.millisecond * 1000 + value.microsecond;
+    if (micros == 0) return text;
+    return '$text.${micros.toString().padLeft(6, '0')}';
+  }
+
   /// PostgreSQL predicate operators for `QueryBuilder2.whereSqlOperator`.
   /// `?`, `?|` and `?&` (JSON keys) are not here: `?` is the placeholder.
   @override

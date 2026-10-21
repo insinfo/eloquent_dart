@@ -574,7 +574,7 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
       if (value is DateTime) {
         if (_nativeDateTimeBindings()) continue;
         (bindings ??= List<dynamic>.of(bindingsP))[key] =
-            Utils.formatDate(value, grammar.getDateFormat());
+            grammar.formatDateTime(value);
       } else if (value == false) {
         driverName ??= _resolvedDriverName();
         if (driverName != 'pgsql') {
