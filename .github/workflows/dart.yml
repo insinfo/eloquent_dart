@@ -6,9 +6,9 @@ name: Dart
 run-name: ${{ github.actor }} is testing Dart
 on:
   push:
-    branches: [ main, performace ]
+    branches: [ main ]
   pull_request:
-    branches: [ main, performace ]
+    branches: [ main ]
 
 #env: 
   #DB_HOST: localhost
