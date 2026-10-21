@@ -162,6 +162,15 @@ bool get supportsSavepoints;
 
 `DargresPDO` requires dargres 4.0.1 (new session options).
 
+### dpgsql
+
+`DpgsqlPDO` requires dpgsql 1.1.0: `execute()`/`unprepared()` set
+`DpgsqlCommand.simpleQuery`, so a script runs through the simple query
+protocol while the other queries keep the extended protocol (binary results,
+auto-prepare). postgres_v3's `execute()` passes `QueryMode.simple` for the
+same reason. A script that failed with 42601 on these two adapters now runs
+as on postgres and dargres.
+
 ### Corrected behaviour that code may have relied on
 
 | Before | Now | What to change |

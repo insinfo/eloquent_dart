@@ -673,16 +673,18 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   }
 
   ///
-  /// Run a raw, unprepared query against the PDO connection.
-  ///
-  /// @param  String  $query
-  /// @return bool
+  /// Run a raw, unprepared query against the PDO connection (Laravel's
+  /// `DB::unprepared`, PHP's `PDO::exec`): no bindings, through the simple
+  /// query protocol on every PostgreSQL adapter, so [query] may hold several
+  /// statements (a script). They run as one implicit transaction unless the
+  /// text has its own `BEGIN`/`COMMIT`, so `CREATE INDEX CONCURRENTLY` and
+  /// `VACUUM` must be alone. Returns the rows affected.
   ///
   Future<int> unprepared(String query, [int? timeoutInSeconds]) async {
     final resp = await this.run(query, [],
         (me, query, bindings, timeoutInSeconds) async {
       if (me.pretending()) {
-        return true;
+        return 0;
       }
 
       return me.getPdo().execute(query, timeoutInSeconds);

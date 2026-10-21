@@ -305,6 +305,22 @@ transaction.
 > isolates Dart exceptions there. `dargres`, `dpgsql` and MySQL recover with
 > `ROLLBACK TO SAVEPOINT` and the outer transaction continues.
 
+## Running a SQL script (unprepared)
+
+`db.unprepared(sql)` (Laravel's `DB::unprepared`, PHP's `PDO::exec`) runs
+raw SQL without bindings through the simple query protocol on every
+PostgreSQL adapter, so a script with several statements runs whole:
+
+```dart
+await db.unprepared(File('scripts/6.4.0/4_orgao_emissor.sql').readAsStringSync());
+```
+
+The statements run as one implicit transaction unless the script has its own
+`BEGIN`/`COMMIT`; `CREATE INDEX CONCURRENTLY` and `VACUUM` must be alone in
+the text. psql meta-commands (`\set`, `\gexec`) are not SQL and are not
+understood. Queries with bindings (`select`, `statement`, the query builder)
+keep the extended protocol and its prepared statements.
+
 ## Ambient transaction: transactionScope
 
 `db.transaction((ctx) ...)` only covers what runs through `ctx`: a repository

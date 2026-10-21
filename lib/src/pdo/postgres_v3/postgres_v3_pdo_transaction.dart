@@ -22,8 +22,10 @@ class PostgresV3PDOTransaction extends PDOTransactionContext {
     if (timeoutInSeconds == null) {
       timeoutInSeconds = (pdoInstance as PostgresV3PDO).queryTimeoutInSeconds;
     }
+    // Simple query protocol, as in PostgresV3PDO.execute.
     final res = await transactionContext.execute(
       statement,
+      queryMode: QueryMode.simple,
       timeout: Duration(seconds: timeoutInSeconds),
     );
     return res.affectedRows;

@@ -25,7 +25,8 @@ class DpgsqlPDOTransaction extends PDOTransactionContext {
     final timeout = Duration(
       seconds: timeoutInSeconds ?? DpgsqlPDO.defaultTimeoutInSeconds,
     );
-    final command = connection.createCommand(statement);
+    // Simple query protocol, as in DpgsqlPDO.execute.
+    final command = connection.createCommand(statement)..simpleQuery = true;
     return DpgsqlPDO.runWithTimeout(
         connection, () => command.executeNonQuery(), timeout);
   }

@@ -25,6 +25,7 @@ Details and migration notes: [doc/release_notes_4.0.0.md](doc/release_notes_4.0.
   `keyParametersByArgument`, `getFunctionHint`) and the static
   `Container.object` removed.
 - The dargres adapter requires dargres 4.0.1.
+- The dpgsql adapter requires dpgsql 1.1.0 (`DpgsqlCommand.simpleQuery`).
 - `where(col, op, null)` with an operator other than `=`, `<>` or `!=` throws
   (it silently became `is not null`); `where(col, value)` means `= value`.
 - `value(col)` returns the column value instead of the row; `update()` and
@@ -162,6 +163,12 @@ Details and migration notes: [doc/release_notes_4.0.0.md](doc/release_notes_4.0.
   `Day`/`Month`/`Year`, JSON (`whereJsonContains`, `whereJsonLength`),
   arrays (`whereArray`), `whereFullText`, `distinctOn`, `joinSub`,
   `joinLateral`/`leftJoinLateral`, `latest`/`oldest`/`inRandomOrder`,
+- `db.unprepared(sql)` and `db.execute(sql)` (Laravel's `DB::unprepared`,
+  PHP's `PDO::exec`) use the simple query protocol on the four PostgreSQL
+  adapters, so a script with several statements, dollar-quoted bodies and
+  its own `BEGIN`/`COMMIT` runs the same everywhere; postgres_v3 and dpgsql
+  sent it through the extended protocol, which refuses more than one
+  statement (42601). Queries with bindings keep the extended protocol.
 - `UniqueConstraintViolationException` (Laravel 10+) with the violated
   `constraint`, on the five adapters, also when it ends a transaction on
   postgres/postgres_v3. `createOrFirst()`/`firstOrCreate()` (insert or return
@@ -175,6 +182,8 @@ Details and migration notes: [doc/release_notes_4.0.0.md](doc/release_notes_4.0.
 
 ### Fixed
 
+- `unprepared()` in `pretend()` threw a `TypeError` (it returned `true` as
+  the affected rows); it returns 0.
 - MySQL `increments()` in a create or add failed with error 1075 (the
   auto_increment column was not declared a key); it is `primary key` inline,
   as in Laravel.

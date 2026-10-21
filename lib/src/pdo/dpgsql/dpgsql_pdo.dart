@@ -108,7 +108,11 @@ class DpgsqlPDO extends PDOInterface {
       seconds: timeoutInSeconds ?? defaultTimeoutInSeconds,
     );
     return _withConnection((connection) async {
-      final command = connection.createCommand(statement);
+      // Simple query protocol, as PDO::exec (libpq's PQexec): no
+      // parameters, and a script with several statements runs whole. The
+      // connection uses the extended protocol for unparameterized commands
+      // (binary results, auto-prepare), which refuses more than one.
+      final command = connection.createCommand(statement)..simpleQuery = true;
       return runWithTimeout(
           connection, () => command.executeNonQuery(), timeout);
     });

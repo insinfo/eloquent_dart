@@ -238,8 +238,12 @@ class PostgresV3PDO extends PDOInterface {
     if (timeoutInSeconds == null) {
       timeoutInSeconds = queryTimeoutInSeconds;
     }
+    // Simple query protocol, as PDO::exec (libpq's PQexec): no parameters,
+    // and a script with several statements runs whole. The extended
+    // protocol (queryMode's default) refuses more than one (42601).
     final res = await connection.execute(
       statement,
+      queryMode: QueryMode.simple,
       timeout: Duration(seconds: timeoutInSeconds),
     );
     return res.affectedRows;
