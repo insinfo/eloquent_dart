@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:eloquent/eloquent.dart';
 import 'package:eloquent/src/doctrine/connection.dart' as doctrine;
 import 'package:eloquent/src/doctrine/schema/mysql_schema_manager.dart';
@@ -313,11 +315,20 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
       [List bindings = const [],
       bool useReadPdo = true,
       int? fetchSize]) async* {
+    final ambient = _ambient();
+    if (ambient != null) {
+      yield* ambient.cursor(query, bindings, useReadPdo, fetchSize);
+      return;
+    }
     if (this.pretending()) {
       _reportQuery(query, bindings, Duration.zero, null);
       return;
     }
     final pdoL = this.getPdoForSelect(useReadPdo);
+    if (!pdoL.supportsQueryStream) {
+      yield* _sqlCursor(query, bindings, fetchSize);
+      return;
+    }
     final params = this.prepareBindings(bindings);
     if (!_observers.active) {
       yield* pdoL.queryStream(query, params, fetchSize);
@@ -336,12 +347,86 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
     }
   }
 
+  static int _cursorSequence = 0;
+
+  /// [cursor] for drivers without an incremental reader, on PostgreSQL:
+  /// `DECLARE name NO SCROLL CURSOR FOR <query>` and `FETCH FORWARD n` in a
+  /// loop, inside the current transaction or one opened for the stream (and
+  /// closed when it ends or is cancelled). Rows are fetched [fetchSize]
+  /// (default 1000) at a time and only when the consumer asks for them.
+  Stream<Map<String, dynamic>> _sqlCursor(
+      String query, List bindings, int? fetchSize) {
+    if (_resolvedDriverName() != 'pgsql') {
+      throw UnsupportedError(
+          'cursor() needs the dpgsql adapter or PostgreSQL (SQL cursors); on '
+          '${getDriverName()} use lazyById/chunkById.');
+    }
+    final size = fetchSize == null || fetchSize < 1 ? 1000 : fetchSize;
+    final name = 'eloquent_cursor_${++_cursorSequence}';
+    if (isInTransaction) return _fetchCursor(this, name, query, bindings, size);
+
+    // The cursor lives in a transaction that stays open while the stream is
+    // consumed: the rows are handed over through a paused controller.
+    late StreamController<Map<String, dynamic>> controller;
+    Completer<void>? resumed;
+    var cancelled = false;
+    controller = StreamController<Map<String, dynamic>>(
+      onListen: () {
+        transaction((ctx) async {
+          await for (final row
+              in _fetchCursor(ctx, name, query, bindings, size)) {
+            if (cancelled) break;
+            controller.add(row);
+            if (controller.isPaused) {
+              await (resumed = Completer<void>()).future;
+            }
+          }
+        }).then((_) => controller.close(), onError: (Object e, StackTrace s) {
+          if (!cancelled) controller.addError(e, s);
+          controller.close();
+        });
+      },
+      onPause: () {},
+      onResume: () {
+        final waiting = resumed;
+        resumed = null;
+        if (waiting != null && !waiting.isCompleted) waiting.complete();
+      },
+      onCancel: () {
+        cancelled = true;
+        final waiting = resumed;
+        resumed = null;
+        if (waiting != null && !waiting.isCompleted) waiting.complete();
+      },
+    );
+    return controller.stream;
+  }
+
+  static Stream<Map<String, dynamic>> _fetchCursor(Connection connection,
+      String name, String query, List bindings, int size) async* {
+    await connection.statement(
+        'declare $name no scroll cursor for $query', bindings);
+    try {
+      while (true) {
+        final rows = await connection.select('fetch forward $size from $name');
+        for (final row in rows) {
+          yield row;
+        }
+        if (rows.length < size) break;
+      }
+    } finally {
+      await connection.statement('close $name');
+    }
+  }
+
   ///
   /// Direct, driver-specific access (COPY, pipelining, LISTEN/NOTIFY, raw
   /// connection). Returns `null` when the active driver adapter has no such
   /// capabilities (only the `dpgsql` adapter implements it today).
   @override
   DriverAccess? driver() {
+    final ambient = _ambient();
+    if (ambient != null) return ambient.driver();
     return this.getPdo().driverAccess();
   }
 
@@ -631,6 +716,13 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   @override
   Future<T> transaction<T>(Future<T> Function(Connection ctx) callback,
       [int? timeoutInSeconds]) {
+    final ambient = _ambient();
+    if (ambient != null) {
+      // `db.transaction` inside a transactionScope: a SAVEPOINT of the
+      // scope's transaction, and the scope follows it.
+      return ambient.transaction<T>(
+          (ctx) => _runInScope(ctx, () => callback(ctx)), timeoutInSeconds);
+    }
     if (isInTransaction) {
       return _savepointTransaction(callback, timeoutInSeconds);
     }
@@ -643,6 +735,8 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   @override
   Future<T> transactionIfNeeded<T>(Future<T> Function(Connection ctx) callback,
       [int? timeoutInSeconds]) {
+    final ambient = _ambient();
+    if (ambient != null) return callback(ambient);
     if (isInTransaction) {
       return callback(this);
     }
@@ -686,8 +780,105 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
     final child = newConnectionForPdo(pdoContext);
     child._observers = _observers;
     child._events = _events;
+    child._root = _root ?? this;
     return child;
   }
+
+  // ------------------------------------------------- ambient transaction
+
+  /// The connection this one was made from for a transaction callback
+  /// (`ctx`), or null for a connection made by the manager.
+  Connection? _root;
+
+  /// Zone key of the [transactionScope] of this (root) connection.
+  final Object _scopeKey = Object();
+
+  /// Scopes running in this isolate; while 0 no query looks up the zone.
+  static int _openScopes = 0;
+
+  /// The `ctx` of the [transactionScope] the current code runs in, when this
+  /// is the root connection (`db`) and the scope is still running.
+  Connection? _ambient() {
+    if (_openScopes == 0 || _root != null) return null;
+    final scope = Zone.current[_scopeKey];
+    if (scope is _AmbientScope && scope.active) return scope.connection;
+    return null;
+  }
+
+  ///
+  /// [transaction] with an *ambient* transaction: while [callback] runs, the
+  /// connection it was called on (`db`, the one made by the manager) also
+  /// runs in the transaction, so code that uses `db` instead of `ctx` (a
+  /// repository called from the callback) takes part in it instead of
+  /// running on another connection of the pool, or waiting for the
+  /// transaction to end on a single connection.
+  ///
+  /// Inside the scope, `db.transaction(...)` becomes a SAVEPOINT of the
+  /// scope's transaction, `db.transactionIfNeeded(...)` joins it and
+  /// `db.isInTransaction` is true. Calls from code started inside the scope
+  /// but still running after it ended (an unawaited future, a timer) use the
+  /// connection normally again. [outsideTransaction] runs something on `db`
+  /// outside the scope on purpose (a log that must survive a rollback).
+  ///
+  /// The scope only covers the async calls of [callback] (it is a [Zone]):
+  /// queries of other requests on the same `db` are not affected. Concurrent
+  /// calls inside the scope (`Future.wait`) share the transaction's
+  /// connection, one at a time.
+  ///
+  /// ```dart
+  /// await db.transactionScope((ctx) async {
+  ///   await processoRepository.encaminhar(dados); // uses `db` inside
+  ///   await pecaRepository.juntar(dados);         // db.transaction -> SAVEPOINT
+  ///   await db.outsideTransaction(() => logRepository.gravar(evento));
+  /// });
+  /// ```
+  ///
+  Future<T> transactionScope<T>(Future<T> Function(Connection ctx) callback,
+      [int? timeoutInSeconds]) {
+    final root = _root ?? this;
+    return transaction<T>(
+        (ctx) => root._runInScope(ctx, () => callback(ctx)), timeoutInSeconds);
+  }
+
+  /// Runs [callback] outside the [transactionScope] the current code is in:
+  /// queries on this connection's `db` inside it use the connection
+  /// normally (another connection of the pool), and are not rolled back with
+  /// the scope. Outside a scope it just runs [callback].
+  ///
+  /// Inside a scope it needs a pool (`'pool': true`): with a single
+  /// connection there is no "outside" while the transaction holds it, so it
+  /// throws [StateError] instead of waiting for the transaction forever.
+  Future<T> outsideTransaction<T>(FutureOr<T> Function() callback) async {
+    final root = _root ?? this;
+    if (root.isInTransactionScope && root.getConfig('pool') != true) {
+      throw StateError(
+          'outsideTransaction() inside a transactionScope needs a connection '
+          "pool ('pool': true): with a single connection the query would wait "
+          'for the transaction to end.');
+    }
+    return await runZoned(callback, zoneValues: {root._scopeKey: null});
+  }
+
+  /// Whether the current code runs inside a [transactionScope] of this
+  /// connection.
+  bool get isInTransactionScope {
+    final root = _root ?? this;
+    if (_openScopes == 0) return false;
+    final scope = Zone.current[root._scopeKey];
+    return scope is _AmbientScope && scope.active;
+  }
+
+  Future<T> _runInScope<T>(Connection ctx, Future<T> Function() body) async {
+    final scope = _AmbientScope(ctx);
+    _openScopes++;
+    try {
+      return await runZoned(body, zoneValues: {_scopeKey: scope});
+    } finally {
+      scope.active = false;
+      _openScopes--;
+    }
+  }
+
 
   /// Creates a connection of this same kind (grammar, processor, config) over
   /// another PDO context, such as a transaction context.
@@ -758,13 +949,14 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   ///
   @override
   int transactionLevel() {
-    return pdo.transactionLevel;
+    return _ambient()?.transactionLevel() ?? pdo.transactionLevel;
   }
 
   /// Whether this connection runs inside a transaction (the `ctx` given to a
-  /// [transaction] callback).
+  /// [transaction] callback, or `db` inside a [transactionScope]).
   @override
-  bool get isInTransaction => pdo.isInTransaction;
+  bool get isInTransaction =>
+      _ambient()?.isInTransaction ?? pdo.isInTransaction;
 
   /// Whether [transaction] can nest via SAVEPOINT on this connection.
   @override
@@ -818,6 +1010,10 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
               int? timeoutInSeconds)
           callback,
       [int? timeoutInSeconds]) async {
+    final ambient = _ambient();
+    if (ambient != null) {
+      return ambient.run(query, bindings, callback, timeoutInSeconds);
+    }
     // Fast path: nothing observes the queries, so nothing is timed.
     if (!_observers.active) {
       return _runUnobserved(query, bindings, callback, timeoutInSeconds);
@@ -1507,4 +1703,15 @@ class _QueryObservers {
 
   /// Whether statements must be timed and reported.
   bool get active => logging || listeners.isNotEmpty;
+}
+
+/// The transaction of a [Connection.transactionScope], kept in the zone.
+final class _AmbientScope {
+  _AmbientScope(this.connection);
+
+  /// The `ctx` of the scope's transaction.
+  final Connection connection;
+
+  /// False once the scope's callback returned.
+  bool active = true;
 }

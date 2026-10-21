@@ -98,3 +98,23 @@ abstract class SqlWhereType {
   static const String isNull = 'Null';
   static const String isNotNull = 'NotNull';
 }
+
+/// Where the term of `whereSearch` must appear in a column value.
+enum SearchMatch {
+  /// `%term%`
+  contains,
+
+  /// `term%`
+  startsWith,
+
+  /// `%term`
+  endsWith,
+
+  /// The whole value (case-insensitive unless asked otherwise).
+  exact,
+
+  /// The words of the term in this order, anything between them:
+  /// "maria da" is `%maria%da%` (finds "MARIA  DA SILVA" with extra spaces,
+  /// and "MARIA EDUARDA").
+  wordsInOrder,
+}

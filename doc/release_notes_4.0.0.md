@@ -460,7 +460,10 @@ set, removing a list allocation per query.
   memory roughly constant for very large results (unlike `chunk`/`each`, which
   page with LIMIT/OFFSET). Plumbed through `ConnectionInterface.cursor`,
   `Connection.cursor` and `PDOExecutionContext.queryStream`. Implemented for
-  `dpgsql` (`executeReader`); other adapters throw `UnsupportedError`.
+  `dpgsql` (`executeReader`); the other PostgreSQL adapters use an SQL cursor
+  (`DECLARE ... NO SCROLL CURSOR` + `FETCH FORWARD n`, inside the current
+  transaction or one held while the stream is read, closed when it ends or is
+  cancelled); MySQL throws `UnsupportedError` (use `lazyById`).
 
 ## dargres adapter
 
@@ -817,6 +820,128 @@ postgres, postgres_v3, dargres and dpgsql, and MariaDB 10.11).
   callback waits forever; use the `ctx` connection.
 - `PDOInterface.getConfig()` threw the config instead of returning it;
   `DatabaseManager` called `extensions[name]` for a driver extension.
+
+## Ambient transaction: `transactionScope`
+
+`db.transaction((ctx) ...)` only covers what runs through `ctx`. A query on
+`db` inside the callback runs elsewhere: with a pool, on another connection
+(it does not see the transaction's rows and is not rolled back); without a
+pool, it waits for the transaction to end, which waits for it (verified on
+the five adapters: a timeout). `transactionScope` makes the transaction
+ambient for the callback:
+
+```dart
+await db.transactionScope((ctx) async {
+  await processoRepository.encaminhar(dados); // uses `db`: in the transaction
+  await db.transaction((inner) async { ... }); // a SAVEPOINT of it
+  await db.outsideTransaction(() => log.gravar(evento)); // survives a rollback
+});
+```
+
+- The scope is a `Zone` value: it covers the async calls of the callback only;
+  other requests on the same `db` are not affected. While no scope is open
+  the cost per query is one integer check.
+- Inside it `db.transaction` is a SAVEPOINT, `db.transactionIfNeeded` joins
+  the transaction, `db.isInTransaction` and `db.isInTransactionScope` are
+  true, `db.cursor()` and `db.driver()` use the transaction's connection.
+  Concurrent calls (`Future.wait`) share that connection, one at a time.
+- Work still running after the scope (an unawaited future, a timer) uses `db`
+  normally again.
+- `outsideTransaction` needs a pool: with a single connection there is no
+  other connection, and it throws `StateError` instead of waiting forever.
+- `transaction()` is unchanged; the scope is opt-in.
+
+## Search, filters and client ordering
+
+- `whereSearch(columns, term, {match, unaccent, caseSensitive, everyWord})`:
+  `(col1 ilike ? or col2 ilike ?)` with the term matched literally (`%`, `_`
+  and `\` escaped; `SearchMatch.contains`/`startsWith`/`endsWith`/`exact`,
+  or `wordsInOrder`: `%maria%da%`, the words in order with anything between).
+  A null or blank term adds nothing. `unaccent: true` (PostgreSQL, extension
+  `unaccent`) compares `unaccent(col::text) ilike unaccent(?)`;
+  `QueryPostgresGrammar.unaccentFunction` names another function (e.g. an
+  IMMUTABLE `f_unaccent` an expression index can use). `everyWord` requires
+  every word in some column. Columns are identifiers, or `db.raw(...)` in
+  QueryBuilder; MySQL leaves case and accents to the collation.
+- `lower: true` compares `lower(col) like lower(?)` (with `unaccent`:
+  `lower(unaccent(col::text)) like lower(unaccent(?))`) instead of `ilike`:
+  the same rows, but an expression index can serve it, e.g. with an
+  IMMUTABLE wrapper set as `unaccentFunction`:
+  `create index on cgm (lower(f_unaccent(nom_cgm::text)) text_pattern_ops)`
+  for `match: SearchMatch.startsWith`. On MySQL it ignores case even with a
+  `_bin`/`_cs` collation. It cannot be combined with `caseSensitive`.
+- `whereAnyLike(columns, pattern)`: the same group with the pattern as given;
+  `whereLike(..., unaccent: true, lower: true)`;
+  `QueryBuilder.escapeLike`/`likePattern`.
+- `orderByInput(field, direction, allowed: {'nome': 'c.nom_cgm'}, fallback:)`:
+  the client's field is looked up in the allow-list (values: a column, a list
+  of columns, or `db.raw` in QueryBuilder); unknown or empty fields use the
+  fallback; `desc`/`descending` in any case is descending, anything else
+  ascending. The client's text never reaches the SQL.
+
+## Composite keys, arrays and ranges
+
+- `whereInTuple(['cod_processo', 'ano_exercicio'], [[10, '2024'], ...])` →
+  `("cod_processo", "ano_exercicio") in ((?, ?), ...)`; `whereNotInTuple`;
+  `whereRowValues(columns, operator, values)` → `(a, b) > (?, ?)`.
+- `whereAnyArray('id', ids)` → `"id" = any(?)` with ONE array parameter
+  (PostgreSQL): the same SQL for any number of ids (one prepared statement)
+  and no 65535-parameter limit; `elementType: 'uuid'` casts it
+  (`?::uuid[]`); `whereNotAnyArray` → `<> all(?)`. MySQL compiles `in (...)`.
+- `whereBetweenColumns('valor', ['minimo', 'maximo'])`,
+  `whereValueBetween(hoje, ['data_inicio', 'data_fim'])` (Laravel 12), and the
+  `or`/`not` forms.
+
+## Pagination
+
+- `cursorPaginate({perPage, cursor})`: keyset pagination on the orders of the
+  query (no OFFSET, no count): order by unique plain columns (end with the
+  key), select them; the opaque `CursorPage.nextCursor`/`previousCursor` go
+  back as `cursor`. Values (including DateTime) are only bound as parameters;
+  an invalid cursor throws `FormatException`.
+- `paginateWithWindowCount(...)`: `paginate` in one query with
+  `count(*) over ()`. Opt-in and not always faster: the database still finds
+  every matching row to count them, while the separate count query of
+  `paginate` can skip the joins and the select list; measure first. An empty
+  page past the first falls back to the count; `distinct`/unions use
+  `paginate`.
+
+## Other query builder additions
+
+- `explain({analyze})`: the rows of `EXPLAIN [ANALYZE]`.
+- `afterQuery(callback)`: transforms the rows of `get` (and `first`,
+  `paginate`, `chunk`...), not of aggregates.
+- `updateFrom(values)`: Laravel's name for an update whose inner joins become
+  `update ... from ...`; `update()` already compiles joins this way here.
+
+## Bulk inserts and numbering
+
+- `copyInto(rows, {columns, batchSize})`: `COPY ... FROM STDIN` when the
+  driver supports it (dpgsql), otherwise multi-row INSERTs within the
+  parameter limit. Rows with lists, maps or bytes use the INSERT path.
+- `insertUnnest(rows, types: {'id': 'int', 'nome': 'text'})`:
+  `insert into t (id, nome) select * from unnest(?::int[], ?::text[])`, one
+  array literal per column (PostgreSQL; MySQL uses multi-row INSERTs).
+- `nextValue(column, {start, lock})`: `coalesce(max(column), start - 1) + 1`
+  in the rows of the query (its where clauses are the scope). With `lock`
+  (default) concurrent transactions with the same scope take turns on a
+  `pg_advisory_xact_lock` held until commit; it must run in the transaction
+  that inserts the number (`StateError` otherwise). PostgreSQL only with the
+  lock (`select max ... for update` deadlocks on InnoDB); `lock: false` is a
+  plain max + 1.
+
+## QueryBuilder2 additions
+
+`whereAny`/`whereAll`/`whereNone`, `whereDate`/`whereTime`/`whereDay`/
+`whereMonth`/`whereYear`, `whereJsonContains`/`whereJsonDoesntContain`/
+`whereJsonLength`, `whereArray` (`ArrayOperator.contains`/`containedBy`/
+`overlaps`), `whereFullText`, `distinctOn`, `joinSub`/`leftJoinSub`,
+`joinLateral`/`leftJoinLateral`, `latest`/`oldest`/`inRandomOrder`,
+`cursor`, `chunk`, `chunkById`, `insertUsing`, `firstOrFail`, plus everything
+in the sections above (`whereSearch`, `orderByInput`, `whereInTuple`,
+`whereAnyArray`, between columns, `cursorPaginate`,
+`paginateWithWindowCount`, `explain`, `afterQuery`, `updateFrom`,
+`copyInto`, `insertUnnest`, `nextValue`).
 
 ## Ported from Laravel 12
 

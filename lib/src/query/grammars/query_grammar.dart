@@ -506,6 +506,18 @@ class QueryGrammar extends BaseGrammar {
         return whereInRaw(query, where);
       case 'NotInRaw':
         return whereNotInRaw(query, where);
+      case 'InTuple':
+        return whereInTuple(query, where);
+      case 'NotInTuple':
+        return whereNotInTuple(query, where);
+      case 'RowValues':
+        return whereRowValues(query, where);
+      case 'AnyArray':
+        return whereAnyArray(query, where);
+      case 'BetweenColumns':
+        return whereBetweenColumns(query, where);
+      case 'ValueBetween':
+        return whereValueBetween(query, where);
       default:
         return callMethod('where${where['type']}', [query, where]).toString();
     }
@@ -790,6 +802,11 @@ class QueryGrammar extends BaseGrammar {
   /// `column [not] like ?`. Dialects override it for case handling; the
   /// generic grammar has no case-sensitive form.
   String whereLike(QueryBuilder query, Map<String, dynamic> where) {
+    if (where['lower'] == true) {
+      final operator = where['not'] == true ? 'not like' : 'like';
+      return 'lower(${this.wrap(where['column'])}) $operator '
+          'lower(${this.parameter(where['value'])})';
+    }
     if (where['caseSensitive'] == true) {
       throw UnsupportedError(
           'Case-sensitive like is not supported by this grammar.');
@@ -811,6 +828,60 @@ class QueryGrammar extends BaseGrammar {
     if (values.isEmpty) return '1 = 1';
     return '${this.wrap(where['column'])} not in (${values.join(', ')})';
   }
+
+  /// `(c1, c2) in ((?, ?), ...)` (whereInTuple); empty: never true.
+  String whereInTuple(QueryBuilder query, Map<String, dynamic> where) =>
+      _tupleIn(where, 'in', '0 = 1');
+
+  /// `(c1, c2) not in ((?, ?), ...)`; empty: always true.
+  String whereNotInTuple(QueryBuilder query, Map<String, dynamic> where) =>
+      _tupleIn(where, 'not in', '1 = 1');
+
+  String _tupleIn(Map<String, dynamic> where, String operator, String empty) {
+    final rows = where['values'] as List;
+    if (rows.isEmpty) return empty;
+    final columns = (where['columns'] as List).map(this.wrap).join(', ');
+    final tuples =
+        rows.map((row) => '(${this.parameterize(row as List)})').join(', ');
+    return '($columns) $operator ($tuples)';
+  }
+
+  /// `(c1, c2) <op> (?, ?)` (whereRowValues).
+  String whereRowValues(QueryBuilder query, Map<String, dynamic> where) {
+    final columns = (where['columns'] as List).map(this.wrap).join(', ');
+    return '($columns) ${where['operator']} '
+        '(${this.parameterize(where['values'] as List)})';
+  }
+
+  /// Whether a list binding is sent as one array parameter
+  /// (`QueryBuilder.whereAnyArray`); grammars without it get `in (...)`.
+  bool get supportsArrayBindings => false;
+
+  /// `column = any(?)` with one array parameter. Only grammars with
+  /// [supportsArrayBindings] produce this clause.
+  String whereAnyArray(QueryBuilder query, Map<String, dynamic> where) {
+    throw UnsupportedError('Array parameters are not supported by this grammar.');
+  }
+
+  /// `column [not] between first and second`, both bounds columns.
+  String whereBetweenColumns(QueryBuilder query, Map<String, dynamic> where) {
+    final bounds = where['values'] as List;
+    final between = where['not'] == true ? 'not between' : 'between';
+    return '${this.wrap(where['column'])} $between ${this.wrap(bounds[0])} '
+        'and ${this.wrap(bounds[1])}';
+  }
+
+  /// `? [not] between first and second` (whereValueBetween).
+  String whereValueBetween(QueryBuilder query, Map<String, dynamic> where) {
+    final bounds = where['values'] as List;
+    final between = where['not'] == true ? 'not between' : 'between';
+    return '${this.parameter(where['value'])} $between ${this.wrap(bounds[0])} '
+        'and ${this.wrap(bounds[1])}';
+  }
+
+  /// `explain [analyze] <sql>` (QueryBuilder.explain).
+  String compileExplain(String sql, {bool analyze = false}) =>
+      analyze ? 'explain analyze $sql' : 'explain $sql';
 
   /// Array operator predicate (`@>`/`<@`/`&&`). Dialect-specific — overridden
   /// where supported (PostgreSQL).

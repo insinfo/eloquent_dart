@@ -25,6 +25,11 @@ abstract class PDOExecutionContext {
     );
   }
 
+  /// Whether [queryStream] is implemented (an incremental reader). Without
+  /// it, `Connection.cursor` falls back to an SQL cursor (`DECLARE ...
+  /// FETCH`) on PostgreSQL.
+  bool get supportsQueryStream => false;
+
   /// Direct, driver-specific access (COPY, pipelining, LISTEN/NOTIFY, raw
   /// connection). Returns `null` when the adapter has no such capabilities.
   DriverAccess? driverAccess() => null;
@@ -130,6 +135,9 @@ class NestedPDOTransaction extends PDOExecutionContext {
   Stream<Map<String, dynamic>> queryStream(String query,
           [dynamic params, int? fetchSize]) =>
       parent.queryStream(query, params, fetchSize);
+
+  @override
+  bool get supportsQueryStream => parent.supportsQueryStream;
 
   @override
   DriverAccess? driverAccess() => parent.driverAccess();

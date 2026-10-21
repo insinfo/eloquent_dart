@@ -8,6 +8,7 @@ import 'package:eloquent/src/contracts/pagination/default_paginator.dart';
 import 'package:eloquent/src/contracts/pagination/length_aware_paginator.dart';
 import 'package:eloquent/src/contracts/pagination/pagination_utils.dart';
 
+import 'package:eloquent/src/query/cursor_pagination.dart';
 import 'package:eloquent/src/query/expression.dart';
 import 'package:eloquent/src/query/grammars/query_grammar.dart';
 import 'package:eloquent/src/query/join_clause.dart';
@@ -26,6 +27,11 @@ class _Absent {
 }
 
 const Object _absent = _Absent();
+
+/// A [QueryBuilder.afterQuery] callback: changes the rows in place or
+/// returns new ones (`null` keeps them).
+typedef AfterQueryCallback = FutureOr<List<Map<String, dynamic>>?> Function(
+    List<Map<String, dynamic>> rows);
 
 /// What [QueryBuilder.count] counts on grouped, `having`, `union` or
 /// `distinct` queries.
@@ -1254,15 +1260,31 @@ class QueryBuilder {
   /// Portable LIKE: case-insensitive by default (`ilike` on PostgreSQL, the
   /// column collation on MySQL); `caseSensitive: true` uses `like` /
   /// `like binary`. `%` and `_` in [value] are wildcards.
-  QueryBuilder whereLike(String column, String value,
+  ///
+  /// [unaccent] (PostgreSQL, extension `unaccent`) compares
+  /// `unaccent(column::text) ilike unaccent(?)`; other grammars ignore it
+  /// (on MySQL the collation decides accents). [lower] compares
+  /// `lower(column) like lower(?)` instead: the same rows as `ilike`, but an
+  /// expression index on `lower(...)` (`text_pattern_ops`, prefix patterns)
+  /// can be used, and MySQL ignores case even with a `_bin`/`_cs` collation.
+  /// [column] is a column or `db.raw(...)`.
+  QueryBuilder whereLike(Object column, String value,
       {bool caseSensitive = false,
+      bool unaccent = false,
+      bool lower = false,
       String boolean = SqlBool.and,
       bool not = false}) {
+    if (lower && caseSensitive) {
+      throw ArgumentError('lower: true is case-insensitive; it cannot be '
+          'combined with caseSensitive: true.');
+    }
     this.wheresProp.add({
       'type': 'Like',
       'column': column,
       'value': value,
       'caseSensitive': caseSensitive,
+      'unaccent': unaccent,
+      'lower': lower,
       'boolean': boolean,
       'not': not,
     });
@@ -1270,20 +1292,38 @@ class QueryBuilder {
     return this;
   }
 
-  QueryBuilder orWhereLike(String column, String value,
-          {bool caseSensitive = false}) =>
+  QueryBuilder orWhereLike(Object column, String value,
+          {bool caseSensitive = false,
+          bool unaccent = false,
+          bool lower = false}) =>
       this.whereLike(column, value,
-          caseSensitive: caseSensitive, boolean: SqlBool.or);
+          caseSensitive: caseSensitive,
+          unaccent: unaccent,
+          lower: lower,
+          boolean: SqlBool.or);
 
-  QueryBuilder whereNotLike(String column, String value,
-          {bool caseSensitive = false, String boolean = SqlBool.and}) =>
+  QueryBuilder whereNotLike(Object column, String value,
+          {bool caseSensitive = false,
+          bool unaccent = false,
+          bool lower = false,
+          String boolean = SqlBool.and}) =>
       this.whereLike(column, value,
-          caseSensitive: caseSensitive, boolean: boolean, not: true);
+          caseSensitive: caseSensitive,
+          unaccent: unaccent,
+          lower: lower,
+          boolean: boolean,
+          not: true);
 
-  QueryBuilder orWhereNotLike(String column, String value,
-          {bool caseSensitive = false}) =>
+  QueryBuilder orWhereNotLike(Object column, String value,
+          {bool caseSensitive = false,
+          bool unaccent = false,
+          bool lower = false}) =>
       this.whereLike(column, value,
-          caseSensitive: caseSensitive, boolean: SqlBool.or, not: true);
+          caseSensitive: caseSensitive,
+          unaccent: unaccent,
+          lower: lower,
+          boolean: SqlBool.or,
+          not: true);
 
   // ----------------------------------------------------- whereIntegerInRaw
 
@@ -1319,6 +1359,329 @@ class QueryBuilder {
 
   QueryBuilder orWhereIntegerNotInRaw(String column, Iterable values) =>
       this.whereIntegerInRaw(column, values, SqlBool.or, true);
+
+  // ------------------------------------------------------------ whereSearch
+
+  /// [value] with the LIKE wildcards `%` and `_` (and the escape character
+  /// `\`) escaped, so it matches literally inside a LIKE pattern (PostgreSQL
+  /// and MySQL use `\` as the LIKE escape character).
+  static String escapeLike(String value) => value
+      .replaceAll(r'\', r'\\')
+      .replaceAll('%', r'\%')
+      .replaceAll('_', r'\_');
+
+  /// The LIKE pattern that finds [term] (escaped) as given by [match].
+  static String likePattern(String term,
+          [SearchMatch match = SearchMatch.contains]) =>
+      switch (match) {
+        SearchMatch.contains => '%${escapeLike(term)}%',
+        SearchMatch.startsWith => '${escapeLike(term)}%',
+        SearchMatch.endsWith => '%${escapeLike(term)}',
+        SearchMatch.exact => escapeLike(term),
+        SearchMatch.wordsInOrder =>
+          '%${term.trim().split(RegExp(r'\s+')).map(escapeLike).join('%')}%',
+      };
+
+  /// Text search of [term] in [columns]:
+  /// `(col1 ilike ? or col2 ilike ? ...)` on PostgreSQL (`like` on MySQL,
+  /// where the collation decides case and accents).
+  ///
+  /// - The term is matched literally: `%` and `_` in it are escaped; [match]
+  ///   chooses contains (default), starts with, ends with or the whole value.
+  /// - [unaccent] (PostgreSQL, extension `unaccent`) compares
+  ///   `unaccent(col::text) ilike unaccent(?)`, so "jose" finds "José".
+  /// - [lower] compares `lower(col) like lower(?)` (with [unaccent]:
+  ///   `lower(unaccent(col::text)) like lower(unaccent(?))`), the form an
+  ///   expression index can serve; see [whereLike].
+  /// - [everyWord] splits the term on spaces and requires each word in some
+  ///   column: "ana silva" finds "Ana Maria da Silva".
+  /// - A null or blank [term] adds nothing, so an optional filter needs no
+  ///   `if`.
+  /// - [columns] are identifiers (quoted, never SQL), or `db.raw(...)` for an
+  ///   expression such as `coalesce(a, b)`.
+  ///
+  /// ```dart
+  /// query.whereSearch(['c.nom_cgm', 'c.cpf'], filtros.searchString,
+  ///     unaccent: true);
+  /// ```
+  QueryBuilder whereSearch(List<Object> columns, String? term,
+      {SearchMatch match = SearchMatch.contains,
+      bool unaccent = false,
+      bool lower = false,
+      bool caseSensitive = false,
+      bool everyWord = false,
+      String boolean = SqlBool.and}) {
+    final text = term?.trim() ?? '';
+    if (text.isEmpty) return this;
+    _checkLikeColumns(columns, 'columns');
+    final words = everyWord ? text.split(RegExp(r'\s+')) : [text];
+
+    void anyColumn(QueryBuilder group, String word) {
+      for (final column in columns) {
+        group.whereLike(column, likePattern(word, match),
+            caseSensitive: caseSensitive,
+            unaccent: unaccent,
+            lower: lower,
+            boolean: SqlBool.or);
+      }
+    }
+
+    if (words.length == 1) {
+      return this.whereNested(
+          (QueryBuilder group) => anyColumn(group, words.first), boolean);
+    }
+    return this.whereNested((QueryBuilder all) {
+      for (final word in words) {
+        all.whereNested((QueryBuilder group) => anyColumn(group, word));
+      }
+    }, boolean);
+  }
+
+  /// [whereSearch] joined with `or`.
+  QueryBuilder orWhereSearch(List<Object> columns, String? term,
+          {SearchMatch match = SearchMatch.contains,
+          bool unaccent = false,
+          bool lower = false,
+          bool caseSensitive = false,
+          bool everyWord = false}) =>
+      this.whereSearch(columns, term,
+          match: match,
+          unaccent: unaccent,
+          lower: lower,
+          caseSensitive: caseSensitive,
+          everyWord: everyWord,
+          boolean: SqlBool.or);
+
+  /// `(col1 like ? or col2 like ? ...)` with the LIKE [pattern] as given
+  /// (`%` and `_` are wildcards; see [whereSearch] to match a term
+  /// literally). Case-insensitive unless [caseSensitive]; [unaccent] as in
+  /// [whereSearch].
+  QueryBuilder whereAnyLike(List<Object> columns, String pattern,
+      {bool caseSensitive = false,
+      bool unaccent = false,
+      bool lower = false,
+      String boolean = SqlBool.and}) {
+    _checkLikeColumns(columns, 'columns');
+    return this.whereNested((QueryBuilder group) {
+      for (final column in columns) {
+        group.whereLike(column, pattern,
+            caseSensitive: caseSensitive,
+            unaccent: unaccent,
+            lower: lower,
+            boolean: SqlBool.or);
+      }
+    }, boolean);
+  }
+
+  QueryBuilder orWhereAnyLike(List<Object> columns, String pattern,
+          {bool caseSensitive = false,
+          bool unaccent = false,
+          bool lower = false}) =>
+      this.whereAnyLike(columns, pattern,
+          caseSensitive: caseSensitive,
+          unaccent: unaccent,
+          lower: lower,
+          boolean: SqlBool.or);
+
+  static void _checkLikeColumns(List<Object> columns, String name) {
+    if (columns.isEmpty) {
+      throw ArgumentError.value(columns, name, 'Must not be empty.');
+    }
+    for (final column in columns) {
+      if (column is QueryExpression) continue;
+      if (column is String && column.trim().isNotEmpty) continue;
+      throw ArgumentError.value(
+          column, name, 'Expected a column name or db.raw(...).');
+    }
+  }
+
+  // ---------------------------------------------------------- whereInTuple
+
+  /// `(col1, col2) in ((?, ?), (?, ?), ...)`: rows whose composite key is one
+  /// of [tuples], e.g. `whereInTuple(['cod_processo', 'ano_exercicio'],
+  /// [[10, '2024'], [11, '2025']])`. Every tuple has one value per column;
+  /// an empty [tuples] matches nothing. A null in a tuple never matches.
+  QueryBuilder whereInTuple(List<String> columns, Iterable<List<Object?>> tuples,
+      [String boolean = SqlBool.and, bool not = false]) {
+    if (columns.isEmpty) {
+      throw ArgumentError.value(columns, 'columns', 'Must not be empty.');
+    }
+    final rows = <List<Object?>>[];
+    for (final tuple in tuples) {
+      if (tuple.length != columns.length) {
+        throw ArgumentError.value(tuple, 'tuples',
+            'Expected ${columns.length} values, one per column.');
+      }
+      rows.add(List<Object?>.of(tuple));
+    }
+    this.wheresProp.add({
+      'type': not ? 'NotInTuple' : 'InTuple',
+      'columns': List<String>.of(columns),
+      'values': rows,
+      'boolean': boolean,
+    });
+    for (final row in rows) {
+      this.addBinding(row, 'where');
+    }
+    return this;
+  }
+
+  QueryBuilder orWhereInTuple(
+          List<String> columns, Iterable<List<Object?>> tuples) =>
+      this.whereInTuple(columns, tuples, SqlBool.or);
+
+  /// `(col1, col2) not in ((?, ?), ...)`; an empty [tuples] excludes nothing.
+  QueryBuilder whereNotInTuple(
+          List<String> columns, Iterable<List<Object?>> tuples,
+          [String boolean = SqlBool.and]) =>
+      this.whereInTuple(columns, tuples, boolean, true);
+
+  QueryBuilder orWhereNotInTuple(
+          List<String> columns, Iterable<List<Object?>> tuples) =>
+      this.whereInTuple(columns, tuples, SqlBool.or, true);
+
+  static const _rowValueOperators = {'=', '<>', '!=', '<', '>', '<=', '>='};
+
+  /// Row comparison `(col1, col2) <operator> (?, ?)` (Laravel's
+  /// whereRowValues), e.g. keyset pagination on a composite key:
+  /// `whereRowValues(['ano', 'numero'], '>', [2024, 150])`.
+  QueryBuilder whereRowValues(
+      List<String> columns, String operator, List<Object?> values,
+      [String boolean = SqlBool.and]) {
+    if (columns.isEmpty || columns.length != values.length) {
+      throw ArgumentError(
+          'whereRowValues needs as many values as columns (${columns.length}).');
+    }
+    if (!_rowValueOperators.contains(operator)) {
+      throw ArgumentError.value(operator, 'operator',
+          'Expected one of ${_rowValueOperators.join(' ')}.');
+    }
+    this.wheresProp.add({
+      'type': 'RowValues',
+      'columns': List<String>.of(columns),
+      'operator': operator,
+      'values': List<Object?>.of(values),
+      'boolean': boolean,
+    });
+    this.addBinding(List<Object?>.of(values), 'where');
+    return this;
+  }
+
+  QueryBuilder orWhereRowValues(
+          List<String> columns, String operator, List<Object?> values) =>
+      this.whereRowValues(columns, operator, values, SqlBool.or);
+
+  // --------------------------------------------------------- whereAnyArray
+
+  static final _sqlTypeName = RegExp(
+      r'^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)?( [A-Za-z_][A-Za-z0-9_]*)*(\(\d+(, ?\d+)?\))?$');
+
+  /// `column = any(?)` with all [values] in ONE array parameter (PostgreSQL),
+  /// instead of one parameter per value as in [whereIn]: the SQL text is the
+  /// same for any number of values (one prepared statement) and there is no
+  /// 65535-parameter limit. [elementType] adds a cast, `= any(?::int[])`, for
+  /// columns whose type the driver cannot infer (e.g. `uuid`). An empty list
+  /// matches nothing. Grammars without array parameters (MySQL) compile a
+  /// plain `column in (?, ...)`.
+  QueryBuilder whereAnyArray(String column, Iterable<Object?> values,
+      {String? elementType, String boolean = SqlBool.and, bool not = false}) {
+    final list = List<Object?>.of(values);
+    if (!this.grammar.supportsArrayBindings) {
+      return this.whereIn(column, list, boolean, not);
+    }
+    if (elementType != null && !_sqlTypeName.hasMatch(elementType.trim())) {
+      throw ArgumentError.value(
+          elementType, 'elementType', 'Not an SQL type name.');
+    }
+    this.wheresProp.add({
+      'type': 'AnyArray',
+      'column': column,
+      'value': list,
+      'elementType': elementType?.trim(),
+      'not': not,
+      'boolean': boolean,
+    });
+    if (list.isNotEmpty) this.addBinding([list], 'where');
+    return this;
+  }
+
+  QueryBuilder orWhereAnyArray(String column, Iterable<Object?> values,
+          {String? elementType}) =>
+      this.whereAnyArray(column, values,
+          elementType: elementType, boolean: SqlBool.or);
+
+  /// `column <> all(?)` (PostgreSQL), the [whereAnyArray] form of
+  /// `not in`; an empty list excludes nothing.
+  QueryBuilder whereNotAnyArray(String column, Iterable<Object?> values,
+          {String? elementType, String boolean = SqlBool.and}) =>
+      this.whereAnyArray(column, values,
+          elementType: elementType, boolean: boolean, not: true);
+
+  QueryBuilder orWhereNotAnyArray(String column, Iterable<Object?> values,
+          {String? elementType}) =>
+      this.whereAnyArray(column, values,
+          elementType: elementType, boolean: SqlBool.or, not: true);
+
+  // ---------------------------------------------- between columns / value
+
+  /// `column between first and second`, both bounds columns:
+  /// `whereBetweenColumns('valor', ['minimo', 'maximo'])`.
+  QueryBuilder whereBetweenColumns(String column, List<String> columns,
+      [String boolean = SqlBool.and, bool not = false]) {
+    _checkTwoColumns(columns);
+    this.wheresProp.add({
+      'type': 'BetweenColumns',
+      'column': column,
+      'values': List<String>.of(columns),
+      'boolean': boolean,
+      'not': not,
+    });
+    return this;
+  }
+
+  QueryBuilder orWhereBetweenColumns(String column, List<String> columns) =>
+      this.whereBetweenColumns(column, columns, SqlBool.or);
+
+  QueryBuilder whereNotBetweenColumns(String column, List<String> columns,
+          [String boolean = SqlBool.and]) =>
+      this.whereBetweenColumns(column, columns, boolean, true);
+
+  QueryBuilder orWhereNotBetweenColumns(String column, List<String> columns) =>
+      this.whereBetweenColumns(column, columns, SqlBool.or, true);
+
+  /// `? between first and second`: a value inside the range of two columns,
+  /// e.g. a date within a validity period:
+  /// `whereValueBetween(hoje, ['data_inicio', 'data_fim'])`.
+  QueryBuilder whereValueBetween(Object value, List<String> columns,
+      [String boolean = SqlBool.and, bool not = false]) {
+    _checkTwoColumns(columns);
+    this.wheresProp.add({
+      'type': 'ValueBetween',
+      'value': value,
+      'values': List<String>.of(columns),
+      'boolean': boolean,
+      'not': not,
+    });
+    this.addBinding([value], 'where');
+    return this;
+  }
+
+  QueryBuilder orWhereValueBetween(Object value, List<String> columns) =>
+      this.whereValueBetween(value, columns, SqlBool.or);
+
+  QueryBuilder whereValueNotBetween(Object value, List<String> columns,
+          [String boolean = SqlBool.and]) =>
+      this.whereValueBetween(value, columns, boolean, true);
+
+  QueryBuilder orWhereValueNotBetween(Object value, List<String> columns) =>
+      this.whereValueBetween(value, columns, SqlBool.or, true);
+
+  static void _checkTwoColumns(List<String> columns) {
+    if (columns.length != 2) {
+      throw ArgumentError.value(
+          columns, 'columns', 'Expected two columns: [low, high].');
+    }
+  }
 
   QueryBuilder whereRaw(String sql,
       [List bindings = const [], boolean = SqlBool.and]) {
@@ -2152,6 +2515,63 @@ class QueryBuilder {
     return this;
   }
 
+  /// Orders by a column chosen by the client (a request parameter) without
+  /// putting the client's text in the SQL: [field] is looked up in
+  /// [allowed] (`{'nome': 'c.nom_cgm', 'data': 'p.timestamp'}`), whose values
+  /// are columns, `db.raw(...)` expressions or lists of them (several
+  /// columns, same direction).
+  ///
+  /// A null, blank or unknown [field] orders by [fallback] (a column, a raw
+  /// expression or a list) in [fallbackDirection], or adds no order when
+  /// there is no [fallback]. [direction] accepts `asc`/`desc` (any case, also
+  /// `ascending`/`descending`); anything else is `asc`.
+  ///
+  /// ```dart
+  /// query.orderByInput(filtros.orderBy, filtros.orderDir,
+  ///     allowed: {'nome': 'c.nom_cgm', 'cpf': 'c.cpf'}, fallback: 'c.numcgm');
+  /// ```
+  QueryBuilder orderByInput(String? field, String? direction,
+      {required Map<String, Object> allowed,
+      Object? fallback,
+      String fallbackDirection = SqlSort.asc}) {
+    final key = field?.trim();
+    final target = key == null || key.isEmpty ? null : allowed[key];
+    if (target == null) {
+      if (fallback == null) return this;
+      return _orderByTargets(fallback, fallbackDirection, 'fallback');
+    }
+    return _orderByTargets(target, inputDirection(direction), 'allowed');
+  }
+
+  /// `asc` or `desc` from a client's direction: `desc`/`descending` in any
+  /// case is `desc`, anything else (null included) is `asc`.
+  static String inputDirection(String? direction) {
+    switch (direction?.trim().toLowerCase()) {
+      case 'desc':
+      case 'descending':
+        return SqlSort.desc;
+      default:
+        return SqlSort.asc;
+    }
+  }
+
+  QueryBuilder _orderByTargets(Object target, String direction, String name) {
+    final targets = target is List ? target : [target];
+    if (targets.isEmpty) {
+      throw ArgumentError.value(target, name, 'Must not be empty.');
+    }
+    for (final item in targets) {
+      if (item is QueryExpression ||
+          (item is String && item.trim().isNotEmpty)) {
+        this.orderBy(item, direction);
+      } else {
+        throw ArgumentError.value(target, name,
+            'Expected a column, db.raw(...) or a list of them.');
+      }
+    }
+    return this;
+  }
+
   /// `order by column desc`.
   QueryBuilder orderByDesc(dynamic column) {
     return this.orderBy(column, SqlSort.desc);
@@ -2544,12 +2964,51 @@ class QueryBuilder {
     }
 
     final resultRunSelect = await this.runSelect(timeoutInSeconds);
-    final results = this.processor.processSelect(this, resultRunSelect);
+    var results = this.processor.processSelect(this, resultRunSelect);
 
     if (!hadColumns) {
       this.columnsProp = null;
     }
+    if (this.afterQueryCallbacks.isNotEmpty && this.aggregateProp == null) {
+      results = await _applyAfterQuery(results);
+    }
     return results;
+  }
+
+  /// Rows of `EXPLAIN <this query>` ([analyze]: `EXPLAIN ANALYZE`, which
+  /// runs the query; PostgreSQL and MySQL 8.0.18+).
+  Future<List<Map<String, dynamic>>> explain({bool analyze = false}) {
+    final sql = this.grammar.compileExplain(this.toSql(), analyze: analyze);
+    return this
+        .connection
+        .select(sql, this.getBindings(), !this.useWritePdoProp);
+  }
+
+  /// Callbacks run on the rows of [get] (and so of [first], [paginate],
+  /// [chunk]...), in order; not on aggregates such as [count].
+  final List<AfterQueryCallback> afterQueryCallbacks = [];
+
+  /// Runs [callback] on the rows after the query (Laravel's afterQuery): it
+  /// may change the rows in place or return new ones (`null` keeps them).
+  ///
+  /// ```dart
+  /// query.afterQuery((rows) {
+  ///   for (final row in rows) row['nome'] = (row['nome'] as String).trim();
+  ///   return null;
+  /// });
+  /// ```
+  QueryBuilder afterQuery(AfterQueryCallback callback) {
+    this.afterQueryCallbacks.add(callback);
+    return this;
+  }
+
+  Future<List<Map<String, dynamic>>> _applyAfterQuery(
+      List<Map<String, dynamic>> rows) async {
+    var result = rows;
+    for (final callback in this.afterQueryCallbacks) {
+      result = await callback(result) ?? result;
+    }
+    return result;
   }
 
   ///
@@ -2645,6 +3104,172 @@ class QueryBuilder {
       'path': PaginationUtils.resolveCurrentPath(),
       'pageName': pageName,
     });
+  }
+
+  /// Like [paginate], but in ONE query: the page rows carry
+  /// `count(*) over ()`, the total of rows that match. Opt-in, because it is
+  /// not always faster: the database still has to find every matching row to
+  /// count them (the separate count query of [paginate] can use an index-only
+  /// scan and skip the joins and the select list), and on large or complex
+  /// queries one heavier query can take longer than two light ones. Measure
+  /// before using it.
+  ///
+  /// An empty page past the first one falls back to the count query. Queries
+  /// with `distinct`, `distinct on` or unions use [paginate] (a window count
+  /// would count the rows before DISTINCT or per union part).
+  Future<LengthAwarePaginator> paginateWithWindowCount({
+    int perPage = 15,
+    List<String> columns = const ['*'],
+    String pageName = 'page',
+    int? page,
+  }) async {
+    if (this.distinctProp ||
+        this.distinctOnProp != null ||
+        this.unionsProp.isNotEmpty) {
+      return this.paginate(
+          perPage: perPage, columns: columns, pageName: pageName, page: page);
+    }
+    page ??= PaginationUtils.resolveCurrentPage(pageName);
+
+    final query = this.clone().forPage(page, perPage);
+    query.columnsProp ??= List<dynamic>.of(columns);
+    query.selectRaw('count(*) over () as $_windowTotalAlias');
+    final rows = await query.get();
+
+    final int total;
+    if (rows.isEmpty) {
+      total = page == 1 ? 0 : await this.getCountForPagination(columns);
+    } else {
+      total = _aggregateToInt(rows.first[_windowTotalAlias]);
+    }
+    final items = [
+      for (final row in rows)
+        Map<String, dynamic>.of(row)..remove(_windowTotalAlias)
+    ];
+    return DefaultLengthAwarePaginator(items, total, perPage, page, {
+      'path': PaginationUtils.resolveCurrentPath(),
+      'pageName': pageName,
+    });
+  }
+
+  static const _windowTotalAlias = 'eloquent_window_total';
+
+  /// Keyset ("cursor") pagination on the orders of the query (Laravel's
+  /// cursorPaginate): no OFFSET, so page 1000 costs the same as page 1, and
+  /// no count query. Pass the [CursorPage.nextCursor] or
+  /// [CursorPage.previousCursor] of the previous page as [cursor].
+  ///
+  /// The query must be ordered by plain columns that together are unique
+  /// (end with the primary key: `orderBy('nome').orderBy('id')`), selected in
+  /// the result, and without null values. A cursor is opaque: its values are
+  /// only bound as parameters. An invalid cursor throws [FormatException].
+  Future<CursorPage> cursorPaginate(
+      {int perPage = 15,
+      String? cursor,
+      List<String> columns = const ['*']}) async {
+    if (perPage < 1) {
+      throw ArgumentError.value(perPage, 'perPage', 'Must be >= 1.');
+    }
+    final orders = <(String, bool)>[];
+    for (final order in this.ordersProp) {
+      final column = order['column'];
+      if (order['sql'] != null || column is! String) {
+        throw ArgumentError(
+            'cursorPaginate needs orders by plain columns, not raw SQL.');
+      }
+      orders.add((column, order['direction'] == SqlSort.desc));
+    }
+    if (orders.isEmpty) {
+      throw ArgumentError('cursorPaginate needs an orderBy on unique columns.');
+    }
+    if (this.unionsProp.isNotEmpty) {
+      throw UnsupportedError('cursorPaginate does not support unions.');
+    }
+
+    final position =
+        cursor == null || cursor.isEmpty ? null : PageCursor.decode(cursor);
+    final previous = position != null && !position.pointsToNextItems;
+    final query = this.clone();
+    if (previous) {
+      query.ordersProp = [
+        for (final order in query.ordersProp)
+          {
+            ...order,
+            'direction':
+                order['direction'] == SqlSort.desc ? SqlSort.asc : SqlSort.desc,
+          }
+      ];
+    }
+    if (position != null) {
+      final values = [for (final (column, _) in orders) position.valueOf(column)];
+      if (values.contains(null)) {
+        throw const FormatException(
+            'cursorPaginate does not support null order values.');
+      }
+      query.whereNested((QueryBuilder group) =>
+          _cursorConditions(group, orders, values, 0, previous));
+    }
+    query.limit(perPage + 1);
+
+    var rows = await query.get(columns);
+    final more = rows.length > perPage;
+    if (more) rows = rows.sublist(0, perPage);
+    if (previous) rows = rows.reversed.toList();
+
+    String? edge(Map<String, dynamic> row, bool next) => PageCursor({
+          for (final (column, _) in orders) column: _cursorValue(row, column)
+        }, pointsToNextItems: next)
+            .encode();
+
+    String? nextCursor;
+    String? previousCursor;
+    if (rows.isNotEmpty) {
+      if (position == null) {
+        if (more) nextCursor = edge(rows.last, true);
+      } else if (position.pointsToNextItems) {
+        previousCursor = edge(rows.first, false);
+        if (more) nextCursor = edge(rows.last, true);
+      } else {
+        nextCursor = edge(rows.last, true);
+        if (more) previousCursor = edge(rows.first, false);
+      }
+    }
+    return CursorPage(
+        items: rows,
+        perPage: perPage,
+        nextCursor: nextCursor,
+        previousCursor: previousCursor);
+  }
+
+  /// `c0 > v0 or (c0 = v0 and (c1 > v1 or (c1 = v1 and ...)))`, with `<` for
+  /// descending columns (inverted when reading the previous page).
+  static void _cursorConditions(QueryBuilder query, List<(String, bool)> orders,
+      List<Object?> values, int index, bool previous) {
+    final (column, descending) = orders[index];
+    final operator = descending != previous ? '<' : '>';
+    query.where(column, operator, values[index]);
+    if (index + 1 < orders.length) {
+      query.orWhere((QueryBuilder next) {
+        next.where(column, SqlOperator.equals, values[index]);
+        next.whereNested((QueryBuilder rest) =>
+            _cursorConditions(rest, orders, values, index + 1, previous));
+      });
+    }
+  }
+
+  Object? _cursorValue(Map<String, dynamic> row, String column) {
+    final key = stripTableForPluck(column) as String;
+    if (!row.containsKey(key)) {
+      throw StateError('cursorPaginate: the rows have no "$key" column; '
+          'select the order columns.');
+    }
+    final value = row[key];
+    if (value == null) {
+      throw StateError(
+          'cursorPaginate does not support null values in the order column '
+          '"$column".');
+    }
+    return value;
   }
 
   ///
@@ -3457,6 +4082,185 @@ class QueryBuilder {
   /// [keyValues] Map
   /// Return int
   ///
+  // ------------------------------------------------------ bulk insert, next
+
+  /// Inserts [rows] in bulk: PostgreSQL `COPY ... FROM STDIN` when the driver
+  /// supports it (dpgsql, `db.driver()?.supportsCopy`), otherwise multi-row
+  /// INSERTs of up to [batchSize] rows (fewer when the 65535-parameter limit
+  /// requires it). Returns the rows inserted.
+  ///
+  /// Every row must have the [columns] (default: the keys of the first row).
+  /// COPY takes scalar values (String, num, bool, DateTime); rows with lists,
+  /// maps, bytes or `db.raw(...)` use the INSERT path. Like COPY, it fires no
+  /// `on conflict` handling: a duplicate key fails the whole load.
+  Future<int> copyInto(Iterable<Map<String, Object?>> rows,
+      {List<String>? columns, int batchSize = 1000}) async {
+    final list = rows is List<Map<String, Object?>> ? rows : rows.toList();
+    if (list.isEmpty) return 0;
+    if (this.fromProp is! String) {
+      throw StateError('copyInto needs a table (from).');
+    }
+    final names = columns ?? list.first.keys.toList();
+    if (names.isEmpty) {
+      throw ArgumentError.value(columns, 'columns', 'Must not be empty.');
+    }
+    for (final row in list) {
+      for (final name in names) {
+        if (!row.containsKey(name)) {
+          throw ArgumentError.value(row, 'rows', 'A row has no "$name".');
+        }
+      }
+    }
+
+    final driver = this.connection.driver();
+    if (driver != null && driver.supportsCopy && list.every(_copyable)) {
+      return driver.copyInRows(this.grammar.wrapTable(this.fromProp), names, [
+        for (final row in list)
+          [for (final name in names) _copyValue(row[name])]
+      ]);
+    }
+
+    final perStatement = batchSize < 1
+        ? 1
+        : (batchSize * names.length > 65535
+            ? 65535 ~/ names.length
+            : batchSize);
+    var inserted = 0;
+    for (var start = 0; start < list.length; start += perStatement) {
+      final end = start + perStatement > list.length
+          ? list.length
+          : start + perStatement;
+      final chunk = [
+        for (final row in list.sublist(start, end))
+          {for (final name in names) name: row[name]}
+      ];
+      final sql = this.grammar.compileInsertRows(this, chunk);
+      inserted += await this.connection.affectingStatement(sql, [
+        for (final row in chunk)
+          for (final name in names) row[name]
+      ]);
+    }
+    return inserted;
+  }
+
+  static bool _copyable(Map<String, Object?> row) => row.values.every((v) =>
+      v == null || v is String || v is num || v is bool || v is DateTime);
+
+  Object? _copyValue(Object? value) =>
+      value is DateTime ? this.grammar.formatDateTime(value) : value;
+
+  /// Inserts [rows] with one array parameter per column (PostgreSQL):
+  /// `insert into t (a, b) select * from unnest(?::int[], ?::text[])`. The
+  /// SQL text is the same for any number of rows (one prepared statement)
+  /// and there is no parameter limit. [types] gives the PostgreSQL type of
+  /// every column (`{'id': 'int', 'nome': 'text', 'criado': 'timestamp'}`).
+  /// Other grammars (MySQL) insert with multi-row INSERTs and ignore
+  /// [types]. Returns the rows inserted.
+  Future<int> insertUnnest(Iterable<Map<String, Object?>> rows,
+      {required Map<String, String> types}) async {
+    final list = rows is List<Map<String, Object?>> ? rows : rows.toList();
+    if (list.isEmpty) return 0;
+    if (types.isEmpty) {
+      throw ArgumentError.value(types, 'types', 'Must not be empty.');
+    }
+    final names = types.keys.toList();
+    for (final name in names) {
+      final type = types[name]!.trim();
+      if (!_sqlTypeName.hasMatch(type)) {
+        throw ArgumentError.value(type, 'types', 'Not an SQL type name.');
+      }
+    }
+    for (final row in list) {
+      for (final name in names) {
+        if (!row.containsKey(name)) {
+          throw ArgumentError.value(row, 'rows', 'A row has no "$name".');
+        }
+        if (row[name] is QueryExpression) {
+          throw ArgumentError.value(
+              row[name], 'rows', 'Raw SQL is not supported by insertUnnest.');
+        }
+      }
+    }
+    if (!this.grammar.supportsArrayBindings) {
+      return this.copyInto(list, columns: names);
+    }
+    final table = this.grammar.wrapTable(this.fromProp);
+    final columnList = names.map(this.grammar.wrap).join(', ');
+    final arrays = names.map((n) => '?::${types[n]!.trim()}[]').join(', ');
+    final sql = 'insert into $table ($columnList) select * from unnest($arrays)';
+    // Each column as a PostgreSQL array literal (text), cast by the SQL: the
+    // same for every driver, whatever it does with Dart lists.
+    return this.connection.affectingStatement(sql, [
+      for (final name in names)
+        _arrayLiteral([for (final row in list) _copyValue(row[name])])
+    ]);
+  }
+
+  /// `{"a","b",NULL}`: a PostgreSQL array literal of [values].
+  static String _arrayLiteral(List<Object?> values) {
+    final buffer = StringBuffer('{');
+    for (var i = 0; i < values.length; i++) {
+      if (i > 0) buffer.write(',');
+      final value = values[i];
+      if (value == null) {
+        buffer.write('NULL');
+      } else {
+        final text = value
+            .toString()
+            .replaceAll(r'\', r'\\')
+            .replaceAll('"', r'\"');
+        buffer.write('"$text"');
+      }
+    }
+    buffer.write('}');
+    return buffer.toString();
+  }
+
+  /// The next number of [column] in the rows of this query (its where
+  /// clauses are the scope): `coalesce(max(column), start - 1) + 1`, e.g.
+  /// `db.table('andamento').where('cod_processo', p).nextValue('cod_andamento')`.
+  ///
+  /// With [lock] (default) concurrent callers with the same scope take turns
+  /// on a `pg_advisory_xact_lock` of the table, column and scope (PostgreSQL;
+  /// other grammars throw [UnsupportedError]: `select max ... for update`
+  /// deadlocks under concurrency on InnoDB). The lock lasts until the
+  /// transaction ends, so call it in the transaction that inserts the number
+  /// (it throws [StateError] outside one). `lock: false` is a plain max + 1.
+  /// A sequence or identity column is still the better tool when the
+  /// numbers need not be consecutive per scope.
+  Future<int> nextValue(String column,
+      {int start = 1, bool lock = true}) async {
+    final query = this.clone()
+      ..ordersProp = []
+      ..bindings['order'] = []
+      ..limitProp = null
+      ..offsetProp = null;
+    if (lock) {
+      if (!this.grammar.supportsArrayBindings) {
+        throw UnsupportedError('nextValue(lock: true) needs PostgreSQL '
+            '(pg_advisory_xact_lock); use an AUTO_INCREMENT column, or lock a '
+            'parent row with lockForUpdate() and call nextValue(lock: false).');
+      }
+      if (!this.connection.isInTransaction) {
+        throw StateError('nextValue(lock: true) needs a transaction: the lock '
+            'lasts until commit and must cover the insert of the number.');
+      }
+      final key = '${query.fromProp}|$column|${query.grammar.compileWheres(query)}|'
+          '${query.getBindings().join('|')}';
+      await this.connection.select(
+          'select pg_advisory_xact_lock(hashtextextended(?, 0))', [key], false);
+    }
+    final max = await query.max(column);
+    return max == null ? start : max.toInt() + 1;
+  }
+
+  /// Laravel's updateFrom: an update whose joins become the `FROM` list of
+  /// `update ... from ...` (PostgreSQL), their conditions part of the WHERE.
+  /// [update] already compiles joins this way here (and as `update ... join`
+  /// on MySQL), so both methods give the same SQL; only inner joins.
+  Future<int> updateFrom(Map<String, dynamic> keyValues, [Duration? timeout]) =>
+      this.update(keyValues, timeout);
+
   Future<int> update(Map<String, dynamic> keyValues, [Duration? timeout]) {
     final sql = this.grammar.compileUpdate(this, keyValues);
     // Each dialect orders CTE/join/SET/where bindings like its SQL.
@@ -3988,6 +4792,7 @@ class QueryBuilder {
     newQuery.onConflictProp = onConflictProp;
     newQuery.returningProp =
         returningProp != null ? [...returningProp!] : null;
+    newQuery.afterQueryCallbacks.addAll(afterQueryCallbacks);
 
     newQuery.bindings = {
       'select': [...bindings['select']!],

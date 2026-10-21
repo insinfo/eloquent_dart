@@ -273,13 +273,56 @@ class QueryPostgresGrammar extends QueryGrammar {
         'to the recursive CTE and filter it (where depth < n).');
   }
 
-  /// `"column"::text ilike ?` (`like` when case-sensitive), as in Laravel.
+  /// `"column"::text ilike ?` (`like` when case-sensitive), as in Laravel;
+  /// with `unaccent`, `unaccent("column"::text) ilike unaccent(?)`; with
+  /// `lower`, `lower(...) like lower(...)`.
   @override
   String whereLike(QueryBuilder query, Map<String, dynamic> where) {
     final not = where['not'] == true ? 'not ' : '';
-    final operator = where['caseSensitive'] == true ? 'like' : 'ilike';
-    return '${this.wrap(where['column'])}::text $not$operator '
-        '${this.parameter(where['value'])}';
+    final lower = where['lower'] == true;
+    final operator =
+        lower || where['caseSensitive'] == true ? 'like' : 'ilike';
+    var column = '${this.wrap(where['column'])}::text';
+    var value = this.parameter(where['value']);
+    if (where['unaccent'] == true) {
+      column = '$unaccentFunction($column)';
+      value = '$unaccentFunction($value)';
+    }
+    if (lower) {
+      column = 'lower($column)';
+      value = 'lower($value)';
+    }
+    return '$column $not$operator $value';
+  }
+
+  /// The function of `unaccent: true` in whereLike/whereSearch: `unaccent`
+  /// (extension `unaccent`), or e.g. an IMMUTABLE wrapper such as
+  /// `public.f_unaccent` that an expression index can use.
+  String get unaccentFunction => _unaccentFunction;
+  set unaccentFunction(String name) {
+    if (!RegExp(r'^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)?$')
+        .hasMatch(name)) {
+      throw ArgumentError.value(name, 'name', 'Not a function name.');
+    }
+    _unaccentFunction = name;
+  }
+
+  String _unaccentFunction = 'unaccent';
+
+  @override
+  bool get supportsArrayBindings => true;
+
+  /// `"column" = any(?)` / `"column" <> all(?)`, `?::type[]` with an
+  /// element type; an empty list is `0 = 1` / `1 = 1`.
+  @override
+  String whereAnyArray(QueryBuilder query, Map<String, dynamic> where) {
+    final not = where['not'] == true;
+    if ((where['value'] as List).isEmpty) return not ? '1 = 1' : '0 = 1';
+    final type = where['elementType'] as String?;
+    final parameter = type == null ? '?' : '?::$type[]';
+    return not
+        ? '${this.wrap(where['column'])} <> all($parameter)'
+        : '${this.wrap(where['column'])} = any($parameter)';
   }
 
   @override

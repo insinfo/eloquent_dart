@@ -134,12 +134,155 @@ final class BetweenPredicate extends Predicate {
 /// `column [not] like ?` (case-insensitive unless [caseSensitive]).
 final class LikePredicate extends Predicate {
   const LikePredicate(this.column, this.pattern,
-      {this.caseSensitive = false, this.negated = false});
+      {this.caseSensitive = false,
+      this.negated = false,
+      this.unaccent = false,
+      this.lower = false});
 
   final String column;
   final String pattern;
   final bool caseSensitive;
   final bool negated;
+
+  /// `unaccent(column::text) ilike unaccent(?)` (PostgreSQL).
+  final bool unaccent;
+
+  /// `lower(column) like lower(?)` instead of `ilike` / the collation.
+  final bool lower;
+}
+
+/// The part of a date/time column compared by [DatePartPredicate].
+enum DatePart {
+  /// `column::date` (PostgreSQL) / `date(column)` (MySQL).
+  date('Date'),
+  time('Time'),
+  day('Day'),
+  month('Month'),
+  year('Year');
+
+  const DatePart(this.whereType);
+
+  /// The QueryBuilder where type.
+  final String whereType;
+}
+
+/// `<part of column> <operator> ?` (whereDate, whereYear, ...).
+final class DatePartPredicate extends Predicate {
+  const DatePartPredicate(this.column, this.part, this.operator, this.value);
+
+  final String column;
+  final DatePart part;
+  final ComparisonOperator operator;
+  final Object value;
+}
+
+/// `(c1, c2) [not] in ((?, ?), ...)`; an empty list is always false (`not
+/// in`: always true).
+final class TupleInPredicate extends Predicate {
+  const TupleInPredicate(this.columns, this.tuples, {this.negated = false});
+
+  final List<String> columns;
+  final List<List<Object?>> tuples;
+  final bool negated;
+}
+
+/// `(c1, c2) <operator> (?, ?)`
+final class RowValuesPredicate extends Predicate {
+  const RowValuesPredicate(this.columns, this.operator, this.values);
+
+  final List<String> columns;
+  final ComparisonOperator operator;
+  final List<Object?> values;
+}
+
+/// `column = any(?)` / `column <> all(?)` with one array parameter
+/// (PostgreSQL; `in (...)` elsewhere).
+final class AnyArrayPredicate extends Predicate {
+  const AnyArrayPredicate(this.column, this.values,
+      {this.elementType, this.negated = false});
+
+  final String column;
+  final List<Object?> values;
+  final String? elementType;
+  final bool negated;
+}
+
+/// `column [not] between low and high`, the bounds being columns.
+final class BetweenColumnsPredicate extends Predicate {
+  const BetweenColumnsPredicate(this.column, this.low, this.high,
+      {this.negated = false});
+
+  final String column;
+  final String low;
+  final String high;
+  final bool negated;
+}
+
+/// `? [not] between low and high`, the bounds being columns.
+final class ValueBetweenPredicate extends Predicate {
+  const ValueBetweenPredicate(this.value, this.low, this.high,
+      {this.negated = false});
+
+  final Object value;
+  final String low;
+  final String high;
+  final bool negated;
+}
+
+/// `(column)::jsonb @> ?` (PostgreSQL) / `json_contains(column, ?)` (MySQL).
+final class JsonContainsPredicate extends Predicate {
+  const JsonContainsPredicate(this.column, this.value, {this.negated = false});
+
+  final String column;
+  final Object? value;
+  final bool negated;
+}
+
+/// `json length of column <operator> ?`
+final class JsonLengthPredicate extends Predicate {
+  const JsonLengthPredicate(this.column, this.operator, this.length);
+
+  final String column;
+  final ComparisonOperator operator;
+  final int length;
+}
+
+/// PostgreSQL array operators of [ArrayOperatorPredicate].
+enum ArrayOperator {
+  /// `@>`: the column has every element of the value.
+  contains('@>'),
+
+  /// `<@`: every element of the column is in the value.
+  containedBy('<@'),
+
+  /// `&&`: the column and the value share an element.
+  overlaps('&&');
+
+  const ArrayOperator(this.sql);
+
+  final String sql;
+}
+
+/// `column <op> ?` with a PostgreSQL array value.
+final class ArrayOperatorPredicate extends Predicate {
+  const ArrayOperatorPredicate(this.column, this.operator, this.values);
+
+  final String column;
+  final ArrayOperator operator;
+  final List<Object?> values;
+}
+
+/// Full-text search of [value] in [columns] (`to_tsvector(...) @@ ...` on
+/// PostgreSQL, `match ... against` on MySQL).
+final class FullTextPredicate extends Predicate {
+  const FullTextPredicate(this.columns, this.value, this.options);
+
+  final List<String> columns;
+  final String value;
+
+  /// `language` and `mode` (`plain`, `phrase`, `websearch`; MySQL: `boolean`,
+  /// `expanded`), as in QueryBuilder.whereFullText.
+  final Map<String, Object> options;
 }
 
 /// `[not] (conditions)`

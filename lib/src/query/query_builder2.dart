@@ -134,25 +134,408 @@ mixin WhereConditions<Self> {
   /// `column like ?`, case-insensitive unless [caseSensitive] (PostgreSQL
   /// `ilike`; MySQL follows the collation, `like binary` when sensitive).
   /// `%` and `_` in [pattern] are wildcards.
-  Self whereLike(String column, String pattern, {bool caseSensitive = false}) =>
+  /// [unaccent] (PostgreSQL, extension `unaccent`) compares
+  /// `unaccent(column::text) ilike unaccent(?)`; [lower] compares
+  /// `lower(column) like lower(?)` (the form an expression index on
+  /// `lower(...)` can serve; see QueryBuilder.whereLike).
+  Self whereLike(String column, String pattern,
+          {bool caseSensitive = false,
+         bool unaccent = false,
+         bool lower = false}) =>
       _add(LogicalConnector.and,
-          LikePredicate(_column(column), pattern, caseSensitive: caseSensitive));
+          _like(column, pattern, caseSensitive, unaccent, lower, false));
   Self orWhereLike(String column, String pattern,
-          {bool caseSensitive = false}) =>
+          {bool caseSensitive = false,
+         bool unaccent = false,
+         bool lower = false}) =>
       _add(LogicalConnector.or,
-          LikePredicate(_column(column), pattern, caseSensitive: caseSensitive));
+          _like(column, pattern, caseSensitive, unaccent, lower, false));
   Self whereNotLike(String column, String pattern,
-          {bool caseSensitive = false}) =>
+          {bool caseSensitive = false,
+         bool unaccent = false,
+         bool lower = false}) =>
+      _add(LogicalConnector.and,
+          _like(column, pattern, caseSensitive, unaccent, lower, true));
+  Self orWhereNotLike(String column, String pattern,
+          {bool caseSensitive = false,
+         bool unaccent = false,
+         bool lower = false}) =>
+      _add(LogicalConnector.or,
+          _like(column, pattern, caseSensitive, unaccent, lower, true));
+
+  static LikePredicate _like(String column, String pattern,
+      bool caseSensitive, bool unaccent, bool lower, bool negated) {
+    if (lower && caseSensitive) {
+      throw ArgumentError('lower: true is case-insensitive; it cannot be '
+          'combined with caseSensitive: true.');
+    }
+    return LikePredicate(_column(column), pattern,
+        caseSensitive: caseSensitive,
+        negated: negated,
+        unaccent: unaccent,
+        lower: lower);
+  }
+
+  /// Text search of [term] in [columns] (see QueryBuilder.whereSearch):
+  /// `(col1 ilike ? or col2 ilike ?)`, the term matched literally (`%` and
+  /// `_` escaped) as given by [match]; [unaccent] ignores accents
+  /// (PostgreSQL); [everyWord] requires each word of the term in some column.
+  /// A null or blank [term] adds nothing.
+  Self whereSearch(List<String> columns, String? term,
+      {SearchMatch match = SearchMatch.contains,
+      bool unaccent = false,
+      bool lower = false,
+      bool caseSensitive = false,
+      bool everyWord = false}) {
+    final predicate =
+        _search(columns, term, match, unaccent, lower, caseSensitive, everyWord);
+    return predicate == null
+        ? whereSelf
+        : _add(LogicalConnector.and, predicate);
+  }
+
+  Self orWhereSearch(List<String> columns, String? term,
+      {SearchMatch match = SearchMatch.contains,
+      bool unaccent = false,
+      bool lower = false,
+      bool caseSensitive = false,
+      bool everyWord = false}) {
+    final predicate =
+        _search(columns, term, match, unaccent, lower, caseSensitive, everyWord);
+    return predicate == null ? whereSelf : _add(LogicalConnector.or, predicate);
+  }
+
+  /// `(col1 like ? or col2 like ? ...)` with [pattern] as given (`%` and `_`
+  /// are wildcards).
+  Self whereAnyLike(List<String> columns, String pattern,
+          {bool caseSensitive = false,
+          bool unaccent = false,
+          bool lower = false}) =>
+      _add(LogicalConnector.and,
+          _likeGroup(columns, pattern, caseSensitive, unaccent, lower));
+  Self orWhereAnyLike(List<String> columns, String pattern,
+          {bool caseSensitive = false,
+          bool unaccent = false,
+          bool lower = false}) =>
+      _add(LogicalConnector.or,
+          _likeGroup(columns, pattern, caseSensitive, unaccent, lower));
+
+  static Predicate? _search(List<String> columns, String? term,
+      SearchMatch match, bool unaccent, bool lower, bool caseSensitive, bool everyWord) {
+    final text = term?.trim() ?? '';
+    if (text.isEmpty) return null;
+    final words = everyWord ? text.split(RegExp(r'\s+')) : [text];
+    final groups = [
+      for (final word in words)
+        _likeGroup(columns, QueryBuilder.likePattern(word, match),
+            caseSensitive, unaccent, lower)
+    ];
+    if (groups.length == 1) return groups.first;
+    return GroupPredicate(List.unmodifiable(
+        [for (final group in groups) WhereClause(LogicalConnector.and, group)]));
+  }
+
+  static GroupPredicate _likeGroup(List<String> columns, String pattern,
+      bool caseSensitive, bool unaccent, bool lower) {
+    if (columns.isEmpty) {
+      throw ArgumentError.value(columns, 'columns', 'Must not be empty.');
+    }
+    return GroupPredicate(List.unmodifiable([
+      for (final column in columns)
+        WhereClause(
+            LogicalConnector.or,
+            _like(column, pattern, caseSensitive, unaccent, lower, false))
+    ]));
+  }
+
+  // ---------------------------------------------------- any / all / none
+
+  /// `(c1 = ? or c2 = ? ...)`: some column matches (or the comparison given
+  /// by [operator]).
+  Self whereAny(List<String> columns, Object? value,
+          {ComparisonOperator operator = ComparisonOperator.equalTo}) =>
+      _add(LogicalConnector.and,
+          _columnsGroup(columns, value, operator, LogicalConnector.or));
+  Self orWhereAny(List<String> columns, Object? value,
+          {ComparisonOperator operator = ComparisonOperator.equalTo}) =>
+      _add(LogicalConnector.or,
+          _columnsGroup(columns, value, operator, LogicalConnector.or));
+
+  /// `(c1 = ? and c2 = ? ...)`: every column matches.
+  Self whereAll(List<String> columns, Object? value,
+          {ComparisonOperator operator = ComparisonOperator.equalTo}) =>
+      _add(LogicalConnector.and,
+          _columnsGroup(columns, value, operator, LogicalConnector.and));
+  Self orWhereAll(List<String> columns, Object? value,
+          {ComparisonOperator operator = ComparisonOperator.equalTo}) =>
+      _add(LogicalConnector.or,
+          _columnsGroup(columns, value, operator, LogicalConnector.and));
+
+  /// `not (c1 = ? or c2 = ? ...)`: no column matches.
+  Self whereNone(List<String> columns, Object? value,
+          {ComparisonOperator operator = ComparisonOperator.equalTo}) =>
       _add(
           LogicalConnector.and,
-          LikePredicate(_column(column), pattern,
-              caseSensitive: caseSensitive, negated: true));
-  Self orWhereNotLike(String column, String pattern,
-          {bool caseSensitive = false}) =>
+          _columnsGroup(columns, value, operator, LogicalConnector.or,
+              negated: true));
+  Self orWhereNone(List<String> columns, Object? value,
+          {ComparisonOperator operator = ComparisonOperator.equalTo}) =>
       _add(
           LogicalConnector.or,
-          LikePredicate(_column(column), pattern,
-              caseSensitive: caseSensitive, negated: true));
+          _columnsGroup(columns, value, operator, LogicalConnector.or,
+              negated: true));
+
+  static Predicate _columnsGroup(List<String> columns, Object? value,
+      ComparisonOperator operator, LogicalConnector inner,
+      {bool negated = false}) {
+    if (columns.isEmpty) {
+      throw ArgumentError.value(columns, 'columns', 'Must not be empty.');
+    }
+    return GroupPredicate(
+        List.unmodifiable([
+          for (final column in columns)
+            WhereClause(inner, _comparison(column, value, operator))
+        ]),
+        negated: negated);
+  }
+
+  // ----------------------------------------------------------------- dates
+
+  /// `column::date = ?` (PostgreSQL) / `date(column) = ?` (MySQL); [value] a
+  /// DateTime or a `yyyy-MM-dd` string.
+  Self whereDate(String column, Object value,
+          {ComparisonOperator operator = ComparisonOperator.equalTo}) =>
+      _add(LogicalConnector.and,
+          _datePart(column, DatePart.date, operator, value));
+  Self orWhereDate(String column, Object value,
+          {ComparisonOperator operator = ComparisonOperator.equalTo}) =>
+      _add(LogicalConnector.or,
+          _datePart(column, DatePart.date, operator, value));
+
+  /// The time of day of [column]; [value] like `'08:30:00'`.
+  Self whereTime(String column, Object value,
+          {ComparisonOperator operator = ComparisonOperator.equalTo}) =>
+      _add(LogicalConnector.and,
+          _datePart(column, DatePart.time, operator, value));
+  Self orWhereTime(String column, Object value,
+          {ComparisonOperator operator = ComparisonOperator.equalTo}) =>
+      _add(LogicalConnector.or,
+          _datePart(column, DatePart.time, operator, value));
+
+  Self whereDay(String column, int value,
+          {ComparisonOperator operator = ComparisonOperator.equalTo}) =>
+      _add(LogicalConnector.and,
+          _datePart(column, DatePart.day, operator, value));
+  Self orWhereDay(String column, int value,
+          {ComparisonOperator operator = ComparisonOperator.equalTo}) =>
+      _add(LogicalConnector.or,
+          _datePart(column, DatePart.day, operator, value));
+
+  Self whereMonth(String column, int value,
+          {ComparisonOperator operator = ComparisonOperator.equalTo}) =>
+      _add(LogicalConnector.and,
+          _datePart(column, DatePart.month, operator, value));
+  Self orWhereMonth(String column, int value,
+          {ComparisonOperator operator = ComparisonOperator.equalTo}) =>
+      _add(LogicalConnector.or,
+          _datePart(column, DatePart.month, operator, value));
+
+  Self whereYear(String column, int value,
+          {ComparisonOperator operator = ComparisonOperator.equalTo}) =>
+      _add(LogicalConnector.and,
+          _datePart(column, DatePart.year, operator, value));
+  Self orWhereYear(String column, int value,
+          {ComparisonOperator operator = ComparisonOperator.equalTo}) =>
+      _add(LogicalConnector.or,
+          _datePart(column, DatePart.year, operator, value));
+
+  static Predicate _datePart(String column, DatePart part,
+          ComparisonOperator operator, Object value) =>
+      DatePartPredicate(_column(column), part, operator, _value(value, 'value'));
+
+  // ------------------------------------------------ tuples, rows, arrays
+
+  /// `(c1, c2) in ((?, ?), ...)`: a composite key among [tuples], e.g.
+  /// `whereInTuple(['cod_processo', 'ano_exercicio'], [[10, '2024']])`.
+  Self whereInTuple(List<String> columns, Iterable<List<Object?>> tuples) =>
+      _add(LogicalConnector.and, _tuple(columns, tuples, negated: false));
+  Self orWhereInTuple(List<String> columns, Iterable<List<Object?>> tuples) =>
+      _add(LogicalConnector.or, _tuple(columns, tuples, negated: false));
+  Self whereNotInTuple(List<String> columns, Iterable<List<Object?>> tuples) =>
+      _add(LogicalConnector.and, _tuple(columns, tuples, negated: true));
+  Self orWhereNotInTuple(
+          List<String> columns, Iterable<List<Object?>> tuples) =>
+      _add(LogicalConnector.or, _tuple(columns, tuples, negated: true));
+
+  /// `(c1, c2) <operator> (?, ?)`, e.g. keyset pagination on a composite
+  /// key: `whereRowValues(['ano', 'numero'], [2024, 150], operator: .greaterThan)`.
+  Self whereRowValues(List<String> columns, List<Object?> values,
+          {ComparisonOperator operator = ComparisonOperator.equalTo}) =>
+      _add(LogicalConnector.and, _rowValues(columns, values, operator));
+  Self orWhereRowValues(List<String> columns, List<Object?> values,
+          {ComparisonOperator operator = ComparisonOperator.equalTo}) =>
+      _add(LogicalConnector.or, _rowValues(columns, values, operator));
+
+  /// `column = any(?)`: [values] in one array parameter (PostgreSQL; `in
+  /// (...)` on MySQL). [elementType] casts it (`?::uuid[]`).
+  Self whereAnyArray(String column, Iterable<Object?> values,
+          {String? elementType}) =>
+      _add(LogicalConnector.and,
+          _anyArray(column, values, elementType, negated: false));
+  Self orWhereAnyArray(String column, Iterable<Object?> values,
+          {String? elementType}) =>
+      _add(LogicalConnector.or,
+          _anyArray(column, values, elementType, negated: false));
+
+  /// `column <> all(?)` (PostgreSQL; `not in (...)` on MySQL).
+  Self whereNotAnyArray(String column, Iterable<Object?> values,
+          {String? elementType}) =>
+      _add(LogicalConnector.and,
+          _anyArray(column, values, elementType, negated: true));
+  Self orWhereNotAnyArray(String column, Iterable<Object?> values,
+          {String? elementType}) =>
+      _add(LogicalConnector.or,
+          _anyArray(column, values, elementType, negated: true));
+
+  /// PostgreSQL array column operators: [ArrayOperator.contains] (`@>`),
+  /// [ArrayOperator.containedBy] (`<@`), [ArrayOperator.overlaps] (`&&`).
+  Self whereArray(String column, ArrayOperator operator,
+          Iterable<Object?> values) =>
+      _add(LogicalConnector.and,
+          ArrayOperatorPredicate(_column(column), operator, List.unmodifiable(values)));
+  Self orWhereArray(String column, ArrayOperator operator,
+          Iterable<Object?> values) =>
+      _add(LogicalConnector.or,
+          ArrayOperatorPredicate(_column(column), operator, List.unmodifiable(values)));
+
+  Self whereArrayContains(String column, Iterable<Object?> values) =>
+      whereArray(column, ArrayOperator.contains, values);
+  Self whereArrayContainedBy(String column, Iterable<Object?> values) =>
+      whereArray(column, ArrayOperator.containedBy, values);
+  Self whereArrayOverlaps(String column, Iterable<Object?> values) =>
+      whereArray(column, ArrayOperator.overlaps, values);
+
+  static Predicate _tuple(List<String> columns, Iterable<List<Object?>> tuples,
+      {required bool negated}) {
+    if (columns.isEmpty) {
+      throw ArgumentError.value(columns, 'columns', 'Must not be empty.');
+    }
+    columns.forEach(_column);
+    final rows = <List<Object?>>[];
+    for (final tuple in tuples) {
+      if (tuple.length != columns.length) {
+        throw ArgumentError.value(tuple, 'tuples',
+            'Expected ${columns.length} values, one per column.');
+      }
+      rows.add(List.unmodifiable(
+          [for (final v in tuple) v == null ? null : _value(v, 'tuples')]));
+    }
+    return TupleInPredicate(List.unmodifiable(columns), List.unmodifiable(rows),
+        negated: negated);
+  }
+
+  static Predicate _rowValues(
+      List<String> columns, List<Object?> values, ComparisonOperator operator) {
+    if (columns.isEmpty || columns.length != values.length) {
+      throw ArgumentError(
+          'whereRowValues needs as many values as columns (${columns.length}).');
+    }
+    columns.forEach(_column);
+    return RowValuesPredicate(List.unmodifiable(columns), operator,
+        List.unmodifiable([for (final v in values) v == null ? null : _value(v, 'values')]));
+  }
+
+  static Predicate _anyArray(
+      String column, Iterable<Object?> values, String? elementType,
+      {required bool negated}) {
+    _column(column);
+    return AnyArrayPredicate(column,
+        List.unmodifiable([for (final v in values) v == null ? null : _value(v, 'values')]),
+        elementType: elementType, negated: negated);
+  }
+
+  // --------------------------------------------- between columns / value
+
+  /// `column between low and high`, both bounds columns.
+  Self whereBetweenColumns(String column, String low, String high) => _add(
+      LogicalConnector.and,
+      BetweenColumnsPredicate(_column(column), _column(low), _column(high)));
+  Self orWhereBetweenColumns(String column, String low, String high) => _add(
+      LogicalConnector.or,
+      BetweenColumnsPredicate(_column(column), _column(low), _column(high)));
+  Self whereNotBetweenColumns(String column, String low, String high) => _add(
+      LogicalConnector.and,
+      BetweenColumnsPredicate(_column(column), _column(low), _column(high),
+          negated: true));
+  Self orWhereNotBetweenColumns(String column, String low, String high) =>
+      _add(
+          LogicalConnector.or,
+          BetweenColumnsPredicate(_column(column), _column(low), _column(high),
+              negated: true));
+
+  /// `? between low and high`: [value] inside the range of two columns, e.g.
+  /// `whereValueBetween(hoje, 'data_inicio', 'data_fim')`.
+  Self whereValueBetween(Object value, String low, String high) => _add(
+      LogicalConnector.and,
+      ValueBetweenPredicate(_value(value, 'value'), _column(low), _column(high)));
+  Self orWhereValueBetween(Object value, String low, String high) => _add(
+      LogicalConnector.or,
+      ValueBetweenPredicate(_value(value, 'value'), _column(low), _column(high)));
+  Self whereValueNotBetween(Object value, String low, String high) => _add(
+      LogicalConnector.and,
+      ValueBetweenPredicate(_value(value, 'value'), _column(low), _column(high),
+          negated: true));
+  Self orWhereValueNotBetween(Object value, String low, String high) => _add(
+      LogicalConnector.or,
+      ValueBetweenPredicate(_value(value, 'value'), _column(low), _column(high),
+          negated: true));
+
+  // ------------------------------------------------------ JSON, full text
+
+  /// `(column)::jsonb @> ?` (PostgreSQL) / `json_contains(column, ?)`
+  /// (MySQL); [value] is encoded as JSON.
+  Self whereJsonContains(String column, Object? value) => _add(
+      LogicalConnector.and, JsonContainsPredicate(_column(column), value));
+  Self orWhereJsonContains(String column, Object? value) => _add(
+      LogicalConnector.or, JsonContainsPredicate(_column(column), value));
+  Self whereJsonDoesntContain(String column, Object? value) => _add(
+      LogicalConnector.and,
+      JsonContainsPredicate(_column(column), value, negated: true));
+  Self orWhereJsonDoesntContain(String column, Object? value) => _add(
+      LogicalConnector.or,
+      JsonContainsPredicate(_column(column), value, negated: true));
+
+  /// The length of the JSON array in [column] compared with [length].
+  Self whereJsonLength(String column, int length,
+          {ComparisonOperator operator = ComparisonOperator.equalTo}) =>
+      _add(LogicalConnector.and,
+          JsonLengthPredicate(_column(column), operator, length));
+  Self orWhereJsonLength(String column, int length,
+          {ComparisonOperator operator = ComparisonOperator.equalTo}) =>
+      _add(LogicalConnector.or,
+          JsonLengthPredicate(_column(column), operator, length));
+
+  /// Full-text search: `to_tsvector(language, col) @@ plainto_tsquery(...)`
+  /// on PostgreSQL ([mode]: `plain`, `phrase`, `websearch`), `match ...
+  /// against` on MySQL ([mode] `boolean`).
+  Self whereFullText(List<String> columns, String value,
+          {String? language, String? mode}) =>
+      _add(LogicalConnector.and, _fullText(columns, value, language, mode));
+  Self orWhereFullText(List<String> columns, String value,
+          {String? language, String? mode}) =>
+      _add(LogicalConnector.or, _fullText(columns, value, language, mode));
+
+  static Predicate _fullText(
+      List<String> columns, String value, String? language, String? mode) {
+    if (columns.isEmpty) {
+      throw ArgumentError.value(columns, 'columns', 'Must not be empty.');
+    }
+    columns.forEach(_column);
+    return FullTextPredicate(List.unmodifiable(columns), value, {
+      if (language != null) 'language': language,
+      if (mode != null) 'mode': mode,
+    });
+  }
 
   // ---------------------------------------------------------------- column
 
@@ -429,6 +812,26 @@ final class _CrossJoin extends _Join {
   const _CrossJoin(super.table);
 }
 
+/// `join (select ...) as alias on first = second`.
+final class _SubJoin extends _Join {
+  const _SubJoin(this.query, super.alias, this.type, this.first, this.operator,
+      this.second);
+  final QueryBuilder2 query;
+  final JoinType type;
+  final String first;
+  final ComparisonOperator operator;
+  final String second;
+}
+
+/// `join lateral (select ...) as alias on ...` (`on true` without
+/// conditions).
+final class _LateralJoin extends _Join {
+  const _LateralJoin(this.query, super.alias, this.type, this.builder);
+  final QueryBuilder2 query;
+  final JoinType type;
+  final JoinBuilder? builder;
+}
+
 sealed class _SelectItem {
   const _SelectItem();
 }
@@ -464,6 +867,10 @@ final class _OrderRaw extends _OrderItem {
   const _OrderRaw(this.sql, this.bindings);
   final String sql;
   final List<Object?> bindings;
+}
+
+final class _OrderRandom extends _OrderItem {
+  const _OrderRandom();
 }
 
 /// The `on conflict` action of [QueryBuilder2.insert] and
@@ -664,6 +1071,8 @@ final class QueryBuilder2 with WhereConditions<QueryBuilder2> {
   _Lock? _lock;
   final List<_Cte> _ctes = [];
   final List<_Union> _unions = [];
+  List<String>? _distinctOn;
+  final List<AfterQueryCallback> _afterQuery = [];
 
   @override
   QueryBuilder2 get whereSelf => this;
@@ -731,6 +1140,17 @@ final class QueryBuilder2 with WhereConditions<QueryBuilder2> {
     return this;
   }
 
+  /// `select distinct on (columns) ...` (PostgreSQL): the first row of each
+  /// group of [columns], by the order of the query (which must start with
+  /// the same columns).
+  QueryBuilder2 distinctOn(List<String> columns) {
+    if (columns.isEmpty) {
+      throw ArgumentError.value(columns, 'columns', 'Must not be empty.');
+    }
+    _distinctOn = List.unmodifiable(columns.map(WhereConditions._column));
+    return this;
+  }
+
   // ----------------------------------------------------------------- joins
 
   /// `inner join table on first = second`.
@@ -769,6 +1189,53 @@ final class QueryBuilder2 with WhereConditions<QueryBuilder2> {
     _joins.add(_CrossJoin(WhereConditions._column(table)));
     return this;
   }
+
+  /// `join (select ...) as alias on first = second`.
+  QueryBuilder2 joinSub(
+      QueryBuilder2 subquery, String alias, String first, String second,
+      {ComparisonOperator operator = ComparisonOperator.equalTo,
+      JoinType type = JoinType.inner}) {
+    _joins.add(_SubJoin(subquery.clone(), WhereConditions._column(alias), type,
+        WhereConditions._column(first), operator, WhereConditions._column(second)));
+    return this;
+  }
+
+  QueryBuilder2 leftJoinSub(
+          QueryBuilder2 subquery, String alias, String first, String second,
+          {ComparisonOperator operator = ComparisonOperator.equalTo}) =>
+      joinSub(subquery, alias, first, second,
+          operator: operator, type: JoinType.left);
+
+  /// `join lateral (select ...) as alias on ...` (PostgreSQL): the subquery
+  /// can reference the columns of the tables before it, e.g. the last
+  /// movement of each process. Without [on] the condition is `on true`.
+  ///
+  /// ```dart
+  /// db.table2('processo as p').leftJoinLateral(
+  ///     db.table2('andamento as a')
+  ///         .whereColumn('a.cod_processo', 'p.cod_processo')
+  ///         .orderByDescending('a.cod_andamento')
+  ///         .limit(1),
+  ///     'ultimo');
+  /// ```
+  QueryBuilder2 joinLateral(QueryBuilder2 subquery, String alias,
+      {void Function(JoinBuilder join)? on, JoinType type = JoinType.inner}) {
+    if (type == JoinType.right) {
+      throw ArgumentError.value(type, 'type', 'LATERAL joins are inner or left.');
+    }
+    JoinBuilder? builder;
+    if (on != null) {
+      builder = JoinBuilder();
+      on(builder);
+    }
+    _joins.add(_LateralJoin(
+        subquery.clone(), WhereConditions._column(alias), type, builder));
+    return this;
+  }
+
+  QueryBuilder2 leftJoinLateral(QueryBuilder2 subquery, String alias,
+          {void Function(JoinBuilder join)? on}) =>
+      joinLateral(subquery, alias, on: on, type: JoinType.left);
 
   // ------------------------------------------------- group, having, order
 
@@ -835,6 +1302,57 @@ final class QueryBuilder2 with WhereConditions<QueryBuilder2> {
   /// Removes every order.
   QueryBuilder2 reorder() {
     _orders.clear();
+    return this;
+  }
+
+  /// `order by column desc` (default `created_at`).
+  QueryBuilder2 latest([String column = 'created_at']) =>
+      orderBy(column, direction: SortDirection.descending);
+
+  /// `order by column asc` (default `created_at`).
+  QueryBuilder2 oldest([String column = 'created_at']) => orderBy(column);
+
+  /// `order by random()` (PostgreSQL) / `rand()` (MySQL).
+  QueryBuilder2 inRandomOrder() {
+    _orders.add(const _OrderRandom());
+    return this;
+  }
+
+  /// Orders by a column chosen by the client without putting its text in the
+  /// SQL (see QueryBuilder.orderByInput): [field] is looked up in [allowed]
+  /// (`{'nome': 'c.nom_cgm'}`; a value can also be a list of columns); a
+  /// null, blank or unknown [field] orders by [fallback] (a column or a list),
+  /// or adds no order without one. [direction] `desc`/`descending` (any case)
+  /// is descending, anything else ascending.
+  QueryBuilder2 orderByInput(String? field, String? direction,
+      {required Map<String, Object> allowed,
+      Object? fallback,
+      SortDirection fallbackDirection = SortDirection.ascending}) {
+    final key = field?.trim();
+    final target = key == null || key.isEmpty ? null : allowed[key];
+    if (target == null) {
+      if (fallback == null) return this;
+      return _orderByTargets(fallback, fallbackDirection, 'fallback');
+    }
+    return _orderByTargets(
+        target,
+        QueryBuilder.inputDirection(direction) == SqlSort.desc
+            ? SortDirection.descending
+            : SortDirection.ascending,
+        'allowed');
+  }
+
+  QueryBuilder2 _orderByTargets(
+      Object target, SortDirection direction, String name) {
+    final targets = target is List ? target : [target];
+    if (targets.isEmpty ||
+        targets.any((t) => t is! String || t.trim().isEmpty)) {
+      throw ArgumentError.value(
+          target, name, 'Expected a column or a list of columns.');
+    }
+    for (final column in targets) {
+      orderBy(column as String, direction: direction);
+    }
     return this;
   }
 
@@ -913,6 +1431,14 @@ final class QueryBuilder2 with WhereConditions<QueryBuilder2> {
 
   // --------------------------------------------------------- conditional
 
+  /// Runs [callback] on the rows of [get] (and [first], [paginate],
+  /// [chunk]...) after the query; it may change them in place or return new
+  /// ones (`null` keeps them). Not run for aggregates such as [count].
+  QueryBuilder2 afterQuery(AfterQueryCallback callback) {
+    _afterQuery.add(callback);
+    return this;
+  }
+
   /// Applies [then] when [condition] is true, otherwise [otherwise].
   QueryBuilder2 when(bool condition, void Function(QueryBuilder2 query) then,
       [void Function(QueryBuilder2 query)? otherwise]) {
@@ -953,7 +1479,9 @@ final class QueryBuilder2 with WhereConditions<QueryBuilder2> {
       .._distinct = _distinct
       .._limit = _limit
       .._offset = _offset
-      .._lock = _lock;
+      .._lock = _lock
+      .._distinctOn = _distinctOn;
+    copy._afterQuery.addAll(_afterQuery);
     copy._ctes.addAll(_ctes);
     copy._unions.addAll(_unions);
     copy._columns.addAll(_columns);
@@ -975,6 +1503,64 @@ final class QueryBuilder2 with WhereConditions<QueryBuilder2> {
   /// The first row, or `null`.
   Future<Map<String, dynamic>?> first({Duration? timeout}) =>
       toQueryBuilder().first(const ['*'], timeout?.inSeconds);
+
+  /// The first row; throws [RecordsNotFoundException] when there is none.
+  Future<Map<String, dynamic>> firstOrFail({Duration? timeout}) async {
+    final row = await first(timeout: timeout);
+    if (row == null) throw RecordsNotFoundException();
+    return row;
+  }
+
+  /// The rows one by one from a server-side cursor (dpgsql; other drivers
+  /// throw [UnsupportedError]); memory stays about constant.
+  Stream<Map<String, dynamic>> cursor({int? fetchSize}) =>
+      toQueryBuilder().cursor(fetchSize);
+
+  /// The rows in pages of [size] (LIMIT/OFFSET); [callback] returns `false`
+  /// to stop. Order the query (and prefer [chunkById] on large tables).
+  Future<bool> chunk(
+          int size,
+          FutureOr<bool> Function(List<Map<String, dynamic>> rows, int page)
+              callback) =>
+      toQueryBuilder().chunk(size, callback);
+
+  /// The rows in pages of [size] by keyset pagination on [column] (`where
+  /// column > last order by column`); [alias] is the key in the rows when it
+  /// differs. [callback] returns `false` to stop.
+  Future<bool> chunkById(int size,
+      FutureOr<bool> Function(List<Map<String, dynamic>> rows) callback,
+      {String column = 'id', String? alias, bool descending = false}) {
+    final query = toQueryBuilder();
+    return descending
+        ? query.chunkByIdDesc(size, callback, column: column, alias: alias)
+        : query.chunkById(size, callback, column: column, alias: alias);
+  }
+
+  /// Rows of `EXPLAIN` ([analyze]: `EXPLAIN ANALYZE`, which runs the query).
+  Future<List<Map<String, dynamic>>> explain({bool analyze = false}) =>
+      toQueryBuilder().explain(analyze: analyze);
+
+  /// Keyset pagination on the orders of the query (see
+  /// QueryBuilder.cursorPaginate): order by unique columns, selected in the
+  /// result; pass the [CursorPage.nextCursor]/[CursorPage.previousCursor] of
+  /// the previous page as [cursor].
+  Future<CursorPage> cursorPaginate({int perPage = 15, String? cursor}) =>
+      toQueryBuilder().cursorPaginate(perPage: perPage, cursor: cursor);
+
+  /// [paginate] in one query with `count(*) over ()` (opt-in; see
+  /// QueryBuilder.paginateWithWindowCount: not always faster than the
+  /// separate count).
+  Future<PageResult> paginateWithWindowCount(
+      {required int page, int perPage = 15}) async {
+    _checkPage(page, perPage);
+    final result = await toQueryBuilder()
+        .paginateWithWindowCount(page: page, perPage: perPage);
+    return PageResult(
+        items: result.items(),
+        total: result.total(),
+        perPage: perPage,
+        currentPage: page);
+  }
 
   /// The only row; throws [RecordsNotFoundException] or
   /// [MultipleRecordsFoundException].
@@ -1159,6 +1745,38 @@ final class QueryBuilder2 with WhereConditions<QueryBuilder2> {
   Future<int> update(Map<String, Object?> values, {Duration? timeout}) =>
       toQueryBuilder().update(values, timeout);
 
+  /// Bulk insert: COPY when the driver supports it, multi-row INSERTs
+  /// otherwise (see QueryBuilder.copyInto). Returns the rows inserted.
+  Future<int> copyInto(Iterable<Map<String, Object?>> rows,
+          {List<String>? columns, int batchSize = 1000}) =>
+      toQueryBuilder().copyInto(rows, columns: columns, batchSize: batchSize);
+
+  /// Bulk insert with one array parameter per column (`unnest`, PostgreSQL;
+  /// see QueryBuilder.insertUnnest). [types] are the PostgreSQL types.
+  Future<int> insertUnnest(Iterable<Map<String, Object?>> rows,
+          {required Map<String, String> types}) =>
+      toQueryBuilder().insertUnnest(rows, types: types);
+
+  /// The next number of [column] in the rows of this query, under a lock
+  /// that lasts until the transaction ends (see QueryBuilder.nextValue).
+  Future<int> nextValue(String column, {int start = 1, bool lock = true}) =>
+      toQueryBuilder().nextValue(column, start: start, lock: lock);
+
+  /// Laravel's updateFrom: the inner joins become `update ... from ...`
+  /// (PostgreSQL); the same SQL as [update] here.
+  Future<int> updateFrom(Map<String, Object?> values, {Duration? timeout}) =>
+      update(values, timeout: timeout);
+
+  /// `insert into table (columns) select ...`; returns the rows inserted.
+  Future<int> insertUsing(List<String> columns, QueryBuilder2 select) async {
+    if (columns.isEmpty) {
+      throw ArgumentError.value(columns, 'columns', 'Must not be empty.');
+    }
+    final result = await toQueryBuilder()
+        .insertUsing(List<String>.of(columns), select.toQueryBuilder());
+    return result is PDOResults ? result.rowsAffected : 0;
+  }
+
   /// Deletes the matching rows; returns how many.
   Future<int> delete({Duration? timeout}) =>
       toQueryBuilder().delete(null, timeout);
@@ -1204,6 +1822,9 @@ final class QueryBuilder2 with WhereConditions<QueryBuilder2> {
       }
     }
     if (_distinct) query.distinct();
+    final distinctOn = _distinctOn;
+    if (distinctOn != null) query.distinctOn(List<String>.of(distinctOn));
+    query.afterQueryCallbacks.addAll(_afterQuery);
 
     for (final join in _joins) {
       switch (join) {
@@ -1214,6 +1835,14 @@ final class QueryBuilder2 with WhereConditions<QueryBuilder2> {
               null, null, type.sql);
         case _CrossJoin(:final table):
           query.crossJoin(table);
+        case _SubJoin(query: final subquery, table: final alias, :final type, :final first, :final operator, :final second):
+          query.joinSub(subquery.toQueryBuilder(), alias, first, operator.sql,
+              second, type.sql);
+        case _LateralJoin(query: final subquery, table: final alias, :final type, :final builder):
+          void on(JoinClause clause) => builder?._applyTo(clause);
+          type == JoinType.left
+              ? query.leftJoinLateral(subquery.toQueryBuilder(), alias, on)
+              : query.joinLateral(subquery.toQueryBuilder(), alias, on);
       }
     }
 
@@ -1240,6 +1869,8 @@ final class QueryBuilder2 with WhereConditions<QueryBuilder2> {
           query.orderBy(column, direction.sql);
         case _OrderRaw(:final sql, :final bindings):
           query.orderByRaw(sql, bindings);
+        case _OrderRandom():
+          query.inRandomOrder();
       }
     }
 
@@ -1279,9 +1910,43 @@ final class QueryBuilder2 with WhereConditions<QueryBuilder2> {
               column, subquery.toQueryBuilder(), boolean, negated);
         case BetweenPredicate(:final column, :final low, :final high, :final negated):
           query.whereBetween(column, [low, high], boolean, negated);
-        case LikePredicate(:final column, :final pattern, :final caseSensitive, :final negated):
+        case LikePredicate(:final column, :final pattern, :final caseSensitive, :final negated, :final unaccent, :final lower):
           query.whereLike(column, pattern,
-              caseSensitive: caseSensitive, boolean: boolean, not: negated);
+              caseSensitive: caseSensitive,
+              unaccent: unaccent,
+              lower: lower,
+              boolean: boolean,
+              not: negated);
+        case DatePartPredicate(:final column, :final part, :final operator, :final value):
+          query.addDateBasedWhere(
+              part.whereType, column, operator.sql, value, boolean);
+        case TupleInPredicate(:final columns, :final tuples, :final negated):
+          query.whereInTuple(columns, tuples, boolean, negated);
+        case RowValuesPredicate(:final columns, :final operator, :final values):
+          query.whereRowValues(columns, operator.sql, values, boolean);
+        case AnyArrayPredicate(:final column, :final values, :final elementType, :final negated):
+          query.whereAnyArray(column, values,
+              elementType: elementType, boolean: boolean, not: negated);
+        case BetweenColumnsPredicate(:final column, :final low, :final high, :final negated):
+          query.whereBetweenColumns(column, [low, high], boolean, negated);
+        case ValueBetweenPredicate(:final value, :final low, :final high, :final negated):
+          query.whereValueBetween(value, [low, high], boolean, negated);
+        case JsonContainsPredicate(:final column, :final value, :final negated):
+          query.whereJsonContains(column, value, boolean, negated);
+        case JsonLengthPredicate(:final column, :final operator, :final length):
+          query.whereJsonLength(column, operator.sql, length, boolean);
+        case ArrayOperatorPredicate(:final column, :final operator, :final values):
+          query.wheresProp.add({
+            'type': 'ArrayOp',
+            'column': column,
+            'operator': operator.sql,
+            'value': List<Object?>.of(values),
+            'boolean': boolean,
+          });
+          query.addBinding([List<Object?>.of(values)], 'where');
+        case FullTextPredicate(:final columns, :final value, :final options):
+          query.whereFullText(List<String>.of(columns), value,
+              Map<String, dynamic>.of(options), boolean);
         case GroupPredicate(clauses: final inner, :final negated):
           query.whereNested((QueryBuilder nested) => _applyWheres(nested, inner),
               negated ? '$boolean not' : boolean);

@@ -99,6 +99,42 @@ Details and migration notes: [doc/release_notes_4.0.0.md](doc/release_notes_4.0.
   `firstOrFail`, `findOr`, `doesntExist`, `existsOr`; `havingBetween`,
   `havingNull`, nested `having`; `whereIntegerInRaw` (no 65535 parameter
   limit); `incrementEach`/`decrementEach`; MySQL `whereFullText`.
+- `db.transactionScope((ctx) ...)`: an ambient transaction; inside it, code
+  that uses `db` (a repository called from the callback) runs in the same
+  transaction instead of another pooled connection (or waiting forever on a
+  single connection), `db.transaction` becomes a SAVEPOINT and
+  `db.isInTransaction` is true. `db.outsideTransaction(...)` leaves the scope
+  on purpose (needs a pool); `isInTransactionScope`.
+- Search and filters: `whereSearch(columns, term, {match, unaccent,
+  everyWord})` (the term matched literally: `%`/`_` escaped; a null or blank
+  term adds nothing), `whereAnyLike`, `unaccent: true` on `whereLike`
+  (PostgreSQL `unaccent(col::text) ilike unaccent(?)`,
+  `QueryPostgresGrammar.unaccentFunction`), `lower: true` (`lower(col) like
+  lower(?)`, for expression indexes and case-sensitive MySQL collations),
+  `QueryBuilder.escapeLike` and
+  `likePattern`; `orderByInput(field, direction, allowed: {...}, fallback:)`
+  orders by a client parameter through an allow-list.
+- `whereInTuple`/`whereNotInTuple` (`(a, b) in ((?, ?), ...)`),
+  `whereRowValues` (`(a, b) > (?, ?)`), `whereAnyArray`/`whereNotAnyArray`
+  (`col = any(?)` with one array parameter, `in (...)` on MySQL),
+  `whereBetweenColumns`, `whereValueBetween`.
+- `cursorPaginate()` (keyset pagination with opaque cursors, `CursorPage`),
+  `paginateWithWindowCount()` (opt-in one-query pagination with
+  `count(*) over ()`), `explain({analyze})`, `afterQuery(callback)`,
+  `updateFrom()`.
+- Bulk: `copyInto(rows)` (COPY on dpgsql, multi-row INSERTs elsewhere),
+  `insertUnnest(rows, types:)` (`insert ... select * from unnest(?::int[],
+  ...)`, PostgreSQL); `nextValue(column)` (max + 1 per scope under
+  `pg_advisory_xact_lock`).
+- `cursor()` on every PostgreSQL adapter: the adapters without an
+  incremental reader use an SQL cursor (`DECLARE ... FETCH` in a
+  transaction); `PDOExecutionContext.supportsQueryStream`.
+- `QueryBuilder2`: `whereAny`/`whereAll`/`whereNone`, `whereDate`/`Time`/
+  `Day`/`Month`/`Year`, JSON (`whereJsonContains`, `whereJsonLength`),
+  arrays (`whereArray`), `whereFullText`, `distinctOn`, `joinSub`,
+  `joinLateral`/`leftJoinLateral`, `latest`/`oldest`/`inRandomOrder`,
+  `cursor`, `chunk`, `chunkById`, `insertUsing`, `firstOrFail`, and every
+  item above.
 
 ### Fixed
 

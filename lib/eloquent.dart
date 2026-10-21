@@ -9,6 +9,7 @@ export 'src/query/sql_constants.dart';
 export 'src/query/join_clause.dart';
 export 'src/query/on_conflict_clause.dart';
 export 'src/query/query_lock.dart';
+export 'src/query/cursor_pagination.dart';
 export 'src/driver/driver_access.dart';
 
 export 'src/grammar.dart'; //BaseGrammar

@@ -397,6 +397,10 @@ class QueryMySqlGrammar extends QueryGrammar {
   @override
   String whereLike(QueryBuilder query, Map<String, dynamic> where) {
     final not = where['not'] == true ? 'not ' : '';
+    if (where['lower'] == true) {
+      return 'lower(${this.wrap(where['column'])}) ${not}like '
+          'lower(${this.parameter(where['value'])})';
+    }
     final operator = where['caseSensitive'] == true ? 'like binary' : 'like';
     return '${this.wrap(where['column'])} $not$operator '
         '${this.parameter(where['value'])}';

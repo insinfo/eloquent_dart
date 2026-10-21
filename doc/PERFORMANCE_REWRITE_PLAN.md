@@ -79,14 +79,14 @@ hot-path do query builder isoladamente (Fase 2: ~26.5 → ~21.9 µs/op, AOT).
 - Cachear `getDateFormat()`/driver name no hot-path de `prepareBindings()` e evitar iterar bindings vazios.
 
 **Query builder (Fase 9, continuação)**
-- Operadores de array: `ANY`, `unnest` (containment/overlap `@>`/`<@`/`&&` já feitos via `whereArrayContains`/`ContainedBy`/`Overlaps`).
+- ~~Operadores de array: `ANY`, `unnest`~~ ✅ `whereAnyArray` (`= any(?)`) e `insertUnnest` (containment/overlap `@>`/`<@`/`&&` já feitos via `whereArrayContains`/`ContainedBy`/`Overlaps`).
 - Ranges e tipos ricos do `dpgsql` (`tsvector`/`tsquery`/geometric já existem no driver).
 - `jsonb_set`/atualização por path; `DISTINCT ON` já feito.
 
 **Streaming / bulk (Fases 3–4)**
-- Fallback de cursor SQL (`DECLARE ... FETCH` em transação) para drivers sem reader nativo.
+- ~~Fallback de cursor SQL (`DECLARE ... FETCH` em transação) para drivers sem reader nativo.~~ ✅ feito (postgres, postgres_v3, dargres).
 - Teste de 100k linhas com memória ~constante.
-- Helper `QueryBuilder.copyInto(rows)` (COPY quando disponível, senão `insertMany`).
+- ~~Helper `QueryBuilder.copyInto(rows)` (COPY quando disponível, senão `insertMany`).~~ ✅ feito.
 
 **Migrations/seeders CLI (Fases 5–6)**
 - Comando `migrate` / `migrate:rollback` / `migrate:reset` / `migrate:status` (precisa de um barrel `migrations.dart` gerado por `migrate:sync` — geração de texto, sem code-gen de build).
@@ -233,7 +233,7 @@ RETURNING last_id;
 
 ### Fase 3 — Streaming / Cursor server-side
 - [x] `PDOExecutionContext.queryStream(sql, params, {int fetchSize})` → `Stream<Map<String,dynamic>>` (default: `UnsupportedError`; sobrescrito no dpgsql via `executeReader().read()`).
-- [ ] Em drivers sem reader nativo: fallback com cursor SQL (`DECLARE ... FETCH`) dentro de transação.
+- [x] Em drivers sem reader nativo: fallback com cursor SQL (`DECLARE ... FETCH`) dentro de transação.
 - [x] `ConnectionInterface.selectStream(...)` + `Connection.cursor(...)`.
 - [x] `QueryBuilder.cursor()` → `Stream<Map>` e `lazy()/lazyById()` construídos sobre o cursor (substituem `chunk` OFFSET por backpressure real).
 - [ ] Testes: consumir 100k linhas com memória ~constante.
@@ -245,7 +245,7 @@ RETURNING last_id;
   - `pipeline([...])`, `batch([...])`.
   - `listen(channel)` → `Stream<Notification>`, `notify(channel, payload)`.
   - `rawConnection()` → `DpgsqlConnection` (escape hatch tipado).
-- [ ] Helper de alto nível `QueryBuilder.copyInto(rows)` para carga em massa (usa COPY quando disponível, cai para `insertMany` senão).
+- [x] Helper de alto nível `QueryBuilder.copyInto(rows)` para carga em massa (usa COPY quando disponível, cai para `insertMany` senão).
 - [x] Testes de COPY round-trip e de LISTEN/NOTIFY.
 
 ### Fase 5 — Migrations utilizáveis de ponta a ponta *(sem codegen)*
@@ -278,7 +278,7 @@ RETURNING last_id;
 
 ### Fase 9 — Recursos PostgreSQL de query builder
 - [x] JSON/JSONB: `whereJsonContains`, `->`/`->>`, `jsonb_set`, path updates.
-- [x] Arrays: operadores de containment/overlap `@>`, `<@`, `&&` (`whereArrayContains`/`ContainedBy`/`Overlaps`). Falta `ANY`/`unnest`.
+- [x] Arrays: operadores de containment/overlap `@>`, `<@`, `&&` (`whereArrayContains`/`ContainedBy`/`Overlaps`), `ANY` (`whereAnyArray`) e `unnest` (`insertUnnest`).
 - [ ] Ranges e tipos ricos do dpgsql.
 - [x] `LATERAL` (parcial já existe), window functions helpers, full-text (`tsvector`/`tsquery`), `DISTINCT ON`.
 - [ ] `INSERT ... FROM SELECT` com RETURNING; `MERGE` (PG 15+).

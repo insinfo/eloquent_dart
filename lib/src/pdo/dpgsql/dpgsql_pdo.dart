@@ -189,6 +189,9 @@ class DpgsqlPDO extends PDOInterface {
   }
 
   @override
+  bool get supportsQueryStream => true;
+
+  @override
   Stream<Map<String, dynamic>> queryStream(String query,
       [dynamic params, int? fetchSize]) async* {
     // Server-side, incremental streaming via dpgsql's forward-only reader.

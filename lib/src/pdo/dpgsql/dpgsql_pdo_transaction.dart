@@ -41,6 +41,9 @@ class DpgsqlPDOTransaction extends PDOTransactionContext {
   }
 
   @override
+  bool get supportsQueryStream => true;
+
+  @override
   Stream<Map<String, dynamic>> queryStream(String query,
       [dynamic params, int? fetchSize]) async* {
     // Streams over the transaction's live connection; the connection is owned
