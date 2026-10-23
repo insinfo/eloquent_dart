@@ -17,8 +17,6 @@ topics:
 environment:
   sdk: ^3.6.0
   
-publish_to: none
-
 dependencies:  
   intl: '>=0.17.0 <3.0.0'
   collection: ^1.19.1
