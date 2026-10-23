@@ -1,26 +1,12 @@
 import '../eloquent.dart';
 
 abstract class ConnectionResolverInterface {
-  ///
-  /// Get a database connection instance.
-  ///
-  /// @param  string  $name
-  /// @return \Illuminate\Database\ConnectionInterface
-  ///
+  /// Returns the connection named [name], or the default connection.
   Future<ConnectionInterface> connection([String name]);
 
-  ///
-  /// Get the default connection name.
-  ///
-  /// @return string
-  ///
+  /// Returns the name of the default connection.
   String getDefaultConnection();
 
-  ///
-  /// Set the default connection name.
-  ///
-  /// @param  string  $name
-  /// @return void
-  ///
+  /// Sets the name of the default connection.
   void setDefaultConnection(String name);
 }

@@ -2,26 +2,14 @@ import 'package:eloquent/eloquent.dart';
 import 'package:eloquent/src/container/container.dart';
 
 mixin CapsuleManagerTrait {
-  ///
-  /// The current globally used instance.
-  ///
-  /// @var object
-  ///
+  /// The instance made global by [setAsGlobal].
   static dynamic instance;
 
-  ///
-  /// The container instance.
-  ///
-  /// @var \Illuminate\Contracts\Container\Container
-  ///
+  /// The IoC container.
   late Container container;
 
-  ///
-  /// Setup the IoC container instance.
-  ///
-  /// @param  \Illuminate\Contracts\Container\Container  $container
-  /// @return void
-  ///
+  /// Sets [container] to [containerP], binding an empty [Fluent] as
+  /// `config` when the container has none.
   void setupContainer(Container containerP) {
     this.container = containerP;
 
@@ -30,30 +18,17 @@ mixin CapsuleManagerTrait {
     }
   }
 
-  ///
-  /// Make this capsule instance available globally.
-  ///
-  /// @return void
-  ///
+  /// Makes this instance available globally as [instance].
   void setAsGlobal() {
     CapsuleManagerTrait.instance = this;
   }
 
-  ///
-  /// Get the IoC container instance.
-  ///
-  /// @return \Illuminate\Contracts\Container\Container
-  ///
+  /// Returns [container].
   Container? getContainer() {
     return this.container;
   }
 
-  ///
-  /// Set the IoC container instance.
-  ///
-  /// @param  \Illuminate\Contracts\Container\Container  $container
-  /// @return void
-  ///
+  /// Sets [container].
   void setContainer(Container containerP) {
     this.container = containerP;
   }

@@ -18,40 +18,18 @@ class MySqlConnection extends Connection {
         this.getTablePrefix(), this.getConfigs());
   }
 
-  ///
-  /// Get the default query grammar instance.
-  ///
-  /// @return \Illuminate\Database\Query\Grammars\QueryMySqlGrammar
-  ///
+  /// Returns a [QueryMySqlGrammar] with this connection's table prefix.
   QueryGrammar getDefaultQueryGrammar() {
     return withTablePrefix(QueryMySqlGrammar());
   }
 
-  ///
-  /// Get the default schema grammar instance.
-  ///
-  /// @return \Illuminate\Database\Schema\Grammars\SchemaMySqlGrammar
-  ///
+  /// Returns a [SchemaMySqlGrammar] with this connection's table prefix.
   SchemaGrammar getDefaultSchemaGrammar() {
     return this.withTablePrefix(SchemaMySqlGrammar());
   }
 
-  ///
-  /// Get the default post processor instance.
-  ///
-  /// @return \Illuminate\Database\Query\Processors\MySqlProcessor
-  ///
+  /// Returns a [MySqlProcessor].
   MySqlProcessor getDefaultPostProcessor() {
     return MySqlProcessor();
   }
-
-  ///
-  /// Get the Doctrine DBAL driver.
-  ///
-  /// @return \Doctrine\DBAL\Driver\PDOPgSql\Driver
-  ///
-  // dynamic getDoctrineDriver()
-  // {
-  //     return new DoctrineDriver;
-  // }
 }

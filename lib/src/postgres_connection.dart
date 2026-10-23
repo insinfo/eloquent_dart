@@ -15,41 +15,19 @@ class PostgresConnection extends Connection {
         this.getTablePrefix(), this.getConfigs());
   }
 
-  ///
-  /// Get the default query grammar instance.
-  ///
-  /// @return \Illuminate\Database\Query\Grammars\PostgresGrammar
-  ///
+  /// Returns a [QueryPostgresGrammar] with this connection's table prefix.
   QueryGrammar getDefaultQueryGrammar() {
     //QueryGrammar()
     return withTablePrefix(QueryPostgresGrammar());
   }
 
-  ///
-  /// Get the default schema grammar instance.
-  ///
-  /// @return \Illuminate\Database\Schema\Grammars\PostgresGrammar
-  ///
+  /// Returns a [SchemaPostgresGrammar] with this connection's table prefix.
   SchemaGrammar getDefaultSchemaGrammar() {
     return this.withTablePrefix(SchemaPostgresGrammar());
   }
 
-  ///
-  /// Get the default post processor instance.
-  ///
-  /// @return \Illuminate\Database\Query\Processors\PostgresProcessor
-  ///
+  /// Returns a [PostgresProcessor].
   PostgresProcessor getDefaultPostProcessor() {
     return PostgresProcessor();
   }
-
-  ///
-  /// Get the Doctrine DBAL driver.
-  ///
-  /// @return \Doctrine\DBAL\Driver\PDOPgSql\Driver
-  ///
-  // dynamic getDoctrineDriver()
-  // {
-  //     return new DoctrineDriver;
-  // }
 }

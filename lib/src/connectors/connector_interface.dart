@@ -1,11 +1,6 @@
 import '../pdo/core/pdo_interface.dart';
 
 abstract class ConnectorInterface {
-  ///
-  /// Establish a database connection.
-  ///
-  /// @param  array  $config
-  /// @return \PDO
-  ///
+  /// Opens a database connection with the settings in [config].
   Future<PDOInterface> connect(Map<String, dynamic> config);
 }

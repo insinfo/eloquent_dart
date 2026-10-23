@@ -6,99 +6,52 @@ import 'package:eloquent/eloquent.dart';
 /// cannot nest arbitrary where groups; [QueryBuilder2.joinOn] with
 /// [JoinBuilder] is the typed alternative.
 class JoinClause {
-  ///
-  /// The type of join being performed.
-  ///
-  /// @var string
-  ///
+  /// The type of join, e.g. `inner`, `left` or `cross`.
   String type;
 
-  ///
-  /// The table the join clause is joining to.
-  ///
-  /// @var string | QueryExpression
-  ///
+  /// The joined table: a name or a [QueryExpression].
   dynamic table;
 
-  ///
-  /// The "on" clauses for the join.
-  ///
-  /// @var array
-  ///
+  /// The conditions of the join, as maps read by the grammar.
   List<Map<String, dynamic>> clauses = [];
 
-  ///
-  /// The "on" bindings for the join.
-  ///
-  /// @var array
-  ///
+  /// The values bound by the conditions of the join.
   List bindingsLocal = [];
 
+  /// Whether the join is `join lateral` (PostgreSQL).
   bool isLateral; // <-- Adicionado
 
-  /// Adiciona uma cláusula ON TRUE.
+  /// Adds the condition `on TRUE`, e.g. for a lateral join.
   JoinClause onTrue([String boolean = SqlBool.and]) {
     return this.on(QueryExpression('TRUE'), null, null, boolean, false);
   }
 
-  ///
-  /// Create a new join clause instance.
-  ///
-  /// @param  String  $type
-  /// @param  String  $table
-  ///
+  /// Creates a join of [type] on [table].
   JoinClause(this.type, this.table,
       [QueryBuilder? parentQuery, this.isLateral = false]) {
-    //: super(parentQuery.getConnection(), parentQuery.getGrammar(),  parentQuery.getProcessor())
-    //public function __construct(Builder $parentQuery, $type, $table)
-    ///  implement extends QueryBuilder
-    /// $this->parentQuery = $parentQuery;
-    //  super(
-    //         $parentQuery->getConnection(), $parentQuery->getGrammar(), $parentQuery->getProcessor()
-    //     );
+    // Unlike Laravel's, this join does not extend the query builder, so
+    // [parentQuery] is not used.
   }
 
-  // /**
-  //  * Get a new instance of the join clause builder.
-  //  *
-  //  * @return \Illuminate\Database\Query\JoinClause
-  //  */
-  // public function newQuery()
-  // {
-  //     return new static($this->parentQuery, $this->type, $this->table);
-  // }
-
-  // /**
-  //  * Create a new query instance for sub-query.
-  //  *
-  //  * @return \Illuminate\Database\Query\Builder
-  //  */
-  // protected function forSubQuery()
-  // {
-  //     return $this->parentQuery->newQuery();
-  // }
-
+  /// Adds an `on` condition comparing the column [first] with [second].
   ///
-  /// Add an "on" clause to the join.
+  /// Conditions chain:
   ///
-  /// On clauses can be chained, e.g.
+  /// ```dart
+  /// join.on('contacts.user_id', '=', 'users.id')
+  ///     .on('contacts.info_id', '=', 'info.id');
+  /// ```
   ///
-  ///  join.on('contacts.user_id', '=', 'users.id')
-  ///       .on('contacts.info_id', '=', 'info.id')
+  /// produces:
   ///
-  /// will produce the following SQL:
+  /// ```sql
+  /// on "contacts"."user_id" = "users"."id"
+  ///   and "contacts"."info_id" = "info"."id"
+  /// ```
   ///
-  /// on `contacts`.`user_id` = `users`.`id`  and `contacts`.`info_id` = `info`.`id`
-  ///
-  /// @param  String|\Closure  $first
-  /// @param  String|null  $operator
-  /// @param  String|null  $second
-  /// @param  String  $boolean
-  /// @param  bool  $where
-  /// @return $this
-  ///
-  /// @throws \ArgumentError
-  ///
+  /// When [first] is a function, it receives a new [JoinClause] whose
+  /// conditions become a nested group (see [nest]). With [where], [second]
+  /// is a bound value instead of a column.
   JoinClause on(dynamic first,
       [String? operator,
       dynamic second,
@@ -120,12 +73,12 @@ class JoinClause {
     // if (where) {
     //   final isIn = operator == 'in' || operator == 'not in';
     //   if (isIn && Utils.is_array(second)) {
-    //     // adiciona TODOS os valores como bindings
+    //     // bind EVERY value
     //     this.bindingsLocal = Utils.array_merge(this.bindingsLocal, second);
-    //     // e troca o "second" por count(...) para gerar os "?, ?, ?"
+    //     // and replace "second" with the count to compile "?, ?, ?"
     //     second = Utils.count(second);
     //   } else {
-    //     // caso normal (um único binding)
+    //     // the usual case (a single binding)
     //     this.bindingsLocal.add(second);
     //   }
     // }
@@ -144,139 +97,68 @@ class JoinClause {
     return this;
   }
 
-  ///
-  /// Add an "or on" clause to the join.
-  ///
-  /// @param  String|\Closure  $first
-  /// @param  String|null  $operator
-  /// @param  String|null  $second
-  /// @return \Illuminate\Database\Query\JoinClause
-  ///
+  /// Adds an `or on` condition; see [on].
   JoinClause orOn(dynamic first, [String? operator, dynamic second]) {
     return this.on(first, operator, second, SqlBool.or);
   }
 
-  ///
-  /// Add an "on where" clause to the join.
-  ///
-  /// @param  String|\Closure  $first
-  /// @param  String|null  $operator
-  /// @param  String|null  $second
-  /// @param  String  $boolean
-  /// @return \Illuminate\Database\Query\JoinClause
-  ///
+  /// Adds a condition comparing the column [first] with the bound value
+  /// [second]: `first <operator> ?`.
   JoinClause where(dynamic first,
       [String? operator, dynamic second, String boolean = SqlBool.and]) {
     return this.on(first, operator, second, boolean, true);
   }
 
-  ///
-  /// Add an "or on where" clause to the join.
-  ///
-  /// @param  String|\Closure  $first
-  /// @param  String|null  $operator
-  /// @param  String|null  $second
-  /// @return \Illuminate\Database\Query\JoinClause
-  ///
+  /// Adds `or first <operator> ?`; see [where].
   JoinClause orWhere(dynamic first, [String? operator, dynamic second]) {
     return this.on(first, operator, second, SqlBool.or, true);
   }
 
-  ///
-  /// Add an "on where is null" clause to the join.
-  ///
-  /// @param  String  $column
-  /// @param  String  $boolean
-  /// @return \Illuminate\Database\Query\JoinClause
-  ///
+  /// Adds the condition `column is null`.
   JoinClause whereNull(String column, [String boolean = SqlBool.and]) {
     return this.on(column, SqlOperator.isOperator, QueryExpression('null'),
         boolean, false);
   }
 
-  ///
-  /// Add an "or on where is null" clause to the join.
-  ///
-  /// @param  String  $column
-  /// @return \Illuminate\Database\Query\JoinClause
-  ///
+  /// Adds the condition `or column is null`.
   JoinClause orWhereNull(String column) {
     return this.whereNull(column, SqlBool.or);
   }
 
-  ///
-  /// Add an "on where is not null" clause to the join.
-  ///
-  /// @param  String  $column
-  /// @param  String  $boolean
-  /// @return \Illuminate\Database\Query\JoinClause
-  ///
+  /// Adds the condition `column is not null`.
   JoinClause whereNotNull(String column, [String boolean = SqlBool.and]) {
     return this.on(column, SqlOperator.isOperator, QueryExpression('not null'),
         boolean, false);
   }
 
-  ///
-  /// Add an "or on where is not null" clause to the join.
-  ///
-  /// @param  String  $column
-  /// @return \Illuminate\Database\Query\JoinClause
-  ///
+  /// Adds the condition `or column is not null`.
   JoinClause orWhereNotNull(String column) {
     return this.whereNotNull(column, SqlBool.or);
   }
 
-  ///
-  /// Add an "on where in (...)" clause to the join.
-  ///
-  /// @param  String  $column
-  /// @param  array  $values
-  /// @return \Illuminate\Database\Query\JoinClause
-  ///
+  /// Adds the condition `column in (?, ...)`, binding [values].
   JoinClause whereIn(String column, List values) {
     return this.on(column, SqlOperator.inList, values, SqlBool.and, true);
   }
 
-  ///
-  /// Add an "on where not in (...)" clause to the join.
-  ///
-  /// @param  String  $column
-  /// @param  array  $values
-  /// @return \Illuminate\Database\Query\JoinClause
-  ///
+  /// Adds the condition `column not in (?, ...)`, binding [values].
   JoinClause whereNotIn(String column, List values) {
     return this.on(column, SqlOperator.notInList, values, SqlBool.and, true);
   }
 
-  ///
-  /// Add an "or on where in (...)" clause to the join.
-  ///
-  /// @param  String  $column
-  /// @param  array  $values
-  /// @return \Illuminate\Database\Query\JoinClause
-  ///
+  /// Adds the condition `or column in (?, ...)`, binding [values].
   JoinClause orWhereIn(String column, List values) {
     return this.on(column, SqlOperator.inList, values, SqlBool.or, true);
   }
 
-  ///
-  /// Add an "or on where not in (...)" clause to the join.
-  ///
-  /// @param  String  $column
-  /// @param  array  $values
-  /// @return \Illuminate\Database\Query\JoinClause
-  ///
+  /// Adds the condition `or column not in (?, ...)`, binding [values].
   JoinClause orWhereNotIn(String column, List values) {
     return this.on(column, SqlOperator.notInList, values, SqlBool.or, true);
   }
 
-  ///
-  /// Add a nested where statement to the query.
-  ///
-  /// @param  \Closure  $callback
-  /// @param  String   $boolean
-  /// @return \Illuminate\Database\Query\JoinClause
-  ///
+  /// Adds a nested group of conditions, `and (...)`: [callback] receives a
+  /// new [JoinClause] whose conditions form the group. An empty group adds
+  /// nothing.
   JoinClause nest(Function callback, [String boolean = SqlBool.and]) {
     final join = JoinClause(this.type, this.table);
 
@@ -297,13 +179,7 @@ class JoinClause {
     return this;
   }
 
-  ///
-  /// Add a raw "on" clause to the join.
-  ///
-  /// @param  String  $sql
-  /// @param  String  $boolean
-  /// @return $this
-  ///
+  /// Adds a raw SQL condition, written as given, with its [bindings].
   JoinClause onRaw(
     String sql, [
     String boolean = SqlBool.and,
@@ -315,18 +191,6 @@ class JoinClause {
       'boolean': boolean,
     });
 
-    /// array1 => ['A', 'B']  and array2 => ['C', 'D'] return ['A', 'B', 'C', 'D']
-    //  List array_merge(List? array1, List? array2) {
-    //   var a1 = array1;
-    //   var a2 = array2;
-    //   if (a1 == null) {
-    //     a1 = [];
-    //   }
-    //   if (a2 == null) {
-    //     a2 = [];
-    //   }
-    //   return [...a1, ...a2];
-    // }
     this.bindingsLocal = Utils.array_merge(this.bindingsLocal, bindings);
     return this;
   }

@@ -3,19 +3,10 @@ import 'dart:convert';
 import '../utils/utils.dart';
 
 class Fluent {
-  ///
-  /// All of the attributes set on the container.
-  ///
-  /// @var array
-  ///
+  /// The attributes set on this container.
   Map<String, dynamic> attributes = {};
 
-  ///
-  /// Create a new fluent container instance.
-  ///
-  /// @param  array|object    $attributes
-  /// @return void
-  ///
+  /// Creates a container with a copy of [attributesP], if given.
   Fluent([Map<String, dynamic>? attributesP]) {
     if (attributesP != null) {
       for (var at in attributesP.entries) {
@@ -27,13 +18,8 @@ class Fluent {
   operator [](String key) => offsetGet(key); // get
   operator []=(String key, dynamic value) => offsetSet(key, value); // set
 
-  ///
-  /// Get an attribute from the container.
-  ///
-  /// @param  string  $key
-  /// @param  mixed   $default
-  /// @return mixed
-  ///
+  /// Returns the attribute [key], or [defaultP] when it is not set (called
+  /// first when it is a function).
   dynamic get(String key, [dynamic defaultP]) {
     // for (var item in attributes.entries) {
     //   if (item.key == key) {
@@ -47,111 +33,47 @@ class Fluent {
     return Utils.value(defaultP);
   }
 
-  ///
-  /// Get the attributes from the container.
-  ///
-  /// @return array
-  ///
+  /// Returns [attributes].
   Map getAttributes() {
     return attributes;
   }
 
-  ///
-  /// Convert the Fluent instance to JSON.
-  ///
-  /// @param  int  $options
-  /// @return string
-  ///
+  /// Encodes [attributes] as JSON.
   String toJson() {
     return jsonEncode(attributes);
   }
 
-  ///
-  /// Determine if the given offset exists.
-  ///
-  /// @param  string  $offset
-  /// @return bool
-  ///
+  /// Returns whether the attribute [offset] is set.
   bool offsetExists(String offset) {
-    // return isset($this->{$offset});
     return this.attributes.containsKey(offset);
   }
 
-  ///
-  /// Get the value for a given offset.
-  ///
-  /// @param  string  $offset
-  /// @return mixed
-  ///
+  /// Returns the attribute [offset], or null when it is not set.
   dynamic offsetGet(String offset) {
-    //return $this->{$offset};
-    //return false;
     return get(offset);
   }
 
-  ///
-  /// Set the value at the given offset.
-  ///
-  /// @param  string  $offset
-  /// @param  mixed   $value
-  /// @return void
-  ///
+  /// Sets the attribute [offset] to [value].
   void offsetSet(String offset, dynamic value) {
-    //$this->{$offset} = $value;
     this.attributes[offset] = value;
   }
 
-  ///
-  /// Unset the value at the given offset.
-  ///
-  /// @param  string  $offset
-  /// @return void
-  ///
+  /// Removes the attribute [offset].
   void offsetUnset(String offset) {
-    //unset($this->{$offset});
     this.attributes.remove(offset);
   }
 
-  ///
-  /// Handle dynamic calls to the container to set attributes.
-  ///
-  /// @param  string  $method
-  /// @param  array   $parameters
-  /// @return $this
-  ///
-  //  __call($method, $parameters)
-  // {
-  //     $this->attributes[$method] = count($parameters) > 0 ? $parameters[0] : true;
-  //     return $this;
-  // }
-
-  ///
-  /// Dynamically set the value of an attribute.
-  ///
-  /// @param  string  $key
-  /// @param  mixed   $value
-  /// @return void
-  ///
+  /// Sets the attribute [key] to [value].
   void set(String key, dynamic value) {
     attributes[key] = value;
   }
 
-  ///
-  /// Dynamically check if an attribute is set.
-  ///
-  /// @param  string  $key
-  /// @return bool
-  ///
+  /// Returns whether the attribute [key] is set.
   bool isset(String key) {
     return attributes.containsKey(key);
   }
 
-  ///
-  /// Dynamically unset an attribute.
-  ///
-  /// @param  string  $key
-  /// @return void
-  ///
+  /// Removes the attribute [key].
   void unset(String key) {
     attributes.remove(key);
   }

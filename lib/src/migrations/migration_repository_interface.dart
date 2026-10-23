@@ -5,30 +5,22 @@ import 'dart:async';
 ///
 /// Corresponds to Illuminate\Database\Migrations\MigrationRepositoryInterface.
 abstract class MigrationRepositoryInterface {
-  /// Get the list of migration file names that have already been run.
-  /// Returns a list of migration file names (e.g., '2023_10_27_000000_create_users_table').
+  /// Returns the names of the migrations that have already run (e.g.
+  /// `2023_10_27_000000_create_users_table`).
   Future<List<String>> getRan();
 
-  /// Get the migrations from the latest batch number.
-  /// Returns a list of migration records (typically Maps).
+  /// Returns the records of the migrations in the latest batch.
   Future<List<Map<String, dynamic>>> getLast();
 
-  /// Get the list of migrations based on a batch limit.
-  /// [steps] The number of batches to retrieve migrations from.
-  /// Returns a list of migration records (typically Maps).
+  /// Returns the records of the migrations in the last [steps] batches.
   Future<List<Map<String, dynamic>>> getMigrations(
       int steps); // Added based on Migrator usage
 
-  /// Log that a migration was run.
-  ///
-  /// [file] The name of the migration file.
-  /// [batch] The batch number it belongs to.
+  /// Records that the migration [file] ran, in batch [batch].
   Future<void> log(String file, int batch);
 
-  /// Remove a migration record from the log.
-  ///
-  /// [migration] The migration record (Map) or just the migration name (String).
-  ///             Using Map allows access to 'migration' key like the PHP object.
+  /// Removes [migration], a record whose `migration` key is the migration
+  /// name, from the log.
   Future<void> delete(Map<String, dynamic> migration);
 
   /// Get the next migration batch number.
@@ -43,7 +35,7 @@ abstract class MigrationRepositoryInterface {
   /// Delete the migration repository data store.
   Future<void> deleteRepository(); // Added based on Migrator usage
 
-  /// Set the information source (database connection name) to gather data from.
-  /// [name] The name of the connection.
+  /// Sets the name of the connection the repository uses; `null` is the
+  /// default connection.
   void setSource(String? name);
 }

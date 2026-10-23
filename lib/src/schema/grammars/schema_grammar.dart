@@ -3,14 +3,14 @@ import 'package:eloquent/eloquent.dart';
 
 import 'package:meta/meta.dart'; // Import for @protected if needed by subclasses
 
-/// Representa a gramática base para manipulação de schemas de banco de dados.
-/// Em PHP: \Illuminate\Database\Schema\Grammars\Grammar
+/// Base grammar that compiles [Blueprint] commands into DDL statements.
+/// Laravel's `Illuminate\Database\Schema\Grammars\Grammar`.
 ///
-/// Esta classe fornece a estrutura e métodos comuns, mas muitos detalhes
-/// de sintaxe SQL específicos são deixados para as subclasses concretas
-/// (ex: SchemaPostgresGrammar, SchemaMySqlGrammar).
+/// It holds the shared structure and common SQL; most of the
+/// database-specific syntax is left to the concrete subclasses (e.g.
+/// [SchemaPostgresGrammar], `SchemaMySqlGrammar`).
 abstract class SchemaGrammar extends BaseGrammar {
-  /// Os possíveis modificadores de coluna que podem ser aplicados.
+  /// The column modifiers, in the order [addModifiers] applies them.
   final List<String> modifiers = const [
     'Unsigned',
     'Charset',
@@ -26,7 +26,7 @@ abstract class SchemaGrammar extends BaseGrammar {
     'Srid',
   ];
 
-  /// Os tipos de coluna que são considerados auto-incremento.
+  /// The column types that can be auto-incrementing.
   final List<String> serials = const [
     'bigInteger',
     'integer',
@@ -39,15 +39,15 @@ abstract class SchemaGrammar extends BaseGrammar {
   late final Map<String, Function(Blueprint, Fluent)> modifierCompilers;
 
   SchemaGrammar() {
-    // Renomeado para evitar conflito com métodos de inicialização de subclasses
+    // Named "...Internal" so it does not clash with the initialization
+    // methods of subclasses.
     typeCompilers = initializeTypeCompilersInternal();
     modifierCompilers = initializeModifierCompilers();
   }
 
-  /// Inicializa o mapa de compiladores de tipo.
+  /// Returns the type compilers, by lowercase column type.
   @protected
   Map<String, Function(Fluent)> initializeTypeCompilersInternal() {
-    // (Implementação como antes)
     return {
       'bigincrements': (c) => typeBigIncrements(c),
       'biginteger': (c) => typeBigInteger(c),
@@ -109,10 +109,9 @@ abstract class SchemaGrammar extends BaseGrammar {
     };
   }
 
-  /// Inicializa o mapa de compiladores de modificador.
+  /// Returns the modifier compilers, by the names in [modifiers].
   @protected
   Map<String, Function(Blueprint, Fluent)> initializeModifierCompilers() {
-    // (Implementação como antes)
     return {
       'Nullable': (b, c) => modifyNullable(b, c),
       'Default': (b, c) => modifyDefault(b, c),
@@ -129,8 +128,7 @@ abstract class SchemaGrammar extends BaseGrammar {
     };
   }
 
-  // --- Métodos de Compilação de Comandos ---
-  // (compileCreate, compileAdd, compilePrimary, etc. como antes, todos retornando List<String>)
+  // --- Command compilers (each returns the statements of one command) ---
   List<String> compileCreate(
       Blueprint blueprint, Fluent command, Connection connection) {
     /* ... */ return [''];
@@ -260,32 +258,29 @@ abstract class SchemaGrammar extends BaseGrammar {
         'Change column requires database-specific implementation or schema introspection.');
   }
 
-  // --- NOVOS MÉTODOS ---
+  // --- Foreign key checks ---
 
-  /// Compila o comando SQL para habilitar restrições de chave estrangeira.
-  /// Retorna uma lista vazia por padrão, indicando que não é suportado ou
-  /// não há comando padrão. Subclasses devem sobrescrever.
+  /// Returns the statements that enable foreign key constraints.
+  ///
+  /// This base version prints a warning and returns an empty list (not
+  /// supported); subclasses override it.
   List<String> compileEnableForeignKeyConstraints() {
     print(
         "Warning: Enabling foreign key constraints is not supported by the default grammar.");
     return [];
   }
 
-  /// Compila o comando SQL para desabilitar restrições de chave estrangeira.
-  /// Retorna uma lista vazia por padrão, indicando que não é suportado ou
-  /// não há comando padrão. Subclasses devem sobrescrever.
+  /// Returns the statements that disable foreign key constraints.
+  ///
+  /// This base version prints a warning and returns an empty list (not
+  /// supported); subclasses override it.
   List<String> compileDisableForeignKeyConstraints() {
     print(
         "Warning: Disabling foreign key constraints is not supported by the default grammar.");
     return [];
   }
 
-  // --- FIM DOS NOVOS MÉTODOS ---
-
-  // --- Métodos Helpers e Implementações de Tipos/Modificadores ---
-  // (getCommandsByName, getCommandByName, getColumns, addModifiers, getType,
-  //  type*, modify*, prefixArray, wrapTable, wrap, wrapValue, getDefaultValue,
-  //  compileTableExists, compileColumnExists, Doctrine stubs... como antes)
+  // --- Helpers, type compilers (type*) and modifier compilers (modify*) ---
 
   @protected
 

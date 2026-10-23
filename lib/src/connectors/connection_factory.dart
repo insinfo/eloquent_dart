@@ -5,28 +5,17 @@ import 'package:eloquent/src/mysql_connection.dart';
 import 'mysql_connector.dart';
 
 class ConnectionFactory {
-  /**
-     * The IoC container instance.
-     *
-     * @var \Illuminate\Contracts\Container\Container
-     */
+  /// The IoC container.
   Container container;
 
-  /**
-     * Create a new connection factory instance.
-     *
-     * @param  \Illuminate\Contracts\Container\Container  $container
-     * @return void
-     */
+  /// Creates a connection factory that uses [container].
   ConnectionFactory(this.container);
 
+  /// Opens a connection with the configuration [configP], named [name].
   ///
-  /// Establish a PDO connection based on the configuration.
-  ///
-  /// @param  array   $config
-  /// @param  string  $name
-  /// @return \Illuminate\Database\Connection
-  ///
+  /// The `driver` key picks the connector (`mysql` or `pgsql`) and `prefix`
+  /// defaults to `''` (see [parseConfig]). With a `read` key the result is a
+  /// read/write connection (see [createReadWriteConnection]).
   Future<Connection> make(Map<String, dynamic> configP,
       [String name = 'default']) {
     var config = parseConfig(configP, name);
@@ -38,12 +27,7 @@ class ConnectionFactory {
     return createSingleConnection(config);
   }
 
-  ///
-  /// Create a single database connection instance.
-  ///
-  /// @param  array  $config
-  /// @return \Illuminate\Database\Connection
-  ///
+  /// Opens a connection with the settings in [config].
   Future<Connection> createSingleConnection(Map<String, dynamic> config) async {
     var conC = createConnector(config);
 
@@ -53,12 +37,10 @@ class ConnectionFactory {
         config['driver'], pdo, config['database'], config['prefix'], config);
   }
 
+  /// Opens a read/write connection.
   ///
-  /// Create a single database connection instance.
-  ///
-  /// @param  array  $config
-  /// @return \Illuminate\Database\Connection
-  ///
+  /// The connection is opened with the `write` settings of [config] and gets
+  /// a second driver connection, opened with the `read` settings, for reads.
   Future<Connection> createReadWriteConnection(
       Map<String, dynamic> config) async {
     var connection = await createSingleConnection(getWriteConfig(config));
@@ -67,24 +49,18 @@ class ConnectionFactory {
     return connection;
   }
 
-  ///
-  /// Create a new PDO instance for reading.
-  ///
-  /// @param  array  $config
-  /// @return \PDO
-  ///
+  /// Opens the driver connection used for reads, with the `read` settings of
+  /// [config] (see [getReadConfig]).
   Future<PDOInterface> createReadPdo(Map<String, dynamic> config) async {
     var readConfig = getReadConfig(config);
 
     return createConnector(readConfig).connect(readConfig);
   }
 
+  /// Returns a copy of [config] with its `read` settings merged in (see
+  /// [mergeReadWriteConfig]).
   ///
-  /// Get the read configuration for a read / write connection.
-  ///
-  /// @param  array  $config
-  /// @return array
-  ///
+  /// When `read['host']` is a list, one of its hosts is picked at random.
   Map<String, dynamic> getReadConfig(Map<String, dynamic> config) {
     var readConfig = getReadWriteConfig(config, 'read');
 
@@ -97,75 +73,45 @@ class ConnectionFactory {
     return mergeReadWriteConfig(config, readConfig);
   }
 
-  ///
-  /// Get the read configuration for a read / write connection.
-  ///
-  /// @param  array  $config
-  /// @return array
-  ///
+  /// Returns a copy of [config] with its `write` settings merged in (see
+  /// [mergeReadWriteConfig]).
   Map<String, dynamic> getWriteConfig(Map<String, dynamic> config) {
     var writeConfig = getReadWriteConfig(config, 'write');
     return mergeReadWriteConfig(config, writeConfig);
   }
 
-  ///
-  /// Get a read / write level configuration.
-  ///
-  /// @param  array   $config
-  /// @param  string  $type
-  /// @return array
-  ///
+  /// Returns the `read` or `write` settings of [config], as given by [type].
   Map<String, dynamic> getReadWriteConfig(
       Map<String, dynamic> config, String type) {
-    // if (config[type][0] != null) {
-    //     return config[type][array_rand($config[$type])];
-    // }
-
     return config[type];
   }
 
-  ///
-  /// Merge a configuration for a read / write connection.
-  ///
-  /// @param  array  $config
-  /// @param  array  $merge
-  /// @return array
-  ///
+  /// Returns a copy of [config] overridden by [merge], without the `read` and
+  /// `write` keys.
   Map<String, dynamic> mergeReadWriteConfig(
       Map<String, dynamic> config, Map<String, dynamic> merge) {
     return Utils.map_except_sd(
         Utils.map_merge_sd(config, merge), ['read', 'write']);
   }
 
+  /// Adds the defaults to [config] and returns it.
   ///
-  /// Parse and prepare the database configuration.
-  ///
-  /// @param  Map<String,dynamic>   config
-  /// @param  String  name
-  /// @return Map<String,dynamic>
-  ///
+  /// Sets `prefix` to `''` and `name` to [name] when they are missing. The map
+  /// is modified in place.
   Map<String, dynamic> parseConfig(Map<String, dynamic> config, String name) {
     var arr = Utils.map_add_sd(config, 'prefix', '');
     var result = Utils.map_add_sd(arr, 'name', name);
     return result;
   }
 
+  /// Returns the connector for the `driver` of [config]: [MySqlConnector] for
+  /// `mysql`, [PostgresConnector] for `pgsql`.
   ///
-  ///  Create a connector instance based on the configuration.
-  ///
-  ///  @param  array  $config
-  ///  @return \Illuminate\Database\Connectors\ConnectorInterface
-  ///
-  ///  @throws \ArgumentError
-  ///
+  /// Throws [ArgumentError] when the driver is missing or not supported.
   ConnectorInterface createConnector(Map<String, dynamic> config) {
     if (config['driver'] == null) {
       throw ArgumentError.notNull('driver');
     }
-
-    // if ($this->container->bound($key = "db.connector.{$config['driver']}")) {
-    //     return $this->container->make($key);
-    // }
 
     switch (config['driver']) {
       case 'mysql':
@@ -173,48 +119,24 @@ class ConnectionFactory {
 
       case 'pgsql':
         return PostgresConnector();
-
-      // case 'sqlite':
-      //     return new SQLiteConnector;
-
-      // case 'sqlsrv':
-      //     return new SqlServerConnector;
     }
 
     throw ArgumentError.value(
         config['driver'], 'driver', 'Unsupported driver.');
   }
 
+  /// Creates the [Connection] for [driver] over the driver connection [pdoP].
   ///
-  ///  Create a new Connection instance.
-  ///
-  ///  @param  string   $driver
-  ///  @param  \PDO     $connection
-  ///  @param  string   $database
-  ///  @param  string   $prefix
-  ///  @param  array    $config
-  ///  @return \Illuminate\Database\Connection
-  ///
-  ///  @throws \ArgumentError
-  ///
+  /// [database] is the database name and [prefix] the table prefix. Throws
+  /// [ArgumentError] when [driver] is not `mysql` or `pgsql`.
   Connection createConnection(String driver, PDOInterface pdoP, String database,
       [String prefix = '', Map<String, dynamic> config = const {}]) {
-    // if ($this->container->bound($key = "db.connection.{$driver}")) {
-    //     return $this->container->make($key, [$connection, $database, $prefix, $config]);
-    // }
-
     switch (driver) {
       case 'mysql':
         return MySqlConnection(pdoP, database, prefix, config);
 
       case 'pgsql':
         return PostgresConnection(pdoP, database, prefix, config);
-
-      // case 'sqlite':
-      //     return new SQLiteConnection($connection, $database, $prefix, $config);
-
-      // case 'sqlsrv':
-      //     return new SqlServerConnection($connection, $database, $prefix, $config);
     }
 
     throw ArgumentError.value(driver, 'driver', 'Unsupported driver.');

@@ -23,10 +23,8 @@ class DatabaseMigrationRepository implements MigrationRepositoryInterface {
   /// The name of the database connection to use (null for default).
   String? connectionName;
 
-  /// Create a new database migration repository instance.
-  ///
-  /// [resolver] Used to get database connections.
-  /// [table] The name of the table to store migration logs.
+  /// Creates a repository that keeps the migration log in [table], on a
+  /// connection from [resolver].
   DatabaseMigrationRepository(this.resolver, this.table);
 
   /// Get the ran migrations.
@@ -113,9 +111,7 @@ class DatabaseMigrationRepository implements MigrationRepositoryInterface {
     await schema.create(table, (Blueprint blueprint) {
       // As in Laravel 5.3+, an id primary key.
       blueprint.increments('id');
-      // Corresponds to $table->string('migration');
       blueprint.string('migration');
-      // Corresponds to $table->integer('batch');
       blueprint.integer('batch');
     });
   }

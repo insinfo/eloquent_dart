@@ -9,12 +9,9 @@ import '../database_manager.dart'; // Need DatabaseManager or similar
 /// Subclasses should implement the `up()` and `down()` methods.
 /// Corresponds to Illuminate\Database\Migrations\Migration.
 abstract class Migration {
-  /// The database connection instance to use for the migration.
-  /// This might be injected or resolved differently than in Laravel.
-  /// Option 1: Inject the connection directly.
-  /// Option 2: Inject a resolver and connection name.
-  /// For simplicity here, we'll assume access to a global resolver or pass connection.
-  // late ConnectionInterface connection; // Option 1
+  /// The database manager that [schema] and [connection] resolve the
+  /// connection named [connectionName] from (`null` name: the default
+  /// connection). The migrator sets both.
   DatabaseManager? db; // Or a similar way to access connections/schema builder
   String? connectionName; // Option 2
 
@@ -28,9 +25,10 @@ abstract class Migration {
   /// in a transaction (e.g. `CREATE INDEX CONCURRENTLY` on PostgreSQL).
   bool withinTransaction = true;
 
-  /// The Schema builder instance for the default or specified connection.
+  /// The schema builder of this migration's connection (see [connection]).
+  ///
+  /// Throws [StateError] when neither [connectionOverride] nor [db] is set.
   Future<SchemaBuilder> get schema async {
-    // <--- Marcado como async
     final override = connectionOverride;
     if (override != null) {
       return override.getSchemaBuilder();
@@ -38,7 +36,7 @@ abstract class Migration {
     if (db == null) {
       throw StateError('DatabaseManager (db) is not set on this migration.');
     }
-    // Usa await para esperar o Future<SchemaBuilder> retornado pelo DatabaseManager
+    // DatabaseManager.schema() returns a Future<SchemaBuilder>.
     return await db!.schema(connectionName); // <--- Usa await
   }
 
@@ -66,16 +64,14 @@ abstract class Migration {
     await (await connection).statement(sql, bindings);
   }
 
-  /// Runs the migration "up" - applying schema changes.
-  /// Must be implemented by subclasses.
+  /// Applies the migration's schema changes.
   Future<void> up();
 
-  /// Reverts the migration "down" - undoing schema changes.
-  /// Must be implemented by subclasses.
+  /// Reverts the changes made by [up].
   Future<void> down();
 
-  /// Get the migration connection name.
-  /// Returns the specific connection this migration should run on, or null for default.
+  /// Returns [connectionName]: the connection this migration runs on, or
+  /// `null` for the default connection.
   String? getConnectionName() {
     return connectionName;
   }

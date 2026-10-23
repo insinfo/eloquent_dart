@@ -7,8 +7,7 @@ import 'dart:async';
 /// Provides an API for managing the database schema.
 /// Mirrors Laravel's Illuminate\Database\Schema\Builder.
 class SchemaBuilder {
-  /// The database connection instance.
-  /// Use ConnectionInterface for better decoupling.
+  /// The database connection.
   late Connection connection;
 
   /// The schema grammar instance, determined by the connection.
@@ -28,17 +27,17 @@ class SchemaBuilder {
   /// nearest second, so 10:20:30.6 is stored as 10:20:31.
   static int? defaultTimePrecision;
 
-  /// Creates a new database Schema manager.
-  ///
-  /// [connection] The database connection instance.
+  /// Creates a schema builder for [connection], with its schema grammar.
   SchemaBuilder(Connection connection) {
     setConnection(
         connection); // Use setter to initialize connection and grammar
   }
 
-  /// Determina se a tabela dada existe no schema padrão.
+  /// Whether the table [tableName] (without the table prefix) exists in the
+  /// connection's schema.
   ///
-  /// [tableName] O nome da tabela (sem prefixo).
+  /// The schema is the first name of the `schema` config, else the
+  /// `database` config, else the connection's database name, else `public`.
   Future<bool> hasTable(String tableName) async {
     final String schema = await _getSchemaName();
     final String sql = grammar.compileTableExists();
@@ -47,10 +46,8 @@ class SchemaBuilder {
     return results.isNotEmpty;
   }
 
-  /// Determina se a tabela dada tem a coluna especificada.
-  ///
-  /// [tableName] O nome da tabela (sem prefixo).
-  /// [columnName] O nome da coluna.
+  /// Whether the table [tableName] (without the table prefix) has the column
+  /// [columnName]. Case is ignored.
   Future<bool> hasColumn(String tableName, String columnName) async {
     final column = columnName.toLowerCase();
     // getColumnListing is now async
@@ -58,10 +55,8 @@ class SchemaBuilder {
     return tableColumns.map((c) => c.toLowerCase()).contains(column);
   }
 
-  /// Determina se a tabela dada tem todas as colunas especificadas.
-  ///
-  /// [tableName] O nome da tabela (sem prefixo).
-  /// [columns] A lista de nomes de coluna.
+  /// Whether the table [tableName] (without the table prefix) has all of
+  /// [columns]. Case is ignored.
   Future<bool> hasColumns(String tableName, List<String> columns) async {
     final tableColumns = (await getColumnListing(tableName)) // await async call
         .map((c) => c.toLowerCase())
@@ -75,9 +70,8 @@ class SchemaBuilder {
     return true;
   }
 
-  /// Obtém a listagem de nomes de coluna para a tabela dada no schema padrão.
-  ///
-  /// [tableName] O nome da tabela (sem prefixo).
+  /// Returns the column names of the table [tableName] (without the table
+  /// prefix) in the connection's schema (see [hasTable]).
   Future<List<String>> getColumnListing(String tableName) async {
     final String schema = await _getSchemaName();
     final String sql = grammar
@@ -93,19 +87,15 @@ class SchemaBuilder {
     return results.map((row) => row['column_name'] as String).toList();
   }
 
-  /// Modifica uma tabela existente no schema.
-  ///
-  /// [tableName] O nome da tabela.
-  /// [callback] Uma função que recebe o Blueprint para definir as alterações.
+  /// Modifies the existing table [tableName]; [callback] receives the
+  /// [Blueprint] that describes the changes.
   Future<void> table(String tableName, Function(Blueprint) callback) async {
-    // Passa o callback para createBlueprint e executa
+    // The blueprint runs the callback when it is created.
     await build(createBlueprint(tableName, callback));
   }
 
-  /// Cria uma nova tabela no schema.
-  ///
-  /// [tableName] O nome da tabela.
-  /// [callback] Uma função que recebe o Blueprint para definir as colunas e índices.
+  /// Creates the table [tableName]; [callback] receives the [Blueprint] that
+  /// defines its columns and indexes.
   Future<void> create(String tableName, Function(Blueprint) callback) async {
     final blueprint = createBlueprint(tableName);
     blueprint.create(); // Marca a intenção de criar
@@ -113,39 +103,33 @@ class SchemaBuilder {
     await build(blueprint); // Executa o blueprint
   }
 
-  /// Dropa (remove) uma tabela do schema.
-  ///
-  /// [tableName] O nome da tabela.
+  /// Drops the table [tableName].
   Future<void> drop(String tableName) async {
     final blueprint = createBlueprint(tableName);
     blueprint.drop();
     await build(blueprint);
   }
 
-  /// Dropa (remove) uma tabela do schema se ela existir.
-  ///
-  /// [tableName] O nome da tabela.
+  /// Drops the table [tableName] if it exists.
   Future<void> dropIfExists(String tableName) async {
     final blueprint = createBlueprint(tableName);
     blueprint.dropIfExists();
     await build(blueprint);
   }
 
-  /// Renomeia uma tabela no schema.
-  ///
-  /// [from] O nome atual da tabela.
-  /// [to] O novo nome da tabela.
+  /// Renames the table [from] to [to].
   Future<void> rename(String from, String to) async {
     final blueprint = createBlueprint(from);
     blueprint.rename(to);
     await build(blueprint);
   }
 
-  /// Habilita restrições de chave estrangeira (se suportado pela gramática).
-  /// Retorna `true` se o comando foi executado com sucesso (ou não era necessário),
-  /// `false` se não suportado ou falhou.
+  /// Enables foreign key constraints, if the grammar supports it.
+  ///
+  /// Returns `true` when the statements ran, and `false`, after printing a
+  /// message, when the grammar has no statements for it or one of them fails.
   Future<bool> enableForeignKeyConstraints() async {
-    // Pede o SQL à gramática
+    // Asks the grammar for the SQL.
     final List<String> sqlCommands =
         grammar.compileEnableForeignKeyConstraints();
     if (sqlCommands.isEmpty) {
@@ -155,7 +139,7 @@ class SchemaBuilder {
     }
     try {
       for (final sql in sqlCommands) {
-        // Usa execute pois geralmente não retorna linhas
+        // execute(), as these statements return no rows.
         await connection.execute(sql);
       }
       return true;
@@ -165,9 +149,10 @@ class SchemaBuilder {
     }
   }
 
-  /// Desabilita restrições de chave estrangeira (se suportado pela gramática).
-  /// Retorna `true` se o comando foi executado com sucesso (ou não era necessário),
-  /// `false` se não suportado ou falhou.
+  /// Disables foreign key constraints, if the grammar supports it.
+  ///
+  /// Returns `true` when the statements ran, and `false`, after printing a
+  /// message, when the grammar has no statements for it or one of them fails.
   Future<bool> disableForeignKeyConstraints() async {
     final List<String> sqlCommands =
         grammar.compileDisableForeignKeyConstraints();
@@ -187,54 +172,50 @@ class SchemaBuilder {
     }
   }
 
-  /// Executa o blueprint para construir / modificar a tabela.
-  /// Método protegido para uso interno.
+  /// Runs the statements of [blueprint] on [connection].
   @protected
   Future<void> build(Blueprint blueprint) async {
-    // Delega a execução para o método build assíncrono do Blueprint
+    // The blueprint compiles its commands with [grammar] and runs them.
     await blueprint.build(connection, grammar);
   }
 
-  /// Cria uma nova instância de Blueprint.
-  /// Utiliza o resolvedor customizado se disponível.
+  /// Creates the [Blueprint] for [table], with [resolver] when it is set.
+  /// [callback], if given, receives the new blueprint.
   @protected
   Blueprint createBlueprint(String table, [Function(Blueprint)? callback]) {
     if (resolver != null) {
-      // O resolver deve retornar um Blueprint
-      // A assinatura do resolver foi ajustada para Function(String, Function?)?
-      // Garantimos que o callback passado seja do tipo correto.
+      // The resolver must return a Blueprint.
       return resolver!(table, callback) as Blueprint;
     }
     return Blueprint(table, callback);
   }
 
-  /// Obtém a instância da conexão com o banco de dados.
+  /// Returns the database connection.
   ConnectionInterface getConnection() {
     return connection;
   }
 
-  /// Define a instância da conexão com o banco de dados e atualiza a gramática.
+  /// Sets the database connection and takes the schema grammar from it.
   SchemaBuilder setConnection(Connection connectionP) {
     connection = connectionP;
-    // Tenta obter a gramática da conexão. Requer que a implementação de
-    // ConnectionInterface (ou a classe concreta Connection) tenha o método.
 
     grammar = connection.getSchemaGrammar();
 
     return this;
   }
 
-  /// Define o callback resolvedor de Blueprint customizado.
+  /// Sets the [resolver] that creates the blueprints; `null` goes back to the
+  /// [Blueprint] constructor.
   void blueprintResolver(
       Function(String table, Function(Blueprint)? callback)? resolverCallback) {
     resolver = resolverCallback;
   }
 
-  /// Helper interno para obter o nome do schema/database da conexão.
-  /// Tenta obter da configuração ou do nome do banco de dados da conexão.
+  /// Returns the schema used for introspection: the first name of the
+  /// `schema` config, else the `database` config, else the connection's
+  /// database name, else `public` (with a warning).
   Future<String> _getSchemaName() async {
     String? schema;
-    // Tenta obter 'schema' ou 'database' da configuração da conexão (se for a classe concreta Connection)
 
     final connImpl = connection;
     // The 'schema' config may be a String, a comma-separated String, or a List
@@ -242,15 +223,13 @@ class SchemaBuilder {
     schema = _normalizeSchemaConfig(connImpl.getConfig('schema')) ??
         _normalizeSchemaConfig(connImpl.getConfig('database'));
 
-    // Se não encontrou na config, tenta buscar o nome do banco de dados da conexão
-    // Assumindo que getDatabaseName existe na ConnectionInterface ou Connection
+    // Not in the config: use the connection's database name.
     schema ??= connection.getDatabaseName();
 
     if (schema == null || schema.isEmpty) {
       print(
           "Warning: Could not determine schema/database name. Falling back to 'public' or potential errors.");
-      // Fallback comum para PG, pode não ser ideal para outros bancos.
-      // Considerar lançar um erro se o schema for essencial e não puder ser determinado.
+      // The usual PostgreSQL default; it may be wrong for other databases.
       return 'public';
     }
     return schema;

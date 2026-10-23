@@ -3,19 +3,10 @@ import 'package:eloquent/eloquent.dart';
 import 'package:eloquent/src/pdo/mysql_client/mysql_client_pdo.dart';
 
 class MySqlConnector extends Connector implements ConnectorInterface {
-  ///
-  /// The default PDO connection options.
-  ///
-  /// @var array
-  ///
+  /// The default connection options.
   Map<dynamic, dynamic> options = {};
 
-  ///
-  /// Establish a database connection.
-  ///
-  /// [config] Map<String, dynamic>
-  /// @return PostgreSQLConnection \PDO
-  ///
+  /// Opens a MySQL connection with the settings in [config].
   Future<PDOInterface> connect(Map<String, dynamic> config) async {
     // The session statements run on every physical connection (each pool
     // connection and reconnects), not once on whichever connection the pool
@@ -28,8 +19,8 @@ class MySqlConnector extends Connector implements ConnectorInterface {
   List<String> sessionStatements(Map<String, dynamic> config) {
     final statements = <String>[];
 
-    // Next we will set the "names" and "collation" on the clients connections so
-    // a correct character set will be used by this client.
+    // Next we will set the "names" and "collation" on the client's connections
+    // so a correct character set will be used by this client.
     if (config.containsKey('charset') && config['charset'] != null) {
       var charset = config['charset'];
 
@@ -49,12 +40,7 @@ class MySqlConnector extends Connector implements ConnectorInterface {
     return statements;
   }
 
-  ///
-  /// Create a DSN string from a configuration.
-  ///
-  /// @param  array   $config
-  /// @return string
-  ///
+  /// Builds a DSN string (`mysql:host=...;dbname=...`) from [config].
   String getDsn(Map<String, dynamic> config) {
     // First we will create the basic DSN setup as well as the port if it is in
     // in the configuration options. This will give us the basic DSN we will
@@ -63,7 +49,7 @@ class MySqlConnector extends Connector implements ConnectorInterface {
     final host = config['host'] != null ? "host=${config['host']};" : '';
     var dsn = "mysql:${host}dbname=${config['database']}";
 
-    // If a port was specified, we will add it to this Postgres DSN connections
+    // If a port was specified, we will add it to this MySQL DSN connections
     // format. Once we have done that we are ready to return this connection
     // string back out for usage, as this has been fully constructed here.
     if (config['port'] != null) {
@@ -78,7 +64,7 @@ class MySqlConnector extends Connector implements ConnectorInterface {
     if (config.containsKey('charset') && config['charset'] != null) {
       dsn = "$dsn;charset=${config['charset']}";
     }
-    // add Pool opttions to DSN
+    // add pool options to DSN
     if (config['pool'] != null) {
       dsn += ";pool=${config['pool']}";
     }
@@ -98,13 +84,8 @@ class MySqlConnector extends Connector implements ConnectorInterface {
     return dsn;
   }
 
-  ///
-  /// Set the modes for the connection.
-  ///
-  /// @param  \PDO  $connection
-  /// @param  array  $config
-  /// @return void
-  ///
+  /// Runs the [sqlModeStatement] for [config] on [connection], if there is
+  /// one.
   Future<void> setModes(
       PDOInterface connection, Map<String, dynamic> config) async {
     final mode = this.sqlModeStatement(config);
@@ -125,12 +106,8 @@ class MySqlConnector extends Connector implements ConnectorInterface {
     return null;
   }
 
-  ///
-  /// Format the schema for the DSN.
-  ///
-  /// @param  array|string  $schema
-  /// @return string
-  ///
+  /// Wraps [schema], a name or a list of names, in double quotes for the
+  /// DSN; list items are joined with `, `.
   String formatSchema(dynamic schema) {
     if (Utils.is_array(schema)) {
       return '"' + Utils.implode('", "', schema) + '"';
@@ -139,15 +116,9 @@ class MySqlConnector extends Connector implements ConnectorInterface {
     }
   }
 
+  /// Opens a [MySqlClientPDO] connection with the settings in [config].
   ///
-  /// Create a new PDO connection.
-  ///
-  /// @param  string  $dsn
-  /// @param  array   $config
-  /// @param  array   $options
-  /// @return \PDO
-  /// Aqui que cria a conexão com o Banco de Dados de fato
-  ///
+  /// The [sessionStatements] run on every new physical connection.
   Future<PDOInterface> createConnection(Map<String, dynamic> config) async {
     late PDOInterface pdo;
 

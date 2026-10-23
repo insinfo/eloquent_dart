@@ -2,15 +2,16 @@
 import 'dart:convert';
 import 'dart:math';
 
-/// String manipulation utility class.
-/// Mirrors functionality from Illuminate\Support\Str.
+/// String helpers ported from Laravel's `Illuminate\Support\Str`.
 class Str {
   // Static caches
   static final Map<String, String> _snakeCache = {};
   static final Map<String, String> _camelCache = {};
   static final Map<String, String> _studlyCache = {};
 
-  /// Transliterate a UTF-8 value to ASCII.
+  /// Transliterates [value] to ASCII.
+  ///
+  /// Characters that are not ASCII and have no mapping are removed.
   static String ascii(String value) {
     String tempValue = value;
     _charsArray().forEach((key, List<String> val) {
@@ -23,8 +24,7 @@ class Str {
     // return tempValue.replaceAll(RegExp(r'[^\x20-\x7E]+'), '');
   }
 
-  /// Convert a value to camel case.
-  /// Example: 'hello_world' -> 'helloWorld'
+  /// Converts [value] to camel case: `'hello_world'` becomes `'helloWorld'`.
   static String camel(String value) {
     if (_camelCache.containsKey(value)) {
       return _camelCache[value]!;
@@ -39,8 +39,8 @@ class Str {
     return result;
   }
 
-  /// Convert a value to studly caps case (PascalCase).
-  /// Example: 'hello_world' -> 'HelloWorld'
+  /// Converts [value] to studly caps (PascalCase): `'hello_world'` becomes
+  /// `'HelloWorld'`.
   static String studly(String value) {
     final key = value;
     if (_studlyCache.containsKey(key)) {
@@ -58,7 +58,10 @@ class Str {
     return tempValue;
   }
 
-  /// Determine if a given string contains a given substring or any of a list of substrings.
+  /// Returns whether [haystack] contains [needles], a String or any element
+  /// of a `List<String>`.
+  ///
+  /// Empty needles never match; other types of [needles] give false.
   static bool contains(String haystack, dynamic needles) {
     if (needles is String) {
       return needles.isNotEmpty && haystack.contains(needles);
@@ -73,7 +76,11 @@ class Str {
     return false;
   }
 
-  /// Determine if a given string ends with a given substring or any of a list of substrings.
+  /// Returns whether [haystack] ends with [needles], a String or any element
+  /// of a `List<String>`.
+  ///
+  /// Unlike [contains] and [startsWith], an empty needle matches; other
+  /// types of [needles] give false.
   static bool endsWith(String haystack, dynamic needles) {
     if (needles is String) {
       return haystack.endsWith(needles);
@@ -88,16 +95,17 @@ class Str {
     return false;
   }
 
-  /// Cap a string with a single instance of a given value.
-  /// Example: finish('test', '/') -> 'test/'
-  /// Example: finish('test/', '/') -> 'test/'
+  /// Returns [value] ending with a single [cap]: `finish('test', '/')` and
+  /// `finish('test//', '/')` both return `'test/'`.
   static String finish(String value, String cap) {
     final quoted = RegExp.escape(cap);
-    // Remove one or more occurrences of cap from the end, then add it back once.
+    // Remove one or more occurrences of cap from the end, then add it back
+    // once.
     return value.replaceAll(RegExp('(?:$quoted)+\$'), '') + cap;
   }
 
-  /// Determine if a given string matches a given pattern (simple wildcard *).
+  /// Returns whether [value] matches [pattern], where `*` matches any
+  /// characters.
   static bool isPattern(String pattern, String value) {
     if (pattern == value) return true;
     if (pattern == '*') return true; // Wildcard matches anything
@@ -109,12 +117,12 @@ class Str {
     return RegExp('^$escapedPattern\$').hasMatch(value);
   }
 
-  /// Return the length of the given string (character count).
+  /// Returns the number of characters (Unicode code points) in [value].
   static int length(String value) {
     return value.runes.length; // Use runes for multi-byte character count
   }
 
-  /// Limit the number of characters in a string.
+  /// Truncates [value] to [limit] characters, adding [end] when it was cut.
   static String limit(String value, [int limit = 100, String end = '...']) {
     if (value.runes.length <= limit) {
       return value;
@@ -126,14 +134,15 @@ class Str {
     return truncated + end;
   }
 
-  /// Convert the given string to lower-case.
+  /// Converts [value] to lower case.
   static String lower(String value) {
     return value.toLowerCase();
   }
 
-  /// Limit the number of words in a string.
+  /// Truncates [value] to [words] words, adding [end] when it was cut.
   static String words(String value, [int words = 100, String end = '...']) {
-    // Match start, then up to 'words' non-space sequences followed by optional space
+    // Match start, then up to 'words' non-space sequences followed by
+    // optional space
     final regex = RegExp(r'^\s*(\S+\s*){1,' + words.toString() + r'}');
     final match = regex.firstMatch(value);
 
@@ -145,28 +154,35 @@ class Str {
     return match.group(0)!.replaceAll(RegExp(r'\s+$'), '') + end;
   }
 
-  /// Parse a Class@method style callback into class and method.
+  /// Splits a `Class@method` callback into `[class, method]`; without `@`
+  /// the method is [defaultMethod], left out when null.
   static List<String> parseCallback(String callback, String? defaultMethod) {
     return contains(callback, '@')
         ? callback.split('@') // Dart split doesn't need limit for this case
         : [callback, if (defaultMethod != null) defaultMethod];
   }
 
-  /// Get the plural form of an English word. (Requires external library)
+  /// Not implemented: throws [UnimplementedError] (pluralization needs an
+  /// external library).
   static String plural(String value, [int count = 2]) {
     // Requires a pluralization library like 'inflection' package
-    // return Pluralizer.plural(value, count); // Example using a hypothetical Pluralizer
+    // return Pluralizer.plural(value, count); // a hypothetical Pluralizer
     throw UnimplementedError("Pluralization requires an external library.");
   }
 
-  /// Get the singular form of an English word. (Requires external library)
+  /// Not implemented: throws [UnimplementedError] (singularization needs an
+  /// external library).
   static String singular(String value) {
     // Requires a pluralization library
-    // return Pluralizer.singular(value); // Example using a hypothetical Pluralizer
+    // return Pluralizer.singular(value); // a hypothetical Pluralizer
     throw UnimplementedError("Singularization requires an external library.");
   }
 
-  /// Generate a more truly "random" alpha-numeric string.
+  /// Returns a random string of [length] characters from a secure random
+  /// source.
+  ///
+  /// The characters are those of URL-safe base64: letters, digits, `-` and
+  /// `_`.
   static String random([int length = 16]) {
     final random = Random.secure();
     // Generate enough bytes (3 bytes -> 4 base64 chars)
@@ -179,7 +195,8 @@ class Str {
         .substring(0, length);
   }
 
-  /// Generate a "random" alpha-numeric string (non-cryptographically secure).
+  /// Returns a random alphanumeric string of [length] characters, from a
+  /// random source that is not cryptographically secure.
   static String quickRandom([int length = 16]) {
     const String pool =
         '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -188,12 +205,12 @@ class Str {
         .join('');
   }
 
-  /// Replace the first occurrence of a given value in the string.
+  /// Replaces the first occurrence of [search] in [subject] with [replace].
   static String replaceFirst(String search, String replace, String subject) {
     return subject.replaceFirst(search, replace);
   }
 
-  /// Replace the last occurrence of a given value in the string.
+  /// Replaces the last occurrence of [search] in [subject] with [replace].
   static String replaceLast(String search, String replace, String subject) {
     final int pos = subject.lastIndexOf(search);
     if (pos == -1) {
@@ -204,12 +221,13 @@ class Str {
         subject.substring(pos + search.length);
   }
 
-  /// Convert the given string to upper-case.
+  /// Converts [value] to upper case.
   static String upper(String value) {
     return value.toUpperCase();
   }
 
-  /// Convert the given string to title case.
+  /// Converts [value] to title case: each word capitalized, the rest in
+  /// lower case.
   static String title(String value) {
     if (value.isEmpty) return '';
     // Split by whitespace, capitalize each part, join back
@@ -220,10 +238,12 @@ class Str {
         onNonMatch: (n) =>
             n.isEmpty ? '' : n[0].toUpperCase() + n.substring(1).toLowerCase());
     // Simpler alternative for basic cases:
-    // return value.split(' ').map((word) => word.isEmpty ? '' : word[0].toUpperCase() + word.substring(1).toLowerCase()).join(' ');
+    // return value.split(' ').map((word) => word.isEmpty ? '' :
+    //     word[0].toUpperCase() + word.substring(1).toLowerCase()).join(' ');
   }
 
-  /// Generate a URL friendly "slug" from a given string.
+  /// Returns a URL-friendly slug of [title], its words joined by
+  /// [separator].
   static String slug(String title, [String separator = '-']) {
     // 1. Transliterate to ASCII
     String slug = ascii(title);
@@ -231,33 +251,37 @@ class Str {
     // 2. Convert to lowercase
     slug = slug.toLowerCase();
 
-    // 3. Remove unwanted characters (not letters, numbers, whitespace, or the separator)
+    // 3. Remove unwanted characters (not letters, numbers, whitespace, or the
+    //    separator)
     final safeSeparator = RegExp.escape(separator);
     slug = slug.replaceAll(RegExp('[^a-z0-9\\s$safeSeparator]+'), '');
 
-    // 4. Replace whitespace and sequences of the separator with a single separator
+    // 4. Replace whitespace and sequences of the separator with a single
+    //    separator
     slug = slug.replaceAll(RegExp('[\\s$safeSeparator]+'), separator);
 
     // 5. Trim leading/trailing separators
     return slug.replaceAll(RegExp('^$safeSeparator+|$safeSeparator+\$'), '');
   }
 
-  /// Convert a string to snake case.
-  /// Example: 'helloWorld' -> 'hello_world'
+  /// Converts [value] to snake case, its words joined by [delimiter]:
+  /// `'helloWorld'` becomes `'hello_world'`.
   static String snake(String value, [String delimiter = '_']) {
     final key = '$value$delimiter'; // Cache key includes delimiter
     if (_snakeCache.containsKey(key)) {
       return _snakeCache[key]!;
     }
 
-    // Regex to find lowercase/digit followed by uppercase or multiple uppercase together
+    // Regex to find lowercase/digit followed by uppercase or multiple
+    // uppercase together
     final regex1 = RegExp(r'([a-z\d])([A-Z])');
     final regex2 = RegExp(r'([A-Z]+)([A-Z][a-z])');
 
     // Insert delimiter before uppercase letters preceded by lowercase/digit
     String result = value.replaceAllMapped(
         regex1, (m) => '${m.group(1)}$delimiter${m.group(2)}');
-    // Insert delimiter between consecutive uppercase letters followed by lowercase
+    // Insert delimiter between consecutive uppercase letters followed by
+    // lowercase
     result = result.replaceAllMapped(
         regex2, (m) => '${m.group(1)}$delimiter${m.group(2)}');
     // Replace spaces/hyphens with delimiter and convert to lowercase
@@ -267,7 +291,10 @@ class Str {
     return result;
   }
 
-  /// Determine if a given string starts with a given substring or any of a list of substrings.
+  /// Returns whether [haystack] starts with [needles], a String or any
+  /// element of a `List<String>`.
+  ///
+  /// Empty needles never match; other types of [needles] give false.
   static bool startsWith(String haystack, dynamic needles) {
     if (needles is String) {
       return needles.isNotEmpty && haystack.startsWith(needles);
@@ -282,7 +309,11 @@ class Str {
     return false;
   }
 
-  /// Returns the portion of string specified by the start and length parameters (character-based).
+  /// Returns the characters of [string] from [start] on, at most [length] of
+  /// them (counted in Unicode code points).
+  ///
+  /// As in PHP, a negative [start] counts from the end, and a negative
+  /// [length] leaves out that many characters at the end.
   static String substr(String string, int start, [int? length]) {
     final runes = string.runes.toList();
     final runeLength = runes.length;
@@ -313,13 +344,13 @@ class Str {
     return String.fromCharCodes(runes.sublist(actualStart, actualEnd));
   }
 
-  /// Make a string's first character uppercase.
+  /// Returns [string] with its first character in upper case.
   static String ucfirst(String string) {
     if (string.isEmpty) return '';
     return string[0].toUpperCase() + string.substring(1);
   }
 
-  /// Returns the replacements for the ascii method.
+  /// Returns the replacements [ascii] makes, by replacement text.
   static Map<String, List<String>> _charsArray() {
     // Cache the map to avoid recreating it every time
     return const {

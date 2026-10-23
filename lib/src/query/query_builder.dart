@@ -56,9 +56,12 @@ class QueryBuilder {
   /// The recursion limit.
   int? recursionLimitProp;
 
-  /// Isaque
-  /// I added this method to map a String to a property/attribute of the QueryBuilder Class
-  /// this allows reading the property/attribute of the QueryBuilder Class based on the property name
+  /// Returns the builder state named [propertyName].
+  ///
+  /// The names are Laravel's property names (`'columns'`, `'wheres'`,
+  /// `'orders'`, `'unionLimit'`, ...); the grammar reads the select
+  /// components through it, as Laravel reads `$query->{$component}`. Throws
+  /// [ArgumentError] for an unknown name.
   dynamic getProperty(String propertyName) {
     switch (propertyName) {
       case 'columns':
@@ -110,7 +113,6 @@ class QueryBuilder {
         throw ArgumentError.value(
             propertyName, 'propertyName', 'Unknown QueryBuilder property.');
     }
-    // return propertyName;
   }
 
   /// The database connection instance.
@@ -140,9 +142,7 @@ class QueryBuilder {
   /// An aggregate function and column to be run.
   Map<String, dynamic>? aggregateProp;
 
-  /// The columns that should be returned.
-  ///
-  /// Property of the QueryBuilder class that stores the columns of the table to be returned
+  /// The columns that should be returned; null selects `*`.
   List<dynamic>? columnsProp;
 
   List<dynamic>? getColumns() {
@@ -195,49 +195,44 @@ class QueryBuilder {
   /// The orderings for the union query.
   List<Map<String, dynamic>> unionOrdersProp = [];
 
-  /// Indicates whether row locking is being used.
+  /// The row lock: `true` (for update), `false` (shared), a [QueryLock] or a
+  /// raw lock clause; null means no lock.
   dynamic lockProp;
 
-  /// The field backups currently in use.
-  Map<String, dynamic> backups = {}; // Para orders, limit, offset, columns
+  /// The `orders`, `limit`, `offset` and `columns` saved while the count of
+  /// [getCountForPagination] runs.
+  Map<String, dynamic> backups = {};
 
-  /// The binding backups currently in use.
-  Map<String, dynamic> bindingBackups = {}; // Para as chaves 'order' e 'select'
+  /// The `order` and `select` bindings saved while the count of
+  /// [getCountForPagination] runs.
+  Map<String, dynamic> bindingBackups = {};
 
   /// All of the available clause operators.
   final List<String> _operators = List<String>.from(SqlOperator.defaults);
 
-  /// Whether use write pdo for select.
+  /// Whether selects run on the write connection.
   bool useWritePdoProp = false;
 
-  /// Pending `ON CONFLICT` clause applied to the next low-level [insert].
-  ///
-  /// Set via [onConflict]/[doUpdate]/[doNothing]. Consumed by [insert].
+  /// The `ON CONFLICT` clause compiled into [insert], set by
+  /// [onConflict], [doUpdate] and [doNothing].
   OnConflictClause? onConflictProp;
 
-  /// Columns for a `RETURNING` clause on insert/update/delete/upsert.
-  ///
-  /// Set via [returning]. When non-null the write returns the affected rows
-  /// instead of an affected-row count.
+  /// The columns of the `RETURNING` clause compiled into [insert], set by
+  /// [returning]; the insert's results then hold the inserted rows.
   List<dynamic>? returningProp;
 
-  /// Create a new query builder instance.
-  ///
-  /// [connection] The database connection instance.
-  /// [grammar] The database query grammar instance.
-  /// [processor] The database query post processor instance.
+  /// Creates a query builder on [connection] that compiles with [grammar] and
+  /// post-processes results with [processor].
   QueryBuilder(this.connection, this.grammar, this.processor);
 
-  /// Add a common table expression to the query.
+  /// Adds a common table expression: `with name (columns) as (query)`.
   ///
-  /// [name] The name of the CTE.
-  /// [query] `Function`|`QueryBuilder`|`String` The query to be used.
-  /// [columns] `List`|`null` The columns to be selected.
-  /// [recursive] `bool` Whether the CTE is recursive.
-  /// Returns the QueryBuilder instance.
+  /// [query] is a [QueryBuilder], a `Function(QueryBuilder)` that builds the
+  /// subquery, or raw SQL. [columns] is an optional list of column names.
+  /// [recursive] makes the clause `with recursive` (for every CTE of the
+  /// query); [materialized] emits `as MATERIALIZED (...)` (PostgreSQL).
   QueryBuilder withExpression(String name, dynamic query,
       [dynamic columns, bool recursive = false, bool materialized = false]) {
-    // createSub retorna [sql, bindings]
     final sub = this.createSub(query);
     final sql = sub[0];
     final bindings = sub[1];
@@ -252,24 +247,18 @@ class QueryBuilder {
     return this;
   }
 
-  /// Add a recursive common table expression to the query.
+  /// Adds a recursive common table expression: `with recursive name ...`.
   ///
-  /// [name] The name of the CTE.
-  /// [query] `Function`|`QueryBuilder`|`String` The query to be used.
-  /// [columns] `List`|`null` The columns to be selected.
-  /// Returns the QueryBuilder instance.
+  /// Takes the same forms of [query] and [columns] as [withExpression].
   QueryBuilder withRecursiveExpression(String name, query,
       [columns = null, bool materialized = false]) {
     return this.withExpression(name, query, columns, true, materialized);
   }
 
-  /// Add a **MATERIALIZED** common table expression to the query.
-  /// (Implied non-recursive)
+  /// Adds a non-recursive, materialized common table expression:
+  /// `with name as MATERIALIZED (query)` (PostgreSQL 12+).
   ///
-  /// [name] The name of the CTE.
-  /// [query] `Function`|`QueryBuilder`|`String` The query to be used.
-  /// [columns] `List`|`null` The columns to be selected.
-  /// Returns the QueryBuilder instance.
+  /// Takes the same forms of [query] and [columns] as [withExpression].
   QueryBuilder withMaterializedExpression(String name, dynamic query,
       [dynamic columns]) {
     final sub = this.createSub(query);
@@ -277,38 +266,38 @@ class QueryBuilder {
     final bindings = sub[1];
     this.expressionsProp.add({
       'name': name,
-      'query': sql, // The SQL of the subquery
+      'query': sql,
       'columns': columns,
-      'recursive': false, // Materialized implies non-recursive in simple form
-      'materialized': true, // THE NEW FLAG!
+      'recursive': false,
+      'materialized': true,
     });
     this.addBinding(bindings, 'expressions');
     return this;
   }
 
-  /// Set the recursion limit of the query.
+  /// Sets the recursion limit of the query's recursive CTEs.
   ///
-  /// [value] The recursion limit.
-  /// Returns the QueryBuilder instance.
+  /// The base grammar compiles it as SQL Server's `option (maxrecursion n)`;
+  /// the PostgreSQL and MySQL grammars throw [UnsupportedError] when the
+  /// query is compiled.
   QueryBuilder recursionLimit(int value) {
     this.recursionLimitProp = value;
     return this;
   }
 
-  /// Insert new records into the table using a subquery.
+  /// Inserts the rows selected by [query] into [columns] of the table:
+  /// `insert into table (columns) select ...`.
   ///
-  /// [columns] The columns to insert into.
-  /// [query] `Function`|`QueryBuilder`|`String` The subquery.
-  /// Returns the result of the insert.
+  /// [query] is a [QueryBuilder], a `Function(QueryBuilder)` or raw SQL.
+  /// Returns the driver's insert result.
   Future<dynamic> insertUsing(columns, query) async {
     final sub = this.createSub(query);
     final sql = sub[0];
     final subBindings = sub[1];
 
-    // Gets bindings from CTEs (expressions), if any
+    // The CTE bindings come first, then the subquery's.
     final List<dynamic> exprBindings = bindings['expressions'] ?? <dynamic>[];
 
-    // Merges: first expressions bindings, then subquery bindings
     final List<dynamic> mergedBindings = [
       ...exprBindings,
       ...subBindings,
@@ -320,16 +309,13 @@ class QueryBuilder {
     return res;
   }
 
-  /// Set the columns to be selected.
-  ///
-  /// [columnsP] `List`|`dynamic` The columns to select. Defaults to `['*']`.
-  /// Returns the QueryBuilder instance.
+  /// Sets the columns to be selected, replacing the previous select list and
+  /// its bindings.
   ///
   /// [columnsP] is a column, a list of columns, or a map
-  /// `{alias: column-or-subquery}`; a subquery (`QueryBuilder` or
-  /// `Function(QueryBuilder)`) becomes `(subquery) as alias`. Replaces the
-  /// previous select list and its bindings.
-  ///
+  /// `{alias: column-or-subquery}`: a column becomes `column as alias` and a
+  /// subquery (`QueryBuilder` or `Function(QueryBuilder)`) becomes
+  /// `(subquery) as alias`. Defaults to `*`.
   QueryBuilder select([dynamic columnsP = const ['*']]) {
     this.bindings['select'] = [];
     if (columnsP is Map) {
@@ -360,11 +346,10 @@ class QueryBuilder {
     });
   }
 
-  /// Add a subselect expression to the query.
+  /// Adds `(query) as alias` to the select list.
   ///
-  /// [query] `Function`|`QueryBuilder`|`String` The subquery.
-  /// [alias] The alias for the subquery.
-  /// Returns the QueryBuilder instance.
+  /// [query] is a [QueryBuilder], a `Function(QueryBuilder)` or raw SQL; its
+  /// bindings go to the select bindings.
   QueryBuilder selectSub(dynamic query, String alias) {
     final res = this.createSub(query);
     final newQuery = res[0];
@@ -374,11 +359,8 @@ class QueryBuilder {
         '(' + newQuery + ') as ' + this.grammar.wrap(alias), bindings);
   }
 
-  /// Add a new "raw" select expression to the query.
-  ///
-  /// [expression] The raw expression.
-  /// [bindingsP] The bindings for the expression.
-  /// Returns the QueryBuilder instance.
+  /// Adds a raw SQL [expression] to the select list, with [bindingsP] for
+  /// its `?` placeholders.
   QueryBuilder selectRaw(String expression, [List? bindingsP = const []]) {
     this.addSelect(QueryExpression(expression));
 
@@ -389,13 +371,8 @@ class QueryBuilder {
     return this;
   }
 
-  /// Add a raw from clause to the query.
-  ///
-  /// [expression] The raw expression.
-  /// [bindingsP] The bindings for the expression.
-  /// Returns the QueryBuilder instance.
-  ///
-  /// Example:
+  /// Sets the FROM clause to the raw SQL [expression], with [bindingsP] for
+  /// its `?` placeholders.
   ///
   /// ```dart
   ///  var map = await db
@@ -411,15 +388,13 @@ class QueryBuilder {
     return this;
   }
 
-  /// Creates a subquery and parse it.
+  /// Returns `[sql, bindings]` for a subquery.
   ///
-  /// [query] `Function`|`QueryBuilder`|`String` The subquery.
-  /// Returns a List containing `[String query, List Bindings]`.
+  /// [query] is a [QueryBuilder], raw SQL, a [QueryExpression], or a
+  /// `Function(QueryBuilder)` that is called with a new builder (see
+  /// [forSubQuery]) to build it.
   List createSub(dynamic query) {
-    // If the given query is a Closure, we will execute it while passing in a new
-    // query instance to the Closure. This will give the developer a chance to
-    // format and work with the query before we cast it to a raw SQL string.
-
+    // A function receives a fresh query to build before it is compiled.
     if (query is Function) {
       final callback = query;
       callback(query = this.forSubQuery());
@@ -430,20 +405,19 @@ class QueryBuilder {
     return result;
   }
 
-  /// Parse the subquery into SQL and bindings.
+  /// Returns `[sql, bindings]` for a [QueryBuilder], raw SQL or a
+  /// [QueryExpression].
   ///
-  /// [query] The subquery (`QueryBuilder`|`String`|`QueryExpression`).
-  /// Returns a List containing `[String query, List Bindings]`.
+  /// Raw SQL and expressions have no bindings. Throws [ArgumentError] for
+  /// any other value.
   List parseSub(dynamic query) {
     if (query is QueryBuilder) {
       return [query.toSql(), query.getBindings()];
     } else if (query is String) {
       return [query, []];
     } else if (query is QueryExpression) {
-      // added to handle lateral join
-      // If it is a QueryExpression, get the value (raw SQL)
-      // and assume there are no bindings associated *with this expression* here.
-      // Bindings for the raw expression must be added separately if necessary.
+      // Used by lateral joins. An expression carries no bindings: the caller
+      // adds them separately.
       return [query.getValue(), []];
     } else {
       throw ArgumentError.value(query, 'query',
@@ -451,15 +425,12 @@ class QueryBuilder {
     }
   }
 
-  /// Add a new select column to the query.
+  /// Adds a column, a list of columns or a map `{alias: column-or-subquery}`
+  /// to the select list.
   ///
-  /// [columnP] `QueryExpression`|`List`|`dynamic` The column(s) to add.
-  /// Returns the QueryBuilder instance.
-  ///
-  /// Adds columns to the select list. A map `{alias: subquery}` adds
-  /// `(subquery) as alias`; when nothing was selected yet the table's columns
+  /// A map entry adds `column as alias` or `(subquery) as alias`; when it
+  /// has a subquery and nothing was selected yet, the table's columns
   /// (`table.*`) are kept, as in Laravel.
-  ///
   QueryBuilder addSelect(dynamic columnP) {
     if (columnP is Map) {
       if (this.columnsProp == null &&
@@ -483,9 +454,7 @@ class QueryBuilder {
     return match != null ? match.group(1)! : from;
   }
 
-  /// Force the query to only return distinct results.
-  ///
-  /// Returns the QueryBuilder instance.
+  /// Makes the query `select distinct`.
   QueryBuilder distinct() {
     this.distinctProp = true;
 
@@ -503,14 +472,11 @@ class QueryBuilder {
     return this;
   }
 
-  /// Set the table which the query is targeting.
+  /// Sets the table the query targets, `table as alias` when [as] is given.
   ///
-  /// [tableP] `QueryExpression`|`String` The table to target.
-  /// Returns the QueryBuilder instance.
-  ///
-  /// [tableP] is a table name or a subquery (`QueryBuilder` or
-  /// `Function(QueryBuilder)`, which requires [as]).
-  ///
+  /// [tableP] is a table name, a [QueryExpression], or a subquery
+  /// (`QueryBuilder` or `Function(QueryBuilder)`, see [fromSub]), which
+  /// requires [as].
   QueryBuilder from(dynamic tableP, [String? as]) {
     if (_isQueryable(tableP)) {
       if (as == null) {
@@ -529,32 +495,26 @@ class QueryBuilder {
         '(${res[0]}) as ${this.grammar.wrapTable(alias)}', res[1] as List);
   }
 
-  /// Add a join clause to the query.
+  /// Adds a join: `type join table on one operator two`.
   ///
-  /// [table] `String`|`QueryExpression` The name of the table to join.
-  /// [one] `String`|`Function(JoinClause)` The first column or a callback.
-  /// [operator] `String` The operator (e.g. '=', 'in').
-  /// [two] `String`|`null` The second column.
-  /// [type] `String` The type of join (e.g. 'inner', 'left').
-  /// [where] `bool` Whether to use a where clause.
-  /// Returns the QueryBuilder instance.
+  /// [table] is a table name or a [QueryExpression]. [one] is the first
+  /// column, or a `Function(JoinClause)` that adds several `on`/`where`
+  /// conditions (then [operator] and [two] are ignored). [type] is the join
+  /// type (`inner`, `left`, `right`, `cross`). With [where] the condition
+  /// compares [one] with the bound value [two] instead of a column.
   QueryBuilder join(dynamic table, dynamic one,
       [String? operator,
       dynamic two = null,
       String type = SqlJoin.inner,
       bool where = false]) {
-    // If the first "column" of the join is really a Closure instance the developer
-    // is trying to build a join with a complex "on" clause containing more than
-    // one condition, so we'll add the join and call a Closure with the query.
+    // A function builds a join with several conditions.
     if (one is Function) {
       final join = JoinClause(type, table, this);
       one(join);
       this.joinsProp.add(join);
       this.addBinding(join.bindingsLocal, 'join');
     }
-// If the column is simply a string, we can assume the join simply has a basic
-// "on" clause with a single condition. So we will just build the join with
-// this simple join clauses attached to it. There is not a join callback.
+    // Otherwise the join has a single "on" condition.
     else {
       final join = JoinClause(type, table, this);
       this.joinsProp.add(join.on(one, operator, two, SqlBool.and, where));
@@ -564,49 +524,39 @@ class QueryBuilder {
     return this;
   }
 
-  /// Add a "join where" clause to the query.
-  ///
-  /// [table] The table to join.
-  /// [one] The first column.
-  /// [operator] The operator.
-  /// [two] The second column.
-  /// [type] The join type.
-  /// Returns the QueryBuilder instance.
+  /// Adds a join whose condition compares column [one] with the bound value
+  /// [two]: `join table on one operator ?`.
   QueryBuilder joinWhere(String table, one, operator, two,
       [type = SqlJoin.inner]) {
     return this.join(table, one, operator, two, type, true);
   }
 
-  /// Add a subquery join clause to the query.
+  /// Joins a subquery: `join (query) as alias on ...`.
   ///
-  /// [query] `QueryBuilder`|`String` The subquery.
-  /// [alias] The alias for the subquery.
-  /// [first] The first column.
-  /// [operator] The operator.
-  /// [second] The second column.
-  /// [type] The join type.
-  /// [where] Whether to use a where clause.
-  /// Returns the QueryBuilder instance.
+  /// [query] is a [QueryBuilder], a `Function(QueryBuilder)` or raw SQL. The
+  /// remaining arguments are those of [join]; [first] may be a
+  /// `Function(JoinClause)`.
   ///
-  /// Example:
   /// ```dart
+  /// var subQuery = db
+  ///     .table('public.clientes')
+  ///     .selectRaw('clientes_grupos.numero_cliente as numero_cliente, '
+  ///         'json_agg(row_to_json(grupos.*)) as grupos')
+  ///     .join('public.clientes_grupos', 'clientes_grupos.numero_cliente',
+  ///         '=', 'clientes.numero')
+  ///     .join('public.grupos', 'grupos.numero', '=',
+  ///         'clientes_grupos.numero_grupo')
+  ///     .groupBy('numero_cliente');
   ///
-  /// var subQuery = db.table('public.clientes')
-  ///  .selectRaw('clientes_grupos.numero_cliente as numero_cliente, json_agg(row_to_json(grupos.*)) as grupos')
-  ///  .join('public.clientes_grupos','clientes_grupos.numero_cliente','=','clientes.numero')
-  ///  .join('public.grupos','grupos.numero','=','clientes_grupos.numero_grupo')
-  ///  .groupBy('numero_cliente');
-  ///
-  ///  var map = await db
-  ///    .table('clientes')
-  ///    .selectRaw('clientes.*')
-  ///    .fromRaw('(SELECT * FROM public.clientes) AS clientes')
-  ///    .joinSub(subQuery, 'grupos',  (JoinClause join) {
-  ///        join.on('grupos.numero_cliente', '=', 'clientes.numero');
-  ///    })
-  ///    .limit(1)
-  ///    .first();
-  ///
+  /// var map = await db
+  ///     .table('clientes')
+  ///     .selectRaw('clientes.*')
+  ///     .fromRaw('(SELECT * FROM public.clientes) AS clientes')
+  ///     .joinSub(subQuery, 'grupos', (JoinClause join) {
+  ///       join.on('grupos.numero_cliente', '=', 'clientes.numero');
+  ///     })
+  ///     .limit(1)
+  ///     .first();
   /// ```
   QueryBuilder joinSub(dynamic query, alias, dynamic first,
       [String? operator, dynamic second, type = SqlJoin.inner, where = false]) {
@@ -641,80 +591,50 @@ class QueryBuilder {
         QueryExpression('(${res[0]}) as ${this.grammar.wrapTable(alias)}'));
   }
 
-  /// Add a left join to the query.
-  ///
-  /// [table] The table to join.
-  /// [first] The first column.
-  /// [operator] The operator.
-  /// [second] The second column.
-  /// Returns the QueryBuilder instance.
+  /// Adds a `left join`; see [join] for the forms of [first].
   QueryBuilder leftJoin(String table, first,
       [String? operator, dynamic second]) {
     return this.join(table, first, operator, second, SqlJoin.left);
   }
 
-  /// Add a "left join where" clause to the query.
-  ///
-  /// [table] The table to join.
-  /// [one] The first column.
-  /// [operator] The operator.
-  /// [two] The second column.
-  /// Returns the QueryBuilder instance.
+  /// Adds a `left join` comparing column [one] with the bound value [two];
+  /// see [joinWhere].
   QueryBuilder leftJoinWhere(
       String table, dynamic one, String operator, dynamic two) {
     return this.joinWhere(table, one, operator, two, SqlJoin.left);
   }
 
-  /// Add a right join to the query.
-  ///
-  /// [table] The table to join.
-  /// [first] The first column.
-  /// [operator] The operator.
-  /// [second] The second column.
-  /// Returns the QueryBuilder instance.
+  /// Adds a `right join`; see [join] for the forms of [first].
   QueryBuilder rightJoin(String table, dynamic first, String operator,
       [dynamic second]) {
     return this.join(table, first, operator, second, SqlJoin.right);
   }
 
-  /// Add a "right join where" clause to the query.
-  ///
-  /// [table] The table to join.
-  /// [one] The first column.
-  /// [operator] The operator.
-  /// [two] The second column.
-  /// Returns the QueryBuilder instance.
+  /// Adds a `right join` comparing column [one] with the bound value [two];
+  /// see [joinWhere].
   QueryBuilder rightJoinWhere(
       String table, dynamic one, String operator, dynamic two) {
     return this.joinWhere(table, one, operator, two, SqlJoin.right);
   }
 
-  /// Add a cross join to the query.
+  /// Adds a `cross join table`.
   ///
-  /// [table] The table to join.
-  /// [first] The first column.
-  /// [operator] The operator.
-  /// [second] The second column.
-  /// Returns the QueryBuilder instance.
+  /// With [first] the join gets an `on` condition, as in [join].
   QueryBuilder crossJoin(dynamic table,
       [dynamic first, String? operator, dynamic second]) {
     if (first != null) {
-      // If a conditional join is passed, delegate to the join method with type 'cross'
       return this.join(table, first, operator, second, SqlJoin.cross);
     }
-    // Otherwise, adds a JoinClause of type 'cross' without ON clause
     this.joinsProp.add(JoinClause(SqlJoin.cross, table, this));
     return this;
   }
 
-  /// Apply the [callback] only if [condition] is true.
-  /// Returns the QueryBuilder itself for chaining (fluent interface).
+  /// Runs [callback] when [condition] is truthy, otherwise [otherwise].
   ///
-  /// Runs [callback] when [condition] is truthy (not null, false, 0, '' or an
-  /// empty collection), otherwise [otherwise]. A callback that takes two
-  /// parameters also receives the value: `when(nome, (q, n) => q.where(...))`.
-  /// [condition] may be a function returning the value.
-  ///
+  /// Truthy means not null, false, 0, '' or an empty collection.
+  /// [condition] may be a function returning the value. A callback that
+  /// takes two parameters also receives the value:
+  /// `when(nome, (q, n) => q.where(...))`.
   QueryBuilder when(dynamic condition, Function callback,
       [Function? otherwise]) {
     final value = condition is dynamic Function() ? condition() : condition;
@@ -762,37 +682,38 @@ class QueryBuilder {
     return true;
   }
 
-  /// Add a basic where clause to the query.
+  /// Adds a where clause: `column operator ?`.
   ///
-  /// [column] `String`|`Map`|`Function(QueryBuilder)` The column, map of conditions, or nested callback.
-  /// [operator] `String` The operator (e.g. '=', '<').
-  /// [value] The value to compare.
-  /// [boolean] The boolean connector ('and' or 'or').
-  /// Returns the QueryBuilder instance.
-  ///
-  /// Example:
-  /// ```dart
-  ///  query.where((QueryBuilder qw1) {
-  ///         for (var i = 0; i < processos.length; i++) {
-  ///           var proc = processos[i];
-  ///           if (i == 0) {
-  ///             qw1.where((QueryBuilder q) {
-  ///               q.where('sw_processo.cod_processo', '=', proc.keys.first);
-  ///               q.where('sw_processo.ano_exercicio', '=', proc.values.first);
-  ///             });
-  ///           } else {
-  ///             qw1.orWhere((QueryBuilder q) {
-  ///               q.where('sw_processo.cod_processo', '=', proc.keys.first);
-  ///               q.where('sw_processo.ano_exercicio', '=', proc.values.first);
-  ///             });
-  ///           }
-  ///         }
-  /// ```
+  /// [column] is a column, a map `{column: value}` (each compared with `=`,
+  /// grouped in parentheses), or a `Function(QueryBuilder)` that builds a
+  /// nested group (see [whereNested]). A [value] that is a
+  /// `Function(QueryBuilder)` is a subquery: `column operator (select ...)`.
+  /// A [QueryExpression] value is inlined instead of bound. [boolean] is the
+  /// connector with the previous condition (`and`/`or`).
   ///
   /// Called with two arguments (`where('status', 'ativo')`) the second one is
   /// the value and the operator is `=`, as in Laravel. A `null` value becomes
   /// `is null` for `=` and `is not null` for `<>`/`!=`; any other operator with
   /// `null` throws [ArgumentError] instead of silently changing the filter.
+  ///
+  /// ```dart
+  /// query.where((QueryBuilder qw1) {
+  ///   for (var i = 0; i < processos.length; i++) {
+  ///     var proc = processos[i];
+  ///     if (i == 0) {
+  ///       qw1.where((QueryBuilder q) {
+  ///         q.where('sw_processo.cod_processo', '=', proc.keys.first);
+  ///         q.where('sw_processo.ano_exercicio', '=', proc.values.first);
+  ///       });
+  ///     } else {
+  ///       qw1.orWhere((QueryBuilder q) {
+  ///         q.where('sw_processo.cod_processo', '=', proc.keys.first);
+  ///         q.where('sw_processo.ano_exercicio', '=', proc.values.first);
+  ///       });
+  ///     }
+  ///   }
+  /// });
+  /// ```
   QueryBuilder where(dynamic column,
       [dynamic operator,
       dynamic value = _absent,
@@ -807,9 +728,8 @@ class QueryBuilder {
       }
     }
 
-    // If the column is an array, we will assume it is an array of key-value pairs
-    // and can add them each as a where clause. We will maintain the boolean we
-    // received when the method was called and pass it into the nested where.
+    // A map of column/value pairs becomes a nested group of `=` conditions,
+    // joined to the query with the given boolean.
     if (column is Map) {
       return this.whereNested((query) {
         for (var entry in column.entries) {
@@ -818,16 +738,11 @@ class QueryBuilder {
       }, boolean);
     }
 
-    // If the columns is actually a Closure instance, we will assume the developer
-    // wants to begin a nested where statement which is wrapped in parenthesis.
-    // We'll add that Closure to the query then return back out immediately.
+    // A function builds a nested group wrapped in parentheses.
     if (column is Function) {
       return this.whereNested(column, boolean);
     }
 
-    // If the value is a Closure, it means the developer is performing an entire
-    // sub-select within the query and we will need to compile the sub-select
-    // within the where clause to get the appropriate query record results.
     if (operator != null && operator is! String) {
       throw ArgumentError.value(operator, 'operator',
           'Expected an SQL operator such as "=", ">" or "like".');
@@ -854,9 +769,6 @@ class QueryBuilder {
               'use whereNull/whereNotNull.');
     }
 
-    // Now that we are working with just a simple query we can put the elements
-    // in our array and add the query binding to our array of bindings that
-    // will be bound to each SQL statements when it is finally executed.
     const type = SqlWhereType.basic;
 
     this.wheresProp.add({
@@ -876,117 +788,59 @@ class QueryBuilder {
     return this;
   }
 
+  /// Adds an `or` where clause; takes the same arguments as [where].
   QueryBuilder orWhere(dynamic column,
       [dynamic operator, dynamic value = _absent]) {
     return this.where(column, operator, value, SqlBool.or);
   }
 
-  /// Adds a flexible "WHERE" clause to the query.
+  /// Adds a where clause, guessing the operator from the arguments' values.
   ///
-  /// This method attempts to emulate the behavior of Laravel's `where` method, where:
+  /// Prefer [where], which tells `where(c, v)` from `where(c, op, v)` by the
+  /// number of arguments. Here a missing argument and `null` are the same,
+  /// so the forms are told apart by value:
   ///
-  /// - If the first parameter is a `Map`, it assumes the map contains key/value pairs and
-  ///   delegates to a nested WHERE clause (where each key is compared using the '=' operator).
-  /// - If the first parameter is a function receiving a `QueryBuilder`, it invokes that function
-  ///   to build a nested WHERE clause.
-  /// - If called with 2 arguments (e.g., `whereFlex('email', 'test@example.com')`),
-  ///   the method interprets the second parameter as the value and implicitly assumes the '=' operator.
-  /// - If called with 3 arguments (e.g., `whereFlex('age', '>', 18)`), the second parameter
-  ///   is interpreted as the operator and the third as the value.
-  /// - If the value is a Function (Closure) receiving a `QueryBuilder`, the clause is treated as a subquery.
-  /// - If the value is `null`, the method internally invokes `whereNull`, provided the operator is
-  ///   '=', '==', '!=' or '<>'. Otherwise, if the operator is not compatible with null values,
-  ///   it is expected to throw an exception (ArgumentError).
+  /// - [column] as a map or a `Function(QueryBuilder)` adds a nested group,
+  ///   as in [where].
+  /// - With [operator] and a non-null [value], [operator] must be a known
+  ///   operator; otherwise it throws [ArgumentError].
+  /// - With [operator] and a null [value], a known operator is used with
+  ///   `null` (`=`/`==` become `is null`, `!=`/`<>` `is not null`, any other
+  ///   throws [ArgumentError]); anything else is the value, compared with
+  ///   `=`. So a value that is itself an operator (`'like'`, `'='`) is read
+  ///   as the operator.
+  /// - Without [operator] the clause is `column is null`.
+  /// - A `Function(QueryBuilder)` value is a subquery, as in [whereSub].
   ///
-  /// **Limitations and Problematic Scenarios**:
-  ///
-  /// 1. **Argument count detection**:
-  ///    Unlike PHP (which uses `func_num_args()`), in Dart optional parameters always
-  ///    receive a value (even if it's the default value). Thus, there is no native way to differentiate
-  ///    a call with 2 arguments from a call with 3 arguments exactly.
-  ///    The method uses a helper function (_countNonDefaultArguments) as a heuristic to try
-  ///    to infer how many arguments were explicitly passed, but this approach may fail in ambiguous
-  ///    cases.
-  ///
-  /// 2. **Null value usage**:
-  ///    For example, if the user calls:
-  ///    ```dart
-  ///    qbFlex.whereFlex('deleted_at', '=', null);
-  ///    ```
-  ///    it is expected that the method interprets this as a "where deleted_at is null" clause.
-  ///    However, due to the heuristic used, the method might interpret this call as if it had
-  ///    been made with 2 arguments – causing the '=' operator to be considered as the value, which
-  ///    will result in the generated SQL:
-  ///    ```sql
-  ///    select * from "users" where "deleted_at" = ?
-  ///    ```
-  ///    with a binding whose value is '=' instead of `null`.
-  ///
-  /// 3. **Invalid operators with null**:
-  ///    If an operator other than '=', '==', '!=' or '<>' is used when explicitly passing a null value,
-  ///    it is expected that the method throws an exception. However, if the method interprets the call as having
-  ///    only 2 parameters, this validation will not occur and the generated SQL will not match the developer's
-  ///    intention.
-  ///
-  /// **Expected usage example (no issues):**
+  /// Unlike [where], a list value is spread into one binding per element.
   ///
   /// ```dart
-  /// // 2 arguments interpretation: '=' operator is inferred
-  /// qbFlex.whereFlex('email', 'test@example.com');
-  /// // Generates: where "email" = ?
-  /// // Binding: ['test@example.com']
-  ///
-  /// // Call with 3 arguments for valid operators:
-  /// qbFlex.whereFlex('age', '>', 18);
-  /// // Generates: where "age" > ?
-  /// // Binding: [18]
+  /// query.whereFlex('email', 'test@example.com'); // "email" = ?
+  /// query.whereFlex('age', '>', 18); // "age" > ?
+  /// query.whereFlex('deleted_at', '=', null); // "deleted_at" is null
   /// ```
-  ///
-  /// **Problematic scenario:**
-  ///
-  /// ```dart
-  /// // The intention is that this code generates a "where deleted_at is null" clause
-  /// // but, due to the heuristic, it might produce:
-  /// qbFlex.whereFlex('deleted_at', '=', null);
-  /// // Generates: where "deleted_at" = ?
-  /// // Binding: ['=']   <-- incorrect binding, because the '=' operator was interpreted as value
-  /// ```
-  ///
-  /// Due to these intrinsic limitations of the Dart language (especially the difficulty of precisely detecting
-  /// the number of passed arguments), it is possible that the `whereFlex` functionality may not
-  /// behave as expected in all scenarios, so caution is recommended when using it in cases
-  /// where null values and operators need to be differentiated precisely.
-  ///
-  /// **Return:**
-  /// Returns the current `QueryBuilder` instance to allow method chaining.
   QueryBuilder whereFlex(dynamic column,
       [dynamic operator, // Kept as dynamic
       dynamic value,
       String boolean = SqlBool.and]) {
-    // Case 1: Map
     if (column is Map) {
       return this.whereNested((query) {
         column.forEach((k, v) {
           query.where(k, SqlOperator.equals, v);
-        }); // Use normal where here
+        });
       }, boolean);
     }
 
-    // Case 2: Function as first argument
     if (column is Function(QueryBuilder)) {
       return this.whereNested(column, boolean);
     }
 
-    // --- Refined Logic to Determine Operator and Value ---
     String? finalOperator;
     dynamic finalValue;
 
-    // Checks if the SECOND argument (operator) WAS provided
     if (operator != null) {
-      // Checks if the THIRD argument (value) was also provided
       if (value != null) {
-        // Scenario: where('column', 'op', 'val')
-        // The second argument MUST be a valid String operator
+        // whereFlex('column', 'op', value): the operator must be known.
         if (operator is String && isValidOperator(operator)) {
           finalOperator = operator;
           finalValue = value;
@@ -995,36 +849,26 @@ class QueryBuilder {
               'When 3 arguments are provided, the second must be a valid string operator. Got type ${operator.runtimeType} ("$operator")');
         }
       } else {
-        // Scenario: where('column', 'something') - 'something' can be operator or value
-        // Checks if 'something' (passed as operator) is a VALID String operator
+        // whereFlex('column', x): x is the operator (compared with null
+        // below) when it is a known operator, otherwise the value.
         if (operator is String && isValidOperator(operator)) {
-          // It is a valid operator! Treat as where('column', 'op'). The value is implicitly null.
           finalOperator = operator;
           finalValue = null;
-          // The subsequent validation (invalidOperatorAndValue) will handle if op + null is valid
         } else {
-          // NOT a valid operator. Treat as where('column', 'value').
-          finalOperator = SqlOperator.equals; // Implicit operator
-          finalValue = operator; // The second argument was the value
+          finalOperator = SqlOperator.equals;
+          finalValue = operator;
         }
       }
     } else {
-      // Scenario where('column') - Second argument (operator) is null.
-      // Treat as where('column', '=', null), which will be caught by the null logic below.
+      // whereFlex('column') means `column is null`.
       finalOperator = SqlOperator.equals;
       finalValue = null;
     }
-    // --- End of Refined Logic ---
 
-    // Case 3: Final value is Function (whereSub)
     if (finalValue is Function(QueryBuilder)) {
-      // It is crucial that 'finalOperator' is a valid operator here.
-      // The logic above must ensure this or have thrown an exception.
-      // If finalOperator is null here, something is wrong, use '=' as safe fallback.
-      return this.whereSub(column, finalOperator, finalValue, boolean); //?? '='
+      return this.whereSub(column, finalOperator, finalValue, boolean);
     }
 
-    // Case 4: Final value is null (whereNull / whereNotNull)
     if (finalValue == null) {
       bool not = (finalOperator == SqlOperator.notEquals ||
           finalOperator == SqlOperator.notEqualsSql);
@@ -1033,23 +877,19 @@ class QueryBuilder {
           not) {
         return this.whereNull(column, boolean, not);
       }
-      // If not an (in)equality operator, the validation below MUST fail.
+      // Any other operator with null fails the check below.
     }
 
-    // Final validation: Checks for illegal combinations
     if (this.invalidOperatorAndValue(finalOperator, finalValue)) {
-      // If this validation fails, it means the logic above did not handle
-      // correctly or the user provided an invalid combination (e.g., '>', null)
       throw ArgumentError(
           'Illegal operator "$finalOperator" and value combination ($finalValue). Operator must be "=" or "!=" or "<>" if value is null.');
     }
 
-    // Case 5: Basic WHERE Clause
     const type = SqlWhereType.basic;
     this.wheresProp.add({
       'type': type,
       'column': column,
-      'operator': finalOperator, // Definitely not null here
+      'operator': finalOperator,
       'value': finalValue,
       'boolean': boolean
     });
@@ -1061,11 +901,13 @@ class QueryBuilder {
     return this;
   }
 
-  // --- Manter orWhereFlex, isValidOperator, invalidOperatorAndValue como estão ---
+  /// Adds an `or` where clause; takes the same arguments as [whereFlex].
   QueryBuilder orWhereFlex(dynamic column, [dynamic operator, dynamic value]) {
     return this.whereFlex(column, operator, value, SqlBool.or);
   }
 
+  /// Whether [op] is one of the builder's or the grammar's operators,
+  /// ignoring case.
   bool isValidOperator(String? op) {
     if (op == null) return false;
     final allOperators = {..._operators, ...grammar.getOperators()}
@@ -1074,6 +916,8 @@ class QueryBuilder {
     return allOperators.contains(op.toLowerCase());
   }
 
+  /// Whether [operator] cannot be used with [value]: only `=`, `==`, `!=`
+  /// and `<>` can be compared with null.
   bool invalidOperatorAndValue(String? operator, dynamic value) {
     if (value == null) {
       bool isValidNullOp = (operator == SqlOperator.equals ||
@@ -1085,30 +929,25 @@ class QueryBuilder {
     return false;
   }
 
+  /// Adds `column = (select ...)`, the subquery built by [closure].
   QueryBuilder whereSubQueryValue(String column, Function(QueryBuilder) closure,
       [String boolean = SqlBool.and]) {
     return this.where(column, SqlOperator.equals, closure, boolean);
   }
 
-  /// Add a "where" clause comparing two columns to the query.
+  /// Adds a where clause comparing two columns: `first operator second`.
   ///
-  /// [first] `String`|`List`|`Map` The first column or array of conditions.
-  /// [operator] `String`|`null` The operator.
-  /// [second] `String`|`null` The second column.
-  /// [boolean] `String` The boolean connector.
-  /// Returns the QueryBuilder instance.
+  /// When [operator] is not a known operator it is the second column and the
+  /// comparison is `=`: `whereColumn('a', 'b')` is `a = b`. [first] may also
+  /// be a list or map of conditions, grouped in parentheses (see
+  /// [addArrayOfWheres]).
   QueryBuilder whereColumn(dynamic first,
       [String? operator, dynamic second, String boolean = SqlBool.and]) {
-    // If "first" is an array (List or Map), we assume it is a set of conditions
-    // and delegate the addition of conditions to the addArrayOfWheres method.
     if (first is List || first is Map) {
       return this.addArrayOfWheres(first, boolean, 'whereColumn');
     }
 
-    // Checks if the provided operator is valid.
-    // If the operator is not found in the list of valid operators of the class (_operators)
-    // or in the grammar's operators list (grammar.getOperators()),
-    // we assume the developer is shortening the usage of the '=' operator.
+    // Not a known operator: whereColumn('a', 'b') is shorthand for `a = b`.
     if (operator == null ||
         !(this._operators.contains(operator.toLowerCase()) ||
             this.grammar.getOperators().contains(operator.toLowerCase()))) {
@@ -1116,10 +955,8 @@ class QueryBuilder {
       operator = SqlOperator.equals;
     }
 
-    // Sets the 'where' clause type to 'Column'
     const type = SqlWhereType.column;
 
-    // Adds the clause to the conditions list (wheresProp)
     this.wheresProp.add({
       'type': type,
       'first': first,
@@ -1131,9 +968,10 @@ class QueryBuilder {
     return this;
   }
 
-  /// Add an "or where" clause comparing two columns to the query.
+  /// Adds an `or` where clause comparing two columns; see [whereColumn].
   ///
-  /// orWhereColumn('first_name', 'last_name') => OR first_name = last_name
+  /// `orWhereColumn('first_name', 'last_name')` adds
+  /// `or first_name = last_name`.
   QueryBuilder orWhereColumn(dynamic first,
       [String? operator, dynamic second]) {
     return this.whereColumn(first, operator, second, SqlBool.or);
@@ -1155,33 +993,35 @@ class QueryBuilder {
     }
   }
 
+  /// Adds a list or map of conditions as one nested group.
+  ///
+  /// A map entry `{column: value}` is compared with `=`; an entry with an
+  /// int key and a list value, or a list item that is itself a list, holds
+  /// the arguments of a call to [method] (`'where'`, `'orWhere'`,
+  /// `'whereColumn'` or `'orWhereColumn'`). With `whereColumn` the map
+  /// values are columns, not bound values.
   QueryBuilder addArrayOfWheres(dynamic column, String boolean,
       [String method = 'where']) {
-    // Uses whereNested to group conditions
     return this.whereNested((QueryBuilder query) {
-      // If "column" is a Map (associative array of conditions)
       if (column is Map) {
         column.forEach((key, value) {
-          // If the key is numeric and the value is a list,
-          // we assume the list contains the parameters to call the 'where' method dynamically.
+          // `{0: ['column', '>', 1]}`: the arguments of a call to [method].
           if (key is int && value is List) {
             Function.apply(_arrayWhereMethod(query, method), value);
           } else if (method == 'whereColumn') {
             // {'first': 'second'}: both sides are columns.
             query.whereColumn(key, SqlOperator.equals, value);
           } else {
-            // Otherwise, treats the key as column name and the value as the value to be compared.
             query.where(key, SqlOperator.equals, value);
           }
         });
       }
-      // If "column" is a list, iterates over each item
+      // A list holds argument lists and maps of conditions.
       else if (column is List) {
         for (var item in column) {
           if (item is List) {
             Function.apply(_arrayWhereMethod(query, method), item);
           } else if (item is Map) {
-            // If the item is a map, iterates over each key and value
             item.forEach((key, value) {
               if (method == 'whereColumn') {
                 query.whereColumn(key, SqlOperator.equals, value);
@@ -1195,13 +1035,7 @@ class QueryBuilder {
     }, boolean);
   }
 
-  /// Add a raw where clause to the query.
-  ///
-  /// [sql] `String` The raw SQL.
-  /// [bindings] `List` The bindings.
-  /// [boolean] `String` The boolean connector.
-  /// Returns the QueryBuilder instance.
-  // ------------------------------------------------- whereAny / All / None / Not
+  // ---------------------------------------- whereAny / All / None / Not
 
   /// `(c1 op ? or c2 op ? ...)`: any of [columns] matches.
   /// `whereAny(['nome', 'email'], 'like', '%ana%')`; with two arguments the
@@ -1686,6 +1520,8 @@ class QueryBuilder {
     }
   }
 
+  /// Adds a raw SQL where condition, with [bindings] for its `?`
+  /// placeholders.
   QueryBuilder whereRaw(String sql,
       [List bindings = const [], boolean = SqlBool.and]) {
     const type = SqlWhereType.raw;
@@ -1694,22 +1530,15 @@ class QueryBuilder {
     return this;
   }
 
-  /// Add a raw or where clause to the query.
-  ///
-  /// [sql] `String` The raw SQL.
-  /// [bindings] `List` The bindings.
-  /// Returns the QueryBuilder instance.
+  /// Adds a raw SQL `or` where condition; see [whereRaw].
   QueryBuilder orWhereRaw(String sql, [List bindings = const []]) {
     return this.whereRaw(sql, bindings, SqlBool.or);
   }
 
-  /// Add a where between statement to the query.
+  /// Adds `column between ? and ?` (`not between` when [not]).
   ///
-  /// [column] `String` The column.
-  /// [values] `List` The values.
-  /// [boolean] `String` The boolean connector.
-  /// [not] `bool` Whether it is a NOT BETWEEN.
-  /// Returns the QueryBuilder instance.
+  /// [values] holds the two bounds, both included. Its length is not
+  /// checked; the SQL always has two placeholders.
   QueryBuilder whereBetween(String column,
       [List? values, String boolean = SqlBool.and, bool not = false]) {
     const type = SqlWhereType.between;
@@ -1723,38 +1552,25 @@ class QueryBuilder {
     return this;
   }
 
-  ///
-  /// Add an or where between statement to the query.
-  ///
-  ///
+  /// Adds `or column between ? and ?`; see [whereBetween].
   QueryBuilder orWhereBetween(String column, List values) {
     return this.whereBetween(column, values, SqlBool.or);
   }
 
-  /// Add a where not between statement to the query.
-  ///
-  /// [column] `String` The column.
-  /// [values] `List` The values.
-  /// [boolean] `String` The boolean connector.
-  /// Returns the QueryBuilder instance.
+  /// Adds `column not between ? and ?`; see [whereBetween].
   QueryBuilder whereNotBetween(column, List values, [boolean = SqlBool.and]) {
     return this.whereBetween(column, values, boolean, true);
   }
 
-  /// Add an or where not between statement to the query.
-  ///
-  /// [column] `String` The column.
-  /// [values] `List` The values.
-  /// Returns the QueryBuilder instance.
+  /// Adds `or column not between ? and ?`; see [whereBetween].
   QueryBuilder orWhereNotBetween(String column, List values) {
     return this.whereNotBetween(column, values, SqlBool.or);
   }
 
-  /// Add a nested where statement to the query.
+  /// Adds a parenthesized group of conditions built by [callback].
   ///
-  /// [callback] `Function` The callback for the nested query.
-  /// [boolean] `String` The boolean connector.
-  /// Returns the QueryBuilder instance.
+  /// [callback] receives a new query on the same table (see
+  /// [forNestedWhere]); a group left without conditions adds nothing.
   QueryBuilder whereNested(Function callback, [String boolean = SqlBool.and]) {
     var query = this.forNestedWhere();
 
@@ -1763,20 +1579,15 @@ class QueryBuilder {
     return this.addNestedWhereQuery(query, boolean);
   }
 
-  /// Create a new query instance for nested where condition.
-  ///
-  /// Returns the new QueryBuilder instance.
+  /// Returns a new query on the same table, for a nested where group.
   QueryBuilder forNestedWhere() {
     var query = this.newQuery();
 
     return query.from(this.fromProp);
   }
 
-  /// Add another query builder as a nested where to the query builder.
-  ///
-  /// [query] `QueryBuilder` The nested query.
-  /// [boolean] `String` The boolean connector.
-  /// Returns the QueryBuilder instance.
+  /// Adds the where conditions of [query] as a parenthesized group, with
+  /// its bindings; does nothing when [query] has no conditions.
   QueryBuilder addNestedWhereQuery(QueryBuilder query,
       [boolean = SqlBool.and]) {
     if (query.wheresProp.isNotEmpty) {
@@ -1790,22 +1601,14 @@ class QueryBuilder {
     return this;
   }
 
-  /// Add a full sub-select to the query.
-  ///
-  /// [column] `String` The column.
-  /// [operator] `String`|`null` The operator.
-  /// [callback] `Function` The callback.
-  /// [boolean] `String` The boolean connector.
-  /// Returns the QueryBuilder instance.
+  /// Adds `column operator (select ...)`, the subquery built by [callback]
+  /// on a new query.
   QueryBuilder whereSub(
       String column, String? operator, Function callback, String boolean) {
     const type = SqlWhereType.sub;
 
     var query = this.newQuery();
 
-    // Once we have the query instance we can simply execute it so it can add all
-    // of the sub-select's conditions to itself, and then we can cache it off
-    // in the array of where clauses for the "main" parent query instance.
     callback(query);
 
     this.wheresProp.add({
@@ -1821,19 +1624,20 @@ class QueryBuilder {
     return this;
   }
 
+  /// Like [whereSub], but builds the subquery on [forSubQuery] and uses `=`
+  /// when [operator] is null.
   QueryBuilder whereSubFlex(
       String column, String? operator, Function callback, String boolean) {
     const type = SqlWhereType.sub;
-    final query = this.forSubQuery(); // Use forSubQuery for consistency
+    final query = this.forSubQuery();
     callback(query);
 
-    // Ensures a default operator if it is null, although previous logic should prevent this
     operator ??= SqlOperator.equals;
 
     this.wheresProp.add({
       'type': type,
       'column': column,
-      'operator': operator, // Final operator determined
+      'operator': operator,
       'query': query,
       'boolean': boolean
     });
@@ -1842,14 +1646,12 @@ class QueryBuilder {
     return this;
   }
 
-  /// Add an exists clause to the query.
+  /// Adds `exists (select ...)` (`not exists` when [not]), the subquery
+  /// built by [callback] on a new query.
   ///
-  /// [callback] `Function` The callback.
-  /// [boolean] `String` The boolean connector.
-  /// [not] `bool` Whether it is a NOT EXISTS.
-  /// Returns the QueryBuilder instance.
+  /// The callback receives a [QueryBuilder], so it uses `from(...)` instead
+  /// of `table(...)`:
   ///
-  /// Example:
   /// ```dart
   /// db.table('usuario as usuario')
   ///   .whereExists((q) {
@@ -1859,17 +1661,12 @@ class QueryBuilder {
   ///      .where('uo_filtro.id_organograma', '=', 10);
   ///   });
   /// ```
-  /// Note: the callback receives a QueryBuilder, so use `from(...)` instead of
-  /// `table(...)` inside the callback.
   QueryBuilder whereExists(Function callback,
       [String boolean = SqlBool.and, not = false]) {
     var type = not ? SqlWhereType.notExists : SqlWhereType.exists;
 
     var query = this.newQuery();
 
-    // Similar to the sub-select clause, we will create a new query instance so
-    // the developer may cleanly specify the entire exists query and we will
-    // compile the whole thing in the grammar and insert it into the SQL.
     callback(query);
 
     this.wheresProp.add(
@@ -1880,61 +1677,37 @@ class QueryBuilder {
     return this;
   }
 
-  /// Add an or exists clause to the query.
-  ///
-  /// [callback] `Function` The callback.
-  /// [not] `bool` Whether it is a NOT EXISTS.
-  /// Returns the QueryBuilder instance.
-  ///
-  /// Note: the callback receives a QueryBuilder, so use `from(...)` instead of
-  /// `table(...)` inside the callback.
+  /// Adds `or exists (select ...)` (`or not exists` when [not]); see
+  /// [whereExists].
   QueryBuilder orWhereExists(Function callback, [bool not = false]) {
     return this.whereExists(callback, SqlBool.or, not);
   }
 
-  /// Add a where not exists clause to the query.
-  ///
-  /// [callback] `Function` The callback.
-  /// [boolean] `String` The boolean connector.
-  /// Returns the QueryBuilder instance.
-  ///
-  /// Note: the callback receives a QueryBuilder, so use `from(...)` instead of
-  /// `table(...)` inside the callback.
+  /// Adds `not exists (select ...)`; see [whereExists].
   QueryBuilder whereNotExists(Function callback,
       [String boolean = SqlBool.and]) {
     return this.whereExists(callback, boolean, true);
   }
 
-  /// Add an or where not exists clause to the query.
-  ///
-  /// [callback] `Function` The callback.
-  /// Returns the QueryBuilder instance.
-  ///
-  /// Note: the callback receives a QueryBuilder, so use `from(...)` instead of
-  /// `table(...)` inside the callback.
+  /// Adds `or not exists (select ...)`; see [whereExists].
   QueryBuilder orWhereNotExists(Function callback) {
     return this.orWhereExists(callback, true);
   }
 
-  /// Add a "where in" clause to the query.
+  /// Adds `column in (?, ...)` (`not in` when [not]).
   ///
-  /// [column] `String` The column.
-  /// [values] `List`|`QueryBuilder`|`Function` The values.
-  /// [boolean] `String` The boolean connector.
-  /// [not] `bool` Whether it is a NOT IN.
-  /// Returns the QueryBuilder instance.
+  /// [values] is a list or other iterable (one binding per element), a
+  /// [QueryBuilder] or a `Function(QueryBuilder)` that builds a subquery:
+  /// `column in (select ...)`. An empty list matches nothing (`0 = 1`); with
+  /// [not] it excludes nothing (`1 = 1`).
   QueryBuilder whereIn(String column, dynamic values,
       [String boolean = SqlBool.and, bool not = false]) {
     var type = not ? SqlWhereType.notInList : SqlWhereType.inList;
 
-    //static se refere ao instancia da propria class
     if (values is QueryBuilder) {
       return this.whereInExistingQuery(column, values, boolean, not);
     }
 
-    // If the value of the where in clause is actually a Closure, we will assume that
-    // the developer is using a full sub-select for this "in" statement, and will
-    // execute those Closures, then we can re-construct the entire sub-selects.
     if (values is Function) {
       return this.whereInSub(column, values, boolean, not);
     }
@@ -1952,45 +1725,27 @@ class QueryBuilder {
     return this;
   }
 
-  /// Add an "or where in" clause to the query.
-  ///
-  /// [column] `String` The column.
-  /// [values] `dynamic` The values.
-  /// Returns the QueryBuilder instance.
+  /// Adds `or column in (...)`; see [whereIn].
   QueryBuilder orWhereIn(String column, dynamic values) {
     return this.whereIn(column, values, SqlBool.or);
   }
 
-  /// Add a "where not in" clause to the query.
-  ///
-  /// [column] `String` The column.
-  /// [values] `dynamic` The values.
-  /// [boolean] `String` The boolean connector.
-  /// Returns the QueryBuilder instance.
+  /// Adds `column not in (...)`; see [whereIn].
   QueryBuilder whereNotIn(String column, values, [boolean = SqlBool.and]) {
     return this.whereIn(column, values, boolean, true);
   }
 
-  /// Add an "or where not in" clause to the query.
-  ///
-  /// [column] `String` The column.
-  /// [values] `dynamic` The values.
-  /// Returns the QueryBuilder instance.
+  /// Adds `or column not in (...)`; see [whereIn].
   QueryBuilder orWhereNotIn(column, values) {
     return this.whereNotIn(column, values, SqlBool.or);
   }
 
-  ///
-  /// Add a where in with a sub-select to the query.
-  ///
-  ///
+  /// Adds `column in (select ...)` (`not in` when [not]), the subquery
+  /// built by [callback] on a new query.
   QueryBuilder whereInSub(
       String column, Function callback, String boolean, bool not) {
     final type = not ? SqlWhereType.notInSub : SqlWhereType.inSub;
 
-    // To create the exists sub-select, we will actually create a query and call the
-    // provided callback with the query so the developer may set any of the query
-    // conditions they want for the in clause, then we'll put it in this array.
     final query = this.newQuery();
     callback(query);
 
@@ -2002,10 +1757,8 @@ class QueryBuilder {
     return this;
   }
 
-  ///
-  /// Add a external sub-select to the query.
-  ///
-  ///
+  /// Adds `column in (select ...)` (`not in` when [not]) with an existing
+  /// [query] as the subquery.
   QueryBuilder whereInExistingQuery(
       String column, QueryBuilder query, String boolean, bool not) {
     var type = not ? SqlWhereType.notInSub : SqlWhereType.inSub;
@@ -2018,10 +1771,7 @@ class QueryBuilder {
     return this;
   }
 
-  ///
-  /// Add a "where null" clause to the query.
-  ///
-  ///
+  /// Adds `column is null` (`is not null` when [not]).
   QueryBuilder whereNull(String column,
       [String boolean = SqlBool.and, bool not = false]) {
     var type = not ? SqlWhereType.isNotNull : SqlWhereType.isNull;
@@ -2031,21 +1781,19 @@ class QueryBuilder {
     return this;
   }
 
-  ///
-  /// Add an "or where null" clause to the query.
-  ///
-  ///
+  /// Adds `or column is null`.
   QueryBuilder orWhereNull(String column) {
     return this.whereNull(column, SqlBool.or);
   }
 
   // --- PostgreSQL JSON / array / full-text helpers -------------------------
 
-  /// Add a JSON containment clause: `("column")::jsonb @> ?`.
+  /// Adds a JSON containment condition: `("column")::jsonb @> ?`
+  /// (PostgreSQL; other grammars throw [UnsupportedError]).
   ///
-  /// [value] is JSON-encoded and bound. Use for jsonb columns and arrays, e.g.
-  /// `whereJsonContains('tags', ['urgent'])` or
-  /// `whereJsonContains('meta->roles', 'admin')`.
+  /// [value] is JSON-encoded and bound; a [QueryExpression] is inlined. Use
+  /// for jsonb columns and arrays, e.g. `whereJsonContains('tags', ['urgent'])`
+  /// or `whereJsonContains('meta->roles', 'admin')`. [not] negates it.
   QueryBuilder whereJsonContains(String column, dynamic value,
       [String boolean = SqlBool.and, bool not = false]) {
     this.wheresProp.add({
@@ -2071,7 +1819,8 @@ class QueryBuilder {
   QueryBuilder orWhereJsonDoesntContain(String column, dynamic value) =>
       this.whereJsonContains(column, value, SqlBool.or, true);
 
-  /// Add a JSON array length comparison: `jsonb_array_length(("column")::jsonb) <op> ?`.
+  /// Adds a JSON array length comparison:
+  /// `jsonb_array_length(("column")::jsonb) <operator> ?` (PostgreSQL).
   QueryBuilder whereJsonLength(String column, String operator, dynamic value,
       [String boolean = SqlBool.and]) {
     this.wheresProp.add({
@@ -2091,10 +1840,13 @@ class QueryBuilder {
           String column, String operator, dynamic value) =>
       this.whereJsonLength(column, operator, value, SqlBool.or);
 
-  /// Add a PostgreSQL full-text search clause across one or more [columns].
+  /// Adds a full-text search of [value] across [columns] (a column or a
+  /// list of columns).
   ///
+  /// On PostgreSQL it is `(to_tsvector(lang, col) || ...) @@ <tsquery>`;
   /// [options] may include `'language'` (default `'english'`) and `'mode'`
-  /// (`'plain'` | `'phrase'` | `'websearch'`).
+  /// (`'plain'`, `'phrase'` or `'websearch'`). MySQL compiles its own
+  /// `match ... against` form.
   QueryBuilder whereFullText(dynamic columns, String value,
       [Map<String, dynamic> options = const {}, String boolean = SqlBool.and]) {
     final cols = columns is List
@@ -2151,89 +1903,70 @@ class QueryBuilder {
       'value': value,
       'boolean': boolean,
     });
-    // Add the whole List as a single binding (addBinding would spread it).
+    // One binding for the whole list (addBinding would spread it).
     this.bindings['where'].add(value);
     return this;
   }
 
-  ///
-  /// Add a "where not null" clause to the query.
-  ///
-  ///
+  /// Adds `column is not null`.
   QueryBuilder whereNotNull(String column, [String boolean = SqlBool.and]) {
     return this.whereNull(column, boolean, true);
   }
 
-  ///
-  /// Add an "or where not null" clause to the query.
-  ///
-  ///
+  /// Adds `or column is not null`.
   QueryBuilder orWhereNotNull(String column) {
     return this.whereNotNull(column, SqlBool.or);
   }
 
-  ///
-  /// Add a "where date" statement to the query.
-  ///
-  ///
+  /// Compares the date part of [column] with [value]: `"column"::date op ?`
+  /// on PostgreSQL, `date("column") op ?` on MySQL.
   QueryBuilder whereDate(String column, String? operator, DateTime? value,
       [String boolean = SqlBool.and]) {
     return this.addDateBasedWhere('Date', column, operator, value, boolean);
   }
 
-  /// Add an "or where date" statement to the query.
-  /// Basic: `orWhereDate('created_at', '=', someDate)`
+  /// Adds an `or` comparison of the date part of [column]; see [whereDate].
+  ///
+  /// `orWhereDate('created_at', '=', someDate)`.
   QueryBuilder orWhereDate(String column, String operator, DateTime? value) {
     return this.whereDate(column, operator, value, SqlBool.or);
   }
 
-  /// Add a "where time" statement to the query.
-  /// [column] Ex: 'created_at'
-  /// [operator] Ex: '=', '<', '>'
-  /// [value] Ex: '12:00:00' or a DateTime whose time matters
-  /// [boolean] Whether it is 'and' or 'or'
+  /// Compares the time part of [column] with [value] (e.g. `'12:00:00'`):
+  /// `time("column") op ?` on MySQL, `extract(time from "column") op ?` on
+  /// PostgreSQL.
   QueryBuilder whereTime(String column, String operator, dynamic value,
       [String boolean = SqlBool.and]) {
-    // Assuming addDateBasedWhere('Time', ...) truncates/compares only the time part
     return this.addDateBasedWhere('Time', column, operator, value, boolean);
   }
 
-  /// Add an "or where time" statement to the query.
+  /// Adds an `or` comparison of the time part of [column]; see [whereTime].
   QueryBuilder orWhereTime(String column, String operator, dynamic value) {
     return this.whereTime(column, operator, value, SqlBool.or);
   }
 
-  ///
-  /// Add a "where day" statement to the query.
-  ///
-  ///
+  /// Compares the day of the month of [column] with [value]:
+  /// `extract(day from "column") op ?` on PostgreSQL, `day("column") op ?`
+  /// on MySQL.
   QueryBuilder whereDay(String column, String operator, int value,
       [String boolean = SqlBool.and]) {
     return this.addDateBasedWhere('Day', column, operator, value, boolean);
   }
 
-  ///
-  /// Add a "where month" statement to the query.
-  ///
-  ///
+  /// Compares the month (1-12) of [column] with [value]; see [whereDay].
   QueryBuilder whereMonth(String column, String operator, int value,
       [String boolean = SqlBool.and]) {
     return this.addDateBasedWhere('Month', column, operator, value, boolean);
   }
 
-  ///
-  /// Add a "where year" statement to the query.
-  ///
-  ///
+  /// Compares the year of [column] with [value]; see [whereDay].
   QueryBuilder whereYear(String column, String operator, int value,
       [String boolean = SqlBool.and]) {
     return this.addDateBasedWhere('Year', column, operator, value, boolean);
   }
 
-  ///
-  /// Add a date based (year, month, day) statement to the query.
-  ///
-  ///
+  /// Adds a where clause of [type] `'Date'`, `'Time'`, `'Day'`, `'Month'` or
+  /// `'Year'`, compiled by the grammar's method of the same name.
   QueryBuilder addDateBasedWhere(
       String type, String column, String? operator, dynamic value,
       [String boolean = SqlBool.and]) {
@@ -2248,25 +1981,21 @@ class QueryBuilder {
     return this;
   }
 
+  /// Adds the where clauses named by a Laravel dynamic where [method], one
+  /// `=` comparison per column with the [parameters] in order.
   ///
-  /// Handles dynamic "where" clauses to the query.
+  /// [method] starts with `where`, followed by CamelCase column names joined
+  /// by `And` or `Or`: `dynamicWhere('whereFirstNameAndLastName',
+  /// ['John', 'Doe'])` adds
   ///
-  ///
-  ///
-  /// Example: `whereFirstNameAndLastName('John', 'Doe')` will be translated to:
   /// ```dart
   /// where('first_name', '=', 'John', 'and')
   ///   .where('last_name', '=', 'Doe', 'and')
   /// ```
-  ///
-  /// The method expects the name to start with "where" and the rest to be composed
-  /// of segments separated by "And" or "Or".
   QueryBuilder dynamicWhere(String method, List<dynamic> parameters) {
-    // Removes the "where" prefix
     final finder = method.substring(5);
 
-    // Processes the string, separating segments and connectors.
-    // Uses a regex to capture "And" or "Or" when followed by an uppercase letter.
+    // Splits on "And"/"Or" followed by an uppercase letter, keeping them.
     final RegExp regExp = RegExp(r'(And|Or)(?=[A-Z])');
     final List<String> tokens = [];
     int start = 0;
@@ -2290,27 +2019,19 @@ class QueryBuilder {
     return this;
   }
 
-  ///
-  /// Add a single dynamic where clause statement to the query.
-  ///
-  ///
+  /// Adds `snake_case(segment) = parameters[index]` with [connector], for
+  /// [dynamicWhere].
   void addDynamic(
       String segment, String connector, List<dynamic> parameters, int index) {
-    // Converts the segment from CamelCase to snake_case.
     final column = Utils.toSnakeCase(segment);
-    // Adds the where clause using the "=" operator.
-    // Here it is assumed that the where method is already implemented in the class.
     where(column, SqlOperator.equals, parameters[index], connector);
   }
 
-  ///
-  /// Add a "group by" clause to the query.
-  ///
-  ///
+  /// Adds columns to the `group by` clause.
   ///
   /// [column] is a column name, a [QueryExpression] (`db.raw(...)`) or a list
-  /// of them. Anything else throws (it used to be ignored silently).
-  ///
+  /// of them. Anything else throws [ArgumentError] (it used to be ignored
+  /// silently).
   QueryBuilder groupBy(dynamic column) {
     if (column is List) {
       for (final item in column) {
@@ -2332,29 +2053,26 @@ class QueryBuilder {
     }
   }
 
-  ///
-  /// Add a raw "group by" clause, with optional bindings.
+  /// Adds the raw SQL [sql] to the `group by` clause, with [bindingsP] for
+  /// its `?` placeholders.
   ///
   /// ```dart
   /// db.table('t')
-  ///     .selectRaw("date_trunc(?, created_at) as dia, count(*) as total", ['day'])
+  ///     .selectRaw('date_trunc(?, created_at) as dia, count(*) as total',
+  ///         ['day'])
   ///     .groupByRaw('date_trunc(?, created_at)', ['day']);
   /// ```
-  ///
   QueryBuilder groupByRaw(String sql, [List bindingsP = const []]) {
     this.groupsProp = [...this.groupsProp, QueryExpression(sql)];
     this.addBinding(bindingsP, 'groupBy');
     return this;
   }
 
-  ///
-  /// Add a "having" clause to the query.
-  ///
-  ///
+  /// Adds a having clause: `having column operator ?`.
   ///
   /// `having(column, value)` (two arguments) means `=`; a
-  /// `Function(QueryBuilder)` column builds a nested group.
-  ///
+  /// `Function(QueryBuilder)` column builds a nested group (see
+  /// [havingNested]). A [QueryExpression] value is inlined instead of bound.
   QueryBuilder having(dynamic column,
       [dynamic operator,
       dynamic value = _absent,
@@ -2385,16 +2103,14 @@ class QueryBuilder {
     return this;
   }
 
-  ///
-  /// Add a "or having" clause to the query.
-  ///
-  ///
+  /// Adds an `or` having clause; takes the same arguments as [having].
   QueryBuilder orHaving(dynamic column,
       [dynamic operator, dynamic value = _absent]) {
     return this.having(column, operator, value, SqlBool.or);
   }
 
-  /// A parenthesized group of having clauses built by [callback].
+  /// Adds a parenthesized group of having clauses built by [callback]; an
+  /// empty group adds nothing.
   QueryBuilder havingNested(Function callback, [String boolean = SqlBool.and]) {
     final query = this.forNestedWhere();
     callback(query);
@@ -2407,7 +2123,9 @@ class QueryBuilder {
     return this;
   }
 
-  /// `having column between ? and ?`.
+  /// Adds `having column between ? and ?` (`not between` when [not]).
+  ///
+  /// Throws [ArgumentError] unless [values] has exactly two elements.
   QueryBuilder havingBetween(String column, List values,
       [String boolean = SqlBool.and, bool not = false]) {
     if (values.length != 2) {
@@ -2433,7 +2151,8 @@ class QueryBuilder {
   QueryBuilder orHavingNotBetween(String column, List values) =>
       this.havingBetween(column, values, SqlBool.or, true);
 
-  /// `having column is null` ([columns] is a column or a list of them).
+  /// Adds `having column is null` (`is not null` when [not]) for each of
+  /// [columns], a column or a list of them.
   QueryBuilder havingNull(dynamic columns,
       [String boolean = SqlBool.and, bool not = false]) {
     final list = columns is List ? columns : [columns];
@@ -2456,46 +2175,34 @@ class QueryBuilder {
   QueryBuilder orHavingNotNull(dynamic columns) =>
       this.havingNull(columns, SqlBool.or, true);
 
-  /// Add a raw "having" clause to the query.
-  ///
-  /// [sql] is the raw SQL expression.
-  /// [bindings] are the values to be bound to the query.
-  /// [boolean] indicates the logical connector of the clause (default is "and").
-  /// Returns the current QueryBuilder instance for chaining.
+  /// Adds a raw SQL having condition, with [bindings] for its `?`
+  /// placeholders.
   QueryBuilder havingRaw(String sql,
       [List bindings = const [], String boolean = SqlBool.and]) {
     const type = 'raw';
 
-    // Adds a record to havingsProp with the necessary info
     this.havingsProp.add({
       'type': type,
       'sql': sql,
       'boolean': boolean,
     });
 
-    // Adds binding values to 'having' section
     this.addBinding(bindings, 'having');
 
     return this;
   }
 
-  /// Add a raw "having" clause with "or" connector to the query.
-  ///
-  /// [sql] is the raw SQL expression.
-  /// [bindings] are the values to be bound to the query.
+  /// Adds a raw SQL `or` having condition; see [havingRaw].
   QueryBuilder orHavingRaw(String sql, [List bindings = const []]) {
     return this.havingRaw(sql, bindings, SqlBool.or);
   }
 
-  ///
-  /// Add an "order by" clause to the query.
-  ///
-  ///
+  /// Adds an `order by` clause.
   ///
   /// [column] is a column, a [QueryExpression] or a subquery (`QueryBuilder`
-  /// or `Function(QueryBuilder)`). [direction] must be `asc` or `desc` (any
-  /// other value used to become `desc` silently).
-  ///
+  /// or `Function(QueryBuilder)`). [direction] must be `asc` or `desc` in any
+  /// case; anything else throws [ArgumentError] (it used to become `desc`
+  /// silently). After a union the order applies to the whole union.
   QueryBuilder orderBy(dynamic column, [String direction = SqlSort.asc]) {
     final _direction = direction.trim().toLowerCase();
     if (_direction != SqlSort.asc && _direction != SqlSort.desc) {
@@ -2578,7 +2285,7 @@ class QueryBuilder {
     return this;
   }
 
-  /// `order by column desc`.
+  /// Adds `order by column desc`.
   QueryBuilder orderByDesc(dynamic column) {
     return this.orderBy(column, SqlSort.desc);
   }
@@ -2596,40 +2303,32 @@ class QueryBuilder {
     return this;
   }
 
-  /// [reorder] by [column] descending.
+  /// Removes every order and orders by [column] descending; see [reorder].
   QueryBuilder reorderDesc(dynamic column) {
     return this.reorder(column, SqlSort.desc);
   }
 
-  ///
-  /// Add an "order by" clause for a timestamp to the query.
-  ///
-  ///
+  /// Orders by [column] descending, newest first.
   QueryBuilder latest([String column = 'created_at']) {
     return this.orderBy(column, SqlSort.desc);
   }
 
-  ///
-  /// Add an "order by" clause for a timestamp to the query.
-  ///
-  ///
+  /// Orders by [column] ascending, oldest first.
   QueryBuilder oldest([String column = 'created_at']) {
     return this.orderBy(column, SqlSort.asc);
   }
 
-  /// Put the query's results in random order.
+  /// Orders the results randomly: `order by RANDOM()`.
   ///
-  /// [seed] can be used in some DBMSs to generate "seeded random".
+  /// On MySQL [seed] is inlined as `RAND(seed)` (not bound, so it must not
+  /// come from user input); other grammars ignore it.
   QueryBuilder inRandomOrder([String seed = '']) {
-    // grammar.compileRandom(seed) would return something like "RAND()" or "RANDOM()"
     final randomExpression = this.grammar.compileRandom(seed);
     return this.orderByRaw(randomExpression);
   }
 
-  ///
-  /// Add a raw "order by" clause to the query.
-  ///
-  ///
+  /// Adds the raw SQL [sql] to the `order by` clause, with [bindings] for
+  /// its `?` placeholders. After a union it orders the whole union.
   QueryBuilder orderByRaw(String sql, [bindings = const []]) {
     var type = 'raw';
     var map = {'type': type, 'sql': sql};
@@ -2647,10 +2346,9 @@ class QueryBuilder {
     return this;
   }
 
+  /// Sets the number of rows to skip; a negative [value] is 0.
   ///
-  /// Set the "offset" value of the query.
-  ///
-  ///
+  /// After a union it applies to the whole union.
   QueryBuilder offset(int value) {
     var v = value < 0 ? 0 : value;
     if (this.unionsProp.isNotEmpty) {
@@ -2662,18 +2360,15 @@ class QueryBuilder {
     return this;
   }
 
-  ///
-  /// Alias to set the "offset" value of the query.
-  ///
-  ///
+  /// Same as [offset].
   QueryBuilder skip(int value) {
     return this.offset(value);
   }
 
+  /// Sets the maximum number of rows to return; a negative [value] is
+  /// ignored.
   ///
-  /// Set the "limit" value of the query.
-  ///
-  ///
+  /// After a union it applies to the whole union.
   QueryBuilder limit(int value) {
     if (value >= 0) {
       if (this.unionsProp.isNotEmpty) {
@@ -2686,43 +2381,33 @@ class QueryBuilder {
     return this;
   }
 
-  ///
-  /// Alias to set the "limit" value of the query.
-  ///
-  ///
+  /// Same as [limit].
   QueryBuilder take(int value) {
     return this.limit(value);
   }
 
-  ///
-  /// Set the limit and offset for a given page.
-  ///
-  ///
+  /// Sets the limit and offset for the 1-based [page] of [perPage] rows.
   QueryBuilder forPage(int page, [int perPage = 15]) {
     return this.skip((page - 1) * perPage).take(perPage);
   }
 
-  /// Constrain the query to the next "page" of results after a given ID.
+  /// The page of [perPage] rows after [lastId] (ascending by [column]);
+  /// `null` means the first page.
   ///
-  /// [perPage]: quantos registros buscar
-  /// [lastId]: valor do ID a partir do qual buscar
-  /// [column]: nome da coluna ID
+  /// Keyset pagination: adds `column > ?`, replaces any order by [column]
+  /// with `order by column asc` and sets the limit.
   QueryBuilder forPageAfterId([
     int perPage = 15,
     dynamic lastId = 0,
     String column = 'id',
   ]) {
-    // 1. Remove qualquer ordering que já exista pela mesma coluna
     this.ordersProp = this.ordersProp.where((order) {
       return order['column'] != column;
     }).toList();
-    // 2. Adiciona where(column, '>', lastId) (null: first page, no filter)
     if (lastId != null) {
       this.where(column, SqlOperator.greater, lastId);
     }
-    // 3. Ordena pela coluna asc
     this.orderBy(column, SqlSort.asc);
-    // 4. Limita a [perPage]
     this.take(perPage);
     return this;
   }
@@ -2744,10 +2429,11 @@ class QueryBuilder {
     return this;
   }
 
+  /// Adds `union` (`union all` when [all]) with another query.
   ///
-  /// Add a union statement to the query.
-  ///
-  ///
+  /// [queryP] is a [QueryBuilder] or a `Function(QueryBuilder)` that builds
+  /// one; anything else throws [ArgumentError]. Orders, limits and offsets
+  /// set after a union apply to the whole union.
   QueryBuilder union(dynamic queryP, [bool all = false]) {
     final QueryBuilder query;
     if (queryP is QueryBuilder) {
@@ -2767,20 +2453,16 @@ class QueryBuilder {
     return this;
   }
 
-  ///
-  /// Add a union all statement to the query.
-  ///
-  ///
+  /// Adds `union all` with another query; see [union].
   QueryBuilder unionAll(dynamic query) {
     return this.union(query, true);
   }
 
-  ///
-  /// Lock the selected rows in the table.
+  /// Locks the selected rows.
   ///
   /// [value] is `true` (`FOR UPDATE`), `false` (shared lock), a [QueryLock],
   /// or a raw SQL string used verbatim (for example `'for no key update'`).
-  ///
+  /// Any lock but `false` runs the select on the write connection.
   QueryBuilder lock([dynamic value = true]) {
     if (value is! bool && value is! String && value is! QueryLock) {
       throw ArgumentError.value(
@@ -2795,8 +2477,7 @@ class QueryBuilder {
     return this;
   }
 
-  ///
-  /// Lock the selected rows in the table for updating.
+  /// Locks the selected rows for update (`FOR UPDATE`).
   ///
   /// [skipLocked] adds `SKIP LOCKED` (rows locked by another transaction are
   /// skipped instead of waited for, the usual job-queue pattern), [noWait]
@@ -2813,7 +2494,6 @@ class QueryBuilder {
   /// // select * from "jobs" where "status" = ? order by "id" asc limit 1
   /// //   for update skip locked
   /// ```
-  ///
   QueryBuilder lockForUpdate(
       {bool skipLocked = false, bool noWait = false, List<String>? of}) {
     if (!skipLocked && !noWait && (of == null || of.isEmpty)) {
@@ -2823,11 +2503,10 @@ class QueryBuilder {
         skipLocked: skipLocked, noWait: noWait, of: of ?? const <String>[]));
   }
 
-  ///
-  /// Share lock the selected rows in the table.
+  /// Locks the selected rows with a shared lock: `for share` on PostgreSQL,
+  /// `lock in share mode` on MySQL (`for share` with modifiers).
   ///
   /// Accepts the same modifiers as [lockForUpdate].
-  ///
   QueryBuilder sharedLock(
       {bool skipLocked = false, bool noWait = false, List<String>? of}) {
     if (!skipLocked && !noWait && (of == null || of.isEmpty)) {
@@ -2840,18 +2519,18 @@ class QueryBuilder {
         of: of ?? const <String>[]));
   }
 
+  /// Adds `SKIP LOCKED` to the current lock.
   ///
-  /// Add `SKIP LOCKED` to the current lock; without a lock it implies
-  /// `FOR UPDATE`, so `skipLocked()` alone yields `for update skip locked`.
-  ///
+  /// Without a lock it implies `FOR UPDATE`, so `skipLocked()` alone yields
+  /// `for update skip locked`. Throws [StateError] on a raw lock clause.
   QueryBuilder skipLocked() {
     return this.lock(_currentQueryLock().copyWith(skipLocked: true));
   }
 
+  /// Adds `NOWAIT` to the current lock.
   ///
-  /// Add `NOWAIT` to the current lock; without a lock it implies
-  /// `FOR UPDATE`.
-  ///
+  /// Without a lock it implies `FOR UPDATE`. Throws [StateError] on a raw
+  /// lock clause.
   QueryBuilder noWait() {
     return this.lock(_currentQueryLock().copyWith(noWait: true));
   }
@@ -2867,29 +2546,23 @@ class QueryBuilder {
     return const QueryLock();
   }
 
-  ///
-  /// Get the SQL representation of the query.
-  ///
-  ///
+  /// Returns the select SQL of the query, with `?` placeholders.
   String toSql() {
     return this.grammar.compileSelect(this);
   }
 
+  /// Returns the row with `id = id`, or null when there is none.
   ///
-  /// Execute a query for a single record by ID.
-  ///
-  ///
+  /// Adds the condition to this builder and sets its limit to 1.
   Future<Map<String, dynamic>?> find(int id,
       [List<String> columns = const ['*']]) {
     return this.where('id', SqlOperator.equals, id).first(columns);
   }
 
-  ///
-  /// Get a single column's value from the first result of a query.
-  ///
-  ///
   /// Returns the value of [column] in the first row, or `null` when there is
-  /// no row. `'t.col'` and `'col as alias'` are accepted.
+  /// no row.
+  ///
+  /// `'t.col'` and `'col as alias'` are accepted.
   Future<dynamic> value(String column) async {
     final row = await this.first([column]);
     if (row == null) return null;
@@ -2906,8 +2579,10 @@ class QueryBuilder {
     return row.length == 1 ? row.values.first : null;
   }
 
-  /// The only row of the query: throws [RecordsNotFoundException] when there
-  /// is none and [MultipleRecordsFoundException] when there is more than one.
+  /// Returns the only row of the query.
+  ///
+  /// Throws [RecordsNotFoundException] when there is none and
+  /// [MultipleRecordsFoundException] when there is more than one.
   Future<Map<String, dynamic>> sole(
       [List<String> columns = const ['*']]) async {
     final rows = await this.clone().take(2).get(columns);
@@ -2920,12 +2595,14 @@ class QueryBuilder {
     return rows.first;
   }
 
-  /// The value of [column] in the only row of the query (see [sole]).
+  /// Returns the value of [column] in the only row of the query (see
+  /// [sole]).
   Future<dynamic> soleValue(String column) async {
     return _valueFromRow(await this.sole([column]), column);
   }
 
-  /// The first row, or [RecordsNotFoundException] when there is none.
+  /// Returns the first row; throws [RecordsNotFoundException] when there is
+  /// none.
   Future<Map<String, dynamic>> firstOrFail(
       [List<String> columns = const ['*']]) async {
     final row = await this.first(columns);
@@ -2935,29 +2612,28 @@ class QueryBuilder {
     return row;
   }
 
-  /// The row with `id = id`, or the result of [callback] when there is none.
+  /// Returns the row with `id = id`, or the result of [callback] when there
+  /// is none.
   Future<dynamic> findOr(dynamic id, FutureOr<dynamic> Function() callback,
       [List<String> columns = const ['*']]) async {
     final row = await this.where('id', SqlOperator.equals, id).first(columns);
     return row ?? await callback();
   }
 
+  /// Returns the first row, or null when there is none.
   ///
-  /// Execute the query and get the first result.
-  ///
-  /// [columns] columns
-  /// `Return` Map<String,dynamic>
-  ///
+  /// Sets the limit of this builder to 1. [timeoutInSeconds] is passed to
+  /// [get].
   Future<Map<String, dynamic>?> first(
       [List<String> columns = const ['*'], int? timeoutInSeconds]) async {
     final results = await this.take(1).get(columns, timeoutInSeconds);
     return results.isNotEmpty ? results.first : null;
   }
 
+  /// Runs the query as a select and returns the rows.
   ///
-  /// Execute the query as a "select" statement.
-  ///
-  ///
+  /// [columnsP] is used only when no columns were selected on the builder.
+  /// The [afterQuery] callbacks run on the rows (not for aggregates).
   Future<List<Map<String, dynamic>>> get(
       [List<String> columnsP = const ['*'], int? timeoutInSeconds]) async {
     // Only take over `columnsProp` (and restore it) when the caller passed
@@ -3017,10 +2693,8 @@ class QueryBuilder {
     return result;
   }
 
-  ///
-  /// Run the query as a "select" statement against the connection.
-  ///
-  ///
+  /// Runs the compiled select on the connection (the read connection unless
+  /// [useWritePdo] was called) and returns the raw rows.
   Future<List<Map<String, dynamic>>> runSelect([int? timeoutInSeconds]) async {
     final sqlStr = this.toSql();
 
@@ -3034,8 +2708,7 @@ class QueryBuilder {
     return results;
   }
 
-  ///
-  /// Stream the query results row-by-row using a server-side cursor.
+  /// Streams the rows of the query one by one through a server-side cursor.
   ///
   /// Unlike [chunk]/[each] (which page with LIMIT/OFFSET and materialize each
   /// page), this keeps memory roughly constant for arbitrarily large result
@@ -3067,14 +2740,12 @@ class QueryBuilder {
     }
   }
 
-  ///
-  /// Alias for [cursor] — lazily stream rows without loading them all in memory.
-  ///
+  /// Same as [cursor]: streams the rows without loading them all in memory.
   Stream<Map<String, dynamic>> lazy([int? fetchSize]) => this.cursor(fetchSize);
 
-  ///
-  /// Direct, driver-specific access (bulk COPY, pipelining, LISTEN/NOTIFY, raw
-  /// connection). Returns `null` when the active driver has no such support.
+  /// Returns direct, driver-specific access (bulk COPY, pipelining,
+  /// LISTEN/NOTIFY, raw connection), or `null` when the active driver has no
+  /// such support.
   ///
   /// ```dart
   /// final drv = db.table('t').driver();
@@ -3084,28 +2755,26 @@ class QueryBuilder {
   /// ```
   DriverAccess? driver() => this.connection.driver();
 
+  /// Returns the 1-based [page] of [perPage] rows with the total count (two
+  /// queries: a count and the page).
   ///
-  /// Paginate the given query into a simple paginator.
-  ///
-  ///
+  /// A null [page] is page 1 ([PaginationUtils.resolveCurrentPage]). The
+  /// page query runs on a clone, so this builder keeps no limit or offset;
+  /// no page query runs when the count is 0.
   Future<LengthAwarePaginator> paginate({
     int perPage = 15,
     List<String> columns = const ['*'],
     String pageName = 'page',
     int? page,
   }) async {
-    // If the page is not provided, resolves the current page.
     page ??= PaginationUtils.resolveCurrentPage(pageName);
 
-    // Gets total records for pagination.
     int total = await getCountForPagination(columns);
 
-    // If there are records, gets results for requested page; otherwise returns empty.
     // A clone keeps limit/offset of the page off this builder.
     List<Map<String, dynamic>> results =
         total > 0 ? await clone().forPage(page, perPage).get(columns) : [];
 
-    // Returns LengthAwarePaginator with results and metadata.
     return DefaultLengthAwarePaginator(results, total, perPage, page, {
       'path': PaginationUtils.resolveCurrentPath(),
       'pageName': pageName,
@@ -3280,40 +2949,33 @@ class QueryBuilder {
     return value;
   }
 
+  /// Returns the 1-based [page] of [perPage] rows with only next/previous
+  /// information: no count query, so it is cheaper on large tables.
   ///
-  /// Get a paginator only supporting simple next and previous links.
-  ///
-  /// This is more efficient on larger data-sets, etc.
-  ///
-  ///
-  /// Get a paginator only supporting simple next and previous links.
-  /// More efficient on large datasets as it doesn't do count(*).
+  /// Reads `perPage + 1` rows to know whether there is a next page. A null
+  /// [page] is page 1 ([PaginationUtils.resolveCurrentPage]).
   Future<DefaultPaginator> simplePaginate({
     int perPage = 15,
     List<String> columns = const ['*'],
     String pageName = 'page',
     int? page,
   }) async {
-    // 1. Determines current page
     page ??= PaginationUtils.resolveCurrentPage(pageName);
 
-    // 2. Loads (perPage + 1) results to detect if there's a next page
+    // One row more than the page tells whether there is a next page.
     final results = await this
         .clone()
         .skip((page - 1) * perPage)
         .take(perPage + 1)
         .get(columns);
 
-    // 3. If more records than `perPage` came back, there are more pages
     bool hasMorePages = results.length > perPage;
 
-    // If 1 extra came back, remove it (we only want to display 'perPage' items)
     List<Map<String, dynamic>> pageItems = results;
     if (hasMorePages) {
       pageItems = results.sublist(0, perPage);
     }
 
-    // 4. Assembles paginator
     return DefaultPaginator(
       pageItems,
       perPage,
@@ -3326,11 +2988,10 @@ class QueryBuilder {
     );
   }
 
+  /// Returns the number of rows the query matches, ignoring its orders,
+  /// limit and offset, for [paginate].
   ///
-  /// Get the count of the total records for the paginator.
-  ///
-  ///
-  /// Returns total count of records for pagination.
+  /// Grouped, distinct and union queries are counted through a subquery.
   Future<int> getCountForPagination(
       [List<String> columns = const ['*']]) async {
     // Grouped/distinct/union queries: count their rows in the database
@@ -3341,14 +3002,13 @@ class QueryBuilder {
 
     backupFieldsForCount();
 
-    // Sets aggregation for count, removing aliases.
     aggregateProp = {
       'function': 'count',
       'columns': clearSelectAliases(columns)
     };
 
-    // Executes query (in this case, count query). The fields are restored
-    // even when it fails, so the builder can still be used.
+    // The fields are restored even when the count fails, so the builder can
+    // still be used.
     final List<Map<String, dynamic>> results;
     try {
       results = await get();
@@ -3357,7 +3017,6 @@ class QueryBuilder {
       restoreFieldsForCount();
     }
 
-    // Expects result to have an 'aggregate' key.
     if (results.isNotEmpty && results.first.containsKey('aggregate')) {
       return _aggregateToInt(results.first['aggregate']);
     }
@@ -3365,39 +3024,29 @@ class QueryBuilder {
     return 0;
   }
 
-  ///
-  /// Backup some fields for the pagination count.
-  ///
-  ///
-  /// Backs up fields used in pagination count.
+  /// Saves and clears the orders, limit, offset, columns and their
+  /// bindings, which a count query must not have; see
+  /// [restoreFieldsForCount].
   void backupFieldsForCount() {
-    // Backup of query fields.
     backups['orders'] = ordersProp;
     backups['limit'] = limitProp;
     backups['offset'] = offsetProp;
     backups['columns'] = columnsProp;
 
-    // Sets query fields to null (or empty lists) for count.
     ordersProp = [];
     limitProp = null;
     offsetProp = null;
     columnsProp = null;
 
-    // Backup of bindings for 'order' and 'select'.
     bindingBackups['order'] = bindings['order'];
     bindingBackups['select'] = bindings['select'];
 
-    // Clears 'order' and 'select' bindings so they don't interfere with count.
     bindings['order'] = [];
     bindings['select'] = [];
   }
 
-  ///
-  /// Remove the column aliases since they will break count queries.
-  ///
-  ///
-  /// Removes column aliases to prevent issues in count.
-  /// Example: "users.name as user_name" becomes "users.name".
+  /// Returns [columns] without their aliases, which break count queries:
+  /// `'users.name as user_name'` becomes `'users.name'`.
   List<String> clearSelectAliases(List<String> columns) {
     return columns.map((column) {
       final aliasPos = column.toLowerCase().indexOf(' as ');
@@ -3405,11 +3054,7 @@ class QueryBuilder {
     }).toList();
   }
 
-  ///
-  /// Restore some fields after the pagination count.
-  ///
-  ///
-  /// Restores fields modified for pagination count.
+  /// Restores the fields saved by [backupFieldsForCount].
   void restoreFieldsForCount() {
     ordersProp = backups['orders'];
     limitProp = backups['limit'];
@@ -3423,11 +3068,13 @@ class QueryBuilder {
     bindingBackups.clear();
   }
 
-  /// Chunk the results of the query into blocks of [count] items each,
-  /// calling [callback] for each block.
+  /// Runs the query in pages of [count] rows (limit/offset) and calls
+  /// [callback] with each page and its 1-based number.
   ///
-  /// The callback receives (list of results, page number).
-  /// Returns false if interrupted early, or true if iterated completely.
+  /// Returns false when [callback] returns false (which stops it), true
+  /// after the last page. The pages are read with [forPage] on this builder,
+  /// which keeps the last limit and offset. Rows changed between pages can
+  /// be skipped or repeated; see [chunkById].
   Future<bool> chunk(
     int count,
     FutureOr<bool> Function(List<Map<String, dynamic>> chunk, int page)
@@ -3436,16 +3083,13 @@ class QueryBuilder {
     int page = 1;
 
     while (true) {
-      // Loads the next block
       final results = await this.forPage(page, count).get();
       final countResults = results.length;
 
       if (countResults == 0) {
-        // No more records
         break;
       }
 
-      // Executes the callback; if it returns false, we stop the loop
       final cbResult = await callback(results, page);
       if (cbResult == false) {
         return false;
@@ -3453,7 +3097,7 @@ class QueryBuilder {
 
       page++;
 
-      // If less than "count", nothing more to fetch
+      // A short page is the last one.
       if (countResults < count) {
         break;
       }
@@ -3462,15 +3106,18 @@ class QueryBuilder {
     return true;
   }
 
-  /// Chunk the results of a query by comparing numeric IDs.
+  /// Runs the query in pages of [count] rows by keyset on [column]
+  /// (`column > last id`, ascending) and calls [callback] with each page.
   ///
-  /// [count]: how many records per "block"
-  /// [callback]: receives the block list and must return bool
-  /// [column]: name of the ID column, defaults to 'id'
-  /// [alias]: if the field has a different alias, e.g., 'users.id as user_id'.
+  /// Unlike [chunk], rows inserted or updated between pages are neither
+  /// skipped nor repeated. [alias] is the key of [column] in the rows when
+  /// it is selected under another name (`'users.id as user_id'`). Returns
+  /// false when [callback] returns false (which stops it), true after the
+  /// last page. Throws [StateError] when the rows lack the id column.
   ///
-  /// Usage example:
-  ///   await query.chunkById(100, (chunk) async { ... }, 'id');
+  /// ```dart
+  /// await query.chunkById(100, (chunk) async { ... }, column: 'id');
+  /// ```
   Future<bool> chunkById(
     int count,
     FutureOr<bool> Function(List<Map<String, dynamic>> chunk) callback, {
@@ -3480,7 +3127,7 @@ class QueryBuilder {
     return _chunkById(count, callback, column, alias, descending: false);
   }
 
-  /// [chunkById] in descending order of [column].
+  /// Same as [chunkById], in descending order of [column].
   Future<bool> chunkByIdDesc(
     int count,
     FutureOr<bool> Function(List<Map<String, dynamic>> chunk) callback, {
@@ -3537,8 +3184,10 @@ class QueryBuilder {
     return true;
   }
 
-  /// Calls [callback] for every row, reading [count] rows at a time by id.
-  /// Returning `false` stops the iteration.
+  /// Calls [callback] for every row with its 0-based index, reading [count]
+  /// rows at a time by id (see [chunkById]).
+  ///
+  /// Returning `false` from [callback] stops the iteration.
   Future<bool> eachById(
     FutureOr<bool> Function(Map<String, dynamic> row, int index) callback, {
     int count = 1000,
@@ -3557,13 +3206,15 @@ class QueryBuilder {
   }
 
   /// Streams every row, reading [chunkSize] rows at a time by [column]
-  /// (keyset pagination). Works on every driver; memory stays bounded.
+  /// (keyset pagination, see [chunkById]).
+  ///
+  /// Works on every driver; memory stays bounded.
   Stream<Map<String, dynamic>> lazyById(
       [int chunkSize = 1000, String column = 'id', String? alias]) {
     return _lazyById(chunkSize, column, alias, descending: false);
   }
 
-  /// [lazyById] in descending order of [column].
+  /// Same as [lazyById], in descending order of [column].
   Stream<Map<String, dynamic>> lazyByIdDesc(
       [int chunkSize = 1000, String column = 'id', String? alias]) {
     return _lazyById(chunkSize, column, alias, descending: true);
@@ -3602,7 +3253,8 @@ class QueryBuilder {
     }
   }
 
-  /// Maps every row with [callback], reading [count] rows at a time.
+  /// Returns every row mapped by [callback], reading [count] rows at a time
+  /// with [chunk].
   Future<List<T>> chunkMap<T>(T Function(Map<String, dynamic> row) callback,
       [int count = 1000]) async {
     final result = <T>[];
@@ -3615,79 +3267,60 @@ class QueryBuilder {
     return result;
   }
 
-  /// Execute a callback over each item while chunking.
+  /// Calls [callback] for every row with its 0-based index, reading [count]
+  /// rows at a time with [chunk].
   ///
-  /// [callback] is called for each individual item. If it returns false, it stops.
-  /// [count] is the block size for chunking.
-  /// Returns true if completed, or false if interrupted early.
+  /// Returns false when [callback] returns false (which stops it), true
+  /// after the last row. Order the query so the pages are stable (Laravel
+  /// requires an `orderBy`).
   Future<bool> each(
     FutureOr<bool> Function(Map<String, dynamic> row, int index) callback, [
     int count = 1000,
   ]) async {
-    // (Optional) in Laravel, it requires orderBy to be defined before each()
-    int globalIndex = 0; // General counter, across chunks
+    int globalIndex = 0;
     return await this.chunk(count, (chunkRows, page) async {
       for (int i = 0; i < chunkRows.length; i++) {
         final row = chunkRows[i];
-        // callback receives (row, global or local index)
         final cbResult = await callback(row, globalIndex);
         if (cbResult == false) {
-          return false; // Interrupted chunk and return false
+          return false;
         }
         globalIndex++;
       }
-      return true; // continue to next chunk
+      return true;
     });
   }
 
+  /// Returns the values of [column]: a list, or a map keyed by the values
+  /// of [key] when it is given.
   ///
-  /// Get an array with the values of a given column.
-  ///
-  ///
+  /// `'t.col'` and `'col as alias'` are accepted.
   Future<dynamic> pluck(String column, [String? key]) async {
     var results = await this.get(key == null ? [column] : [column, key]);
 
-    // If the columns are qualified with a table or have an alias, we cannot use
-    // those directly in the "pluck" operations since the results from the DB
-    // are only keyed by the column itself. We'll strip the table out here.
-    // return Utils.array_pluck(
-    //     results, this.stripTableForPluck(column), this.stripTableForPluck(key));
-
+    // The rows are keyed by the bare column (or alias), without the table.
     return Arr.pluck(
         results, this.stripTableForPluck(column), this.stripTableForPluck(key));
   }
 
-  ///
-  /// Alias for the "pluck" method.
-  ///
-  ///
-  ///
-  /// Strip off the table name or alias from a column identifier.
-  ///
-  ///
+  /// Returns the key of [column] in a result row: the part after the last
+  /// dot or space (`'t.col'` is `'col'`, `'col as c'` is `'c'`); null stays
+  /// null.
   dynamic stripTableForPluck(column) {
     return column == null ? column : column.split(RegExp(r'\.| ')).last;
   }
 
-  /// Concatenate values of a given column as a string.
-  ///
-  /// In Laravel, `implode(column, glue)` combines values into a single string.
-  /// Here, it returns the concatenated string.
+  /// Returns the values of [column] joined with [glue]; nulls become empty
+  /// strings.
   Future<String> implode(String column, [String glue = '']) async {
-    // 1. Gets list of column values using pluck
     final dynamic result = await this.pluck(column);
-    // 2. If pluck returns a list, converts each item to string and joins
     if (result is List) {
       return result.map((item) => item?.toString() ?? '').join(glue);
     }
-    // 3. If not a list (or if pluck isn't complete yet), returns empty
     return '';
   }
 
-  ///
-  /// Determine if any rows exist for the current query.
-  ///
-  ///
+  /// Whether the query returns any row: `select exists(<query>) as "exists"`.
   Future<bool> exists() async {
     final sql = this.grammar.compileExists(this);
 
@@ -3707,27 +3340,26 @@ class QueryBuilder {
   /// Whether the query returns no row.
   Future<bool> doesntExist() async => !(await this.exists());
 
-  /// `true` when a row exists, otherwise the result of [callback].
+  /// Returns `true` when a row exists, otherwise the result of [callback].
   Future<dynamic> existsOr(FutureOr<dynamic> Function() callback) async =>
       await this.exists() ? true : await callback();
 
-  /// `true` when no row exists, otherwise the result of [callback].
+  /// Returns `true` when no row exists, otherwise the result of [callback].
   Future<dynamic> doesntExistOr(FutureOr<dynamic> Function() callback) async =>
       await this.doesntExist() ? true : await callback();
 
+  /// Returns the number of rows the query returns ([CountMode.rows], the
+  /// default).
   ///
-  /// Retrieve the "count" result of the query.
-  ///
-  ///
-  /// Counts the rows the query returns ([CountMode.rows], the default). With
-  /// `groupBy`, `having`, `union` or `distinct` (over the selected columns) it
-  /// counts the rows of the whole query through a subquery, instead of the
-  /// first group's count. Pass [CountMode.laravel] for Laravel's semantics.
+  /// With `groupBy`, `having`, `union` or `distinct` (over the selected
+  /// columns) it counts the rows of the whole query through a subquery,
+  /// instead of the first group's count. Pass [CountMode.laravel] for
+  /// Laravel's semantics.
   ///
   /// ```dart
-  /// await db.table('t').groupBy('status').count();          // groups
+  /// await db.table('t').groupBy('status').count(); // groups
   /// await db.table('t').groupBy('status')
-  ///     .count('*', CountMode.laravel);                       // 1st group's rows
+  ///     .count('*', CountMode.laravel); // rows of the 1st group
   /// ```
   Future<int> count(
       [dynamic columns = '*', CountMode mode = CountMode.rows]) async {
@@ -3806,54 +3438,42 @@ class QueryBuilder {
     return 0;
   }
 
-  ///
-  /// Retrieve the minimum value of a given column.
-  ///
-  ///
+  /// Returns the smallest value of [column], or null when there are no
+  /// rows.
   Future<num?> min(String column) async {
     final result = await this.aggregate("min", [column]);
     return result is String ? num.tryParse(result) : result;
   }
 
-  ///
-  /// Retrieve the maximum value of a given column.
-  ///
-  ///
+  /// Returns the largest value of [column], or null when there are no rows.
   Future<num?> max(String column) async {
     final result = await this.aggregate("max", [column]);
     return result is String ? num.tryParse(result) : result;
   }
 
-  ///
-  /// Retrieve the sum of the values of a given column.
-  ///
-  ///
+  /// Returns the sum of [column], or null when there are no rows (SQL
+  /// `sum` of no rows is null).
   Future<num?> sum(String column) async {
     final result = await this.aggregate('sum', [column]);
     return result is String ? num.tryParse(result) : result;
   }
 
-  ///
-  /// Retrieve the average of the values of a given column.
-  ///
-  ///
+  /// Returns the average of [column], or null when there are no rows.
   Future<num?> avg(String column) async {
     final result = await this.aggregate('avg', [column]);
     return result is String ? num.tryParse(result) : result;
   }
 
-  ///
-  /// Alias for the "avg" method.
-  ///
-  ///
+  /// Same as [avg].
   Future<num?> average(String column) async {
     return await this.avg(column);
   }
 
+  /// Runs `select function(columns) as aggregate` on the query and returns
+  /// the value as the driver gives it, or null when there is no row.
   ///
-  /// Execute an aggregate function on the database.
-  ///
-  ///
+  /// The select list and its bindings are restored afterwards, even when
+  /// the query fails.
   Future<dynamic> aggregate(String function,
       [List<String> columnsP = const <String>['*']]) async {
     this.aggregateProp = {'function': function, 'columns': columnsP};
@@ -3862,9 +3482,8 @@ class QueryBuilder {
         this.columnsProp != null ? [...this.columnsProp!] : null;
     var previousColumns = cols;
 
-    // We will also back up the select bindings since the select clause will be
-    // removed when performing the aggregate function. Once the query is run
-    // we will add the bindings back onto this query so they can get used.
+    // An aggregate query has no select list: its bindings are set aside and
+    // restored afterwards.
     // ignore: unused_local_variable
     var previousSelectBindings = [...(this.bindings['select'] as List)];
 
@@ -3887,43 +3506,34 @@ class QueryBuilder {
     return null;
   }
 
-  /// Execute a numeric aggregate function on the database.
+  /// Runs the aggregate [function] (`count`, `sum`, `avg`, `min` or `max`)
+  /// and returns it as an int or a double.
   ///
-  /// [function] Can be "count", "sum", "avg", "min" or "max".
-  /// [columns] List of columns (default ['*']).
-  /// Returns a [num] value (int or double).
+  /// Null is 0; a value the driver returns as text (e.g. a `numeric`) is
+  /// parsed, and an unparsable one is 0.
   Future<num> numericAggregate(String function,
       [List<String> columns = const ['*']]) async {
-    // Calls aggregate method to get raw result
     final dynamic result = await this.aggregate(function, columns);
-    // If no result, returns 0
     if (result == null) {
       return 0;
     }
-    // If already int or double, returns directly
     if (result is int || result is double) {
       return result;
     }
-    // Converts to string to check if it has decimal point
     final String resultStr = result.toString();
-    // If no decimal point, parse as int
     if (!resultStr.contains('.')) {
       return int.tryParse(resultStr) ?? 0;
     }
-    // Otherwise, convert to double
     return double.tryParse(resultStr) ?? 0.0;
   }
 
+  /// Inserts one row and returns the driver's [PDOResults].
   ///
-  /// Insert a new record into the database.
-  ///
-  /// [values]  values Map<String, dynamic>
-  /// Return bool
-  ///
+  /// A pending [onConflict] clause and a [returning] list are compiled into
+  /// the insert; with [returning], the results hold the returned rows.
+  /// [QueryExpression] values are inlined. [timeout] is rounded up to whole
+  /// seconds.
   Future<dynamic> insert(Map<String, dynamic> values, [Duration? timeout]) {
-    // Since every insert gets treated like a batch insert, we will make sure the
-    // bindings are structured in a way that is convenient for building these
-    // inserts statements by verifying the elements are actually an array.
     final conflict = this.onConflictProp;
     final returning = this.returningProp;
 
@@ -3931,9 +3541,6 @@ class QueryBuilder {
       final bindings =
           this.cleanBindings(values.values.toList(growable: false));
       final sql = this.grammar.compileInsert(this, values);
-      // Once we have compiled the insert statement's SQL we can execute it on
-      // the connection and return a result as a boolean success indicator as
-      // that is the same type of result returned by the raw connection.
       return this.connection.insert(sql, bindings, _timeoutSeconds(timeout));
     }
 
@@ -3955,11 +3562,11 @@ class QueryBuilder {
         .insert(sql, this.cleanBindings(bindings), _timeoutSeconds(timeout));
   }
 
-  /// Set an `ON CONFLICT` target for the next low-level [insert].
+  /// Sets an `ON CONFLICT` target for the next [insert].
   ///
-  /// Provide the conflict columns (`onConflict(['ano'])`) or a named
-  /// constraint (`onConflict.constraint`). Chain [doUpdate] or [doNothing]
-  /// to define the action. Example (eliminates the need for explicit locks):
+  /// Give the conflict [columns] (`onConflict(['ano'])`) or a named
+  /// [constraint] (`onConflict([], 'uq_name')`), then chain [doUpdate] or
+  /// [doNothing] for the action. An atomic counter needs no explicit lock:
   ///
   /// ```dart
   /// final rows = await db.table('processos_sequences')
@@ -3978,7 +3585,7 @@ class QueryBuilder {
     return this;
   }
 
-  /// Turn a pending [onConflict] into `DO UPDATE SET ...`.
+  /// Makes the pending [onConflict] `DO UPDATE SET ...`.
   ///
   /// [values] may contain [QueryExpression]s via `db.raw(...)` so expressions
   /// such as `last_id = table.last_id + 1` are supported. [whereRaw] appends a
@@ -3993,27 +3600,28 @@ class QueryBuilder {
     return this;
   }
 
-  /// Turn a pending [onConflict] into `DO NOTHING`.
+  /// Makes the pending [onConflict] `DO NOTHING`.
   QueryBuilder doNothing() {
     final current = this.onConflictProp ?? const OnConflictClause();
     this.onConflictProp = current.copyWith(doNothing: true);
     return this;
   }
 
-  /// Request a `RETURNING` clause on the next write (insert/update/delete/upsert).
+  /// Adds a `RETURNING columns` clause to the next [insert]; an empty
+  /// [columns] means `*`.
   ///
-  /// When set, the write returns the affected rows (a `List<Map>`), mirroring
-  /// PL/pgSQL's `RETURNING ... INTO` — the returned column can be read in Dart.
+  /// The insert's [PDOResults] then hold the inserted rows, as PL/pgSQL's
+  /// `RETURNING ... INTO`. [update], [delete] and [upsert] do not use it.
   QueryBuilder returning([List<dynamic> columns = const ['*']]) {
     this.returningProp = columns.isEmpty ? ['*'] : columns;
     return this;
   }
 
-  /// Insert records, ignoring rows that violate a unique/primary constraint.
+  /// Inserts a row or a list of rows, skipping those that violate a unique
+  /// or primary key, and returns the number of rows inserted.
   ///
   /// PostgreSQL/SQLite: `INSERT ... ON CONFLICT DO NOTHING`.
   /// MySQL: `INSERT IGNORE`.
-  /// Returns the number of rows actually inserted.
   Future<int> insertOrIgnore(dynamic values) async {
     final rows = _normalizeMultiInsert(values);
     if (rows.isEmpty) return 0;
@@ -4028,13 +3636,14 @@ class QueryBuilder {
         );
   }
 
-  /// Insert or update records atomically (`UPSERT`).
+  /// Inserts rows or updates the ones that already exist, atomically, and
+  /// returns the affected-row count reported by the driver.
   ///
-  /// [values] is a single map or a list of maps (all must share the same keys).
-  /// [uniqueBy] are the conflict-target columns.
-  /// [update] are the columns to update on conflict; when omitted, every
-  /// non-[uniqueBy] column is updated with the value that would have been
-  /// inserted. Values in [update] may be [QueryExpression]s.
+  /// [values] is a single map or a list of maps (all with the same keys).
+  /// [uniqueBy] are the conflict-target columns. [update] are the columns to
+  /// update on conflict; when omitted, every non-[uniqueBy] column is
+  /// updated with the value that would have been inserted. Values in
+  /// [update] may be [QueryExpression]s.
   ///
   /// PostgreSQL: `INSERT ... ON CONFLICT (uniqueBy) DO UPDATE SET ...`.
   /// MySQL: `INSERT ... ON DUPLICATE KEY UPDATE ...`.
@@ -4061,7 +3670,8 @@ class QueryBuilder {
         );
   }
 
-  /// Normalize a single map or list of maps into a list of row maps.
+  /// Returns a single map or a list of maps as a list of rows; an empty map
+  /// is no row.
   List<Map<String, dynamic>> _normalizeMultiInsert(dynamic values) {
     if (values is Map<String, dynamic>) {
       return values.isEmpty ? const [] : [values];
@@ -4076,10 +3686,8 @@ class QueryBuilder {
     );
   }
 
-  ///
-  /// Insert a new record and get the value of the primary key.
-  ///
-  ///
+  /// Inserts one row and returns the generated value of [sequence] (the
+  /// primary key column).
   Future<dynamic> insertGetId(Map<String, dynamic> keyValues,
       [String sequence = 'id']) async {
     final sql = this.grammar.compileInsertGetId(this, keyValues, sequence);
@@ -4087,12 +3695,6 @@ class QueryBuilder {
     return await this.processor.processInsertGetId(this, sql, values, sequence);
   }
 
-  ///
-  /// Update a record in the database.
-  ///
-  /// [keyValues] Map
-  /// Return int
-  ///
   // ------------------------------------------------------ bulk insert, next
 
   /// Inserts [rows] in bulk: PostgreSQL `COPY ... FROM STDIN` when the driver
@@ -4226,9 +3828,14 @@ class QueryBuilder {
     return buffer.toString();
   }
 
-  /// The next number of [column] in the rows of this query (its where
-  /// clauses are the scope): `coalesce(max(column), start - 1) + 1`, e.g.
-  /// `db.table('andamento').where('cod_processo', p).nextValue('cod_andamento')`.
+  /// Returns the next number of [column] in the rows of this query (its
+  /// where clauses are the scope): `max(column) + 1`, or [start] when no row
+  /// matches.
+  ///
+  /// ```dart
+  /// db.table('andamento').where('cod_processo', p)
+  ///     .nextValue('cod_andamento');
+  /// ```
   ///
   /// With [lock] (default) concurrent callers with the same scope take turns
   /// on a `pg_advisory_xact_lock` of the table, column and scope (PostgreSQL;
@@ -4272,6 +3879,13 @@ class QueryBuilder {
   Future<int> updateFrom(Map<String, dynamic> keyValues, [Duration? timeout]) =>
       this.update(keyValues, timeout);
 
+  /// Updates the rows the query matches with [keyValues] and returns the
+  /// number of affected rows.
+  ///
+  /// [QueryExpression] values (`db.raw(...)`) are inlined. Joins are
+  /// compiled as `update ... from` on PostgreSQL and `update ... join` on
+  /// MySQL; a limit restricts the rows (by `ctid` on PostgreSQL). [timeout]
+  /// is rounded up to whole seconds.
   Future<int> update(Map<String, dynamic> keyValues, [Duration? timeout]) {
     final sql = this.grammar.compileUpdate(this, keyValues);
     // Each dialect orders CTE/join/SET/where bindings like its SQL.
@@ -4281,51 +3895,47 @@ class QueryBuilder {
         .update(sql, this.cleanBindings(bindings), _timeoutSeconds(timeout));
   }
 
-  /// [Duration] → whole seconds for the driver (rounded up; null = default).
+  /// Returns [timeout] in whole seconds for the driver, rounded up; null
+  /// keeps the driver's default.
   static int? _timeoutSeconds(Duration? timeout) {
     if (timeout == null) return null;
     final ms = timeout.inMilliseconds;
     return ms <= 0 ? 0 : (ms + 999) ~/ 1000;
   }
 
-  /// Insert or update a record matching the [attributes], and fill it with [values].
+  /// Updates the first row that matches [attributes] with [values], or
+  /// inserts [attributes] + [values] when no row matches.
   ///
-  /// If no record matches [attributes]:
-  ///   -> executes insert(attributes + values).
-  /// Else:
-  ///   -> updates the first matching record.
-  ///
-  /// Returns `true` on success, `false` if fails (or no changes).
+  /// Returns whether a row was inserted or updated; with empty [values] an
+  /// existing row counts as done. The `where(attributes)` stays on this
+  /// builder. Not atomic: concurrent callers can both insert (see
+  /// [createOrFirst]).
   Future<bool> updateOrInsert(
     Map<String, dynamic> attributes, [
     Map<String, dynamic> values = const {},
   ]) async {
-    // 1. Checks if any record exists with provided attributes. The wheres are
-    // added once and reused by the update below.
+    // The wheres are added once and reused by the update below.
     this.where(attributes);
     final bool recordExists = await this.exists();
 
     if (!recordExists) {
-      // 2. If not exists, executes insert
       final inserted = await this.insert({
         ...attributes,
         ...values,
       });
 
-      // Insert return value can vary (bool, int, etc.),
-      // depending on ConnectionInterface implementation. Adjust as needed:
+      // Connections return PDOResults; the bool and num cases cover other
+      // ConnectionInterface implementations.
       if (inserted is bool) {
-        return inserted; // true or false
+        return inserted;
       } else if (inserted is num) {
-        return inserted > 0; // if it is row count
+        return inserted > 0;
       }
-      return inserted != null; // simple fallback
+      return inserted != null;
     } else {
-      // 3. If exists, updates only 1 record (nothing to update: done).
       if (values.isEmpty) return true;
       final int affectedRows = await this.limit(1).update(values);
 
-      // 4. Converts number of affected rows to bool
       return affectedRows > 0;
     }
   }
@@ -4399,61 +4009,42 @@ class QueryBuilder {
     return await query.useWritePdo().where(attributes).first() ?? row;
   }
 
-  /// Increment a column's value by a given amount.
-  ///
-  /// [column] Name of the column to increment.
-  /// [amount] Value to add to the column.
-  /// [extra]  Additional values that can be updated in the same update.
-  /// Returns the number of affected rows (usually int).
+  /// Adds [amount] to [column] in the rows the query matches
+  /// (`set column = column + amount`), also setting the [extra] columns, and
+  /// returns the number of affected rows.
   Future<int> increment(String column,
       [num amount = 1, Map<String, dynamic> extra = const {}]) async {
-    // 2. Wrap column name to ensure escaping (e.g. `"table"."column"`)
     final wrapped = this.grammar.wrap(column);
-    // 3. Builds columns map, creating expression "<column> + <amount>"
-    //    and merging with extra columns:
     final Map<String, dynamic> columnsToUpdate = {
       ...extra,
       column: this.raw('$wrapped + $amount'),
     };
-    // 4. Calls update(...) passing calculated columns
     final int affected = await this.update(columnsToUpdate);
-    // 5. Returns number of affected rows (depends on update implementation)
     return affected;
   }
 
-  /// Decrement a column's value by a given amount.
-  ///
-  /// [column] Name of the column to decrement.
-  /// [amount] Value to subtract from the column.
-  /// [extra]  Additional values that can be updated in the same update.
-  /// Returns the number of affected rows (usually int).
+  /// Subtracts [amount] from [column] in the rows the query matches
+  /// (`set column = column - amount`), also setting the [extra] columns, and
+  /// returns the number of affected rows.
   Future<int> decrement(String column,
       [num amount = 1, Map<String, dynamic> extra = const {}]) async {
-    // 2. Wrap column name to ensure escaping (e.g. `"table"."column"`)
     final wrapped = this.grammar.wrap(column);
 
-    // 3. Builds columns map, creating expression "<column> - <amount>"
-    //    and merging with extra columns:
     final Map<String, dynamic> columnsToUpdate = {
       ...extra,
       column: this.raw('$wrapped - $amount'),
     };
 
-    // 4. Calls update(...) passing calculated columns
     final int affected = await this.update(columnsToUpdate);
 
-    // 5. Returns number of affected rows (depends on update implementation)
     return affected;
   }
 
+  /// Deletes the rows the query matches and returns how many were deleted.
   ///
-  /// Delete a record from the database.
-  ///
-  ///
+  /// A non-null [id] first adds `id = ?` to this builder. [timeout] is
+  /// rounded up to whole seconds.
   Future<int> delete([dynamic id, Duration? timeout]) {
-    // If an ID is passed to the method, we will set the where clause to check
-    // the ID to allow developers to simply and quickly remove a single row
-    // from their database without manually specifying the where clauses.
     if (id != null) {
       this.where('id', SqlOperator.equals, id);
     }
@@ -4466,10 +4057,7 @@ class QueryBuilder {
         .delete(sql, this.cleanBindings(bindings), _timeoutSeconds(timeout));
   }
 
-  ///
-  /// Run a truncate statement on the table.
-  ///
-  ///
+  /// Empties the table (`truncate ... restart identity` on PostgreSQL).
   Future<void> truncate() async {
     for (var entry in this.grammar.compileTruncate(this).entries) {
       final sql = entry.key;
@@ -4479,10 +4067,11 @@ class QueryBuilder {
     }
   }
 
+  /// Locks this query's table in [mode] (PostgreSQL `LOCK TABLE`), held
+  /// until the transaction ends (there is no unlock).
   ///
-  /// PostgreSQL `LOCK TABLE` of this query's table in [mode], held until the
-  /// transaction ends (there is no unlock). [noWait] fails at once (SQLSTATE
-  /// `55P03`) instead of waiting for a conflicting lock.
+  /// [noWait] fails at once (SQLSTATE `55P03`) instead of waiting for a
+  /// conflicting lock.
   ///
   /// Prefer the narrowest tool: a unique index ([createOrFirst],
   /// [UniqueConstraintViolationException]) for uniqueness, [lockForUpdate]
@@ -4500,7 +4089,6 @@ class QueryBuilder {
   ///   // lock table "normas"."tipo_norma" in exclusive mode
   /// });
   /// ```
-  ///
   Future<void> lockTable(TableLockMode mode,
       {bool noWait = false, Duration? timeout}) async {
     final sql = this.grammar.compileLockTable(this, mode, noWait: noWait);
@@ -4511,37 +4099,24 @@ class QueryBuilder {
     await this.connection.statement(sql, [], _timeoutSeconds(timeout));
   }
 
-  ///
-  /// Get a new instance of the query builder.
-  ///
-  ///
+  /// Returns an empty query on the same connection, grammar and processor.
   QueryBuilder newQuery() {
     return QueryBuilder(this.connection, this.grammar, this.processor);
   }
 
-  ///
-  /// Create a new query instance for a sub-query.
-  ///
-  ///
+  /// Returns an empty query to build a subquery on.
   QueryBuilder forSubQuery() {
     return this.newQuery();
   }
 
-  ///
-  /// Merge an array of where clauses and bindings.
-  ///
-  ///
+  /// Appends where clauses and their bindings, e.g. those of another query.
   void mergeWheres(List<Map<String, dynamic>> wheresP, bindingsP) {
-    // Merges WHERE clauses
     this.wheresProp.addAll(wheresP);
-    // Merges bindings of type 'where'
     this.bindings['where'].addAll(bindingsP);
   }
 
-  ///
-  /// Remove all of the expressions from a list of bindings.
-  ///
-  ///
+  /// Returns [bindings] without the [QueryExpression]s, which are inlined
+  /// in the SQL instead of bound.
   List cleanBindings(List bindings) {
     for (final binding in bindings) {
       if (binding is QueryExpression) {
@@ -4554,22 +4129,17 @@ class QueryBuilder {
     return bindings;
   }
 
-  ///
-  /// Create a raw database expression.
-  ///
-  ///
+  /// Returns a raw SQL expression, inlined instead of bound.
   QueryExpression raw(dynamic value) {
     return this.connection.raw(value);
   }
 
-  ///
-  /// Get the current query value bindings in a flattened array.
-  ///
-  ///
+  /// Returns all bindings in the order of their placeholders in the select
+  /// SQL: CTEs, select, from, join, where, group by, having, order, unions
+  /// and the union order.
   List getBindings() {
-    var result = <dynamic>[]; // Use typed list
+    var result = <dynamic>[];
 
-    // 1. Adds CTE bindings ('expressions') FIRST
     if (bindings['expressions'] is List &&
         bindings['expressions']!.isNotEmpty) {
       result.addAll(bindings['expressions']!);
@@ -4579,7 +4149,6 @@ class QueryBuilder {
       result.addAll(this.bindings['select']);
     }
     if (bindings['from'] is List && bindings['from']!.isNotEmpty) {
-      // Added for 'fromRaw'
       result.addAll(bindings['from']!);
     }
     if (this.bindings['join'] != null) {
@@ -4607,19 +4176,13 @@ class QueryBuilder {
     return result;
   }
 
-  ///
-  /// Get the raw array of bindings.
-  ///
-  ///
+  /// Returns the bindings by type (`'select'`, `'where'`, ...).
   Map<String, dynamic> getRawBindings() {
     return this.bindings;
   }
 
-  ///
-  /// Set the bindings on the query builder.
-  ///
-  ///
-  ///
+  /// Replaces the bindings of [type]; throws [ArgumentError] for an unknown
+  /// type.
   QueryBuilder setBindings(Map<String, dynamic> bindingsP, [type = 'where']) {
     if (!bindings.containsKey(type)) {
       throw ArgumentError.value(type, 'type', 'Invalid binding type.');
@@ -4628,13 +4191,8 @@ class QueryBuilder {
     return this;
   }
 
-  ///
-  /// Add a binding to the query.
-  ///
-  /// [value]  dynamic
-  /// [type]  String
-  ///
-  ///
+  /// Adds [value] to the bindings of [type]; a list adds one binding per
+  /// element. Throws [ArgumentError] for an unknown type.
   QueryBuilder addBinding(dynamic value, [String type = 'where']) {
     if (!this.bindings.containsKey(type)) {
       throw ArgumentError.value(type, 'type', 'Invalid binding type.');
@@ -4650,10 +4208,7 @@ class QueryBuilder {
     return this;
   }
 
-  ///
-  /// Merge an array of bindings into our bindings.
-  ///
-  ///
+  /// Appends every binding of [query] to the bindings of the same type.
   QueryBuilder mergeBindings(QueryBuilder query) {
     query.bindings.forEach((key, value) {
       bindings.putIfAbsent(key, () => []).addAll(value);
@@ -4661,116 +4216,94 @@ class QueryBuilder {
     return this;
   }
 
-  ///
-  /// Get the database connection instance.
-  ///
-  ///
+  /// Returns the database connection.
   ConnectionInterface getConnection() {
     return this.connection;
   }
 
-  ///
-  /// Get the database query processor instance.
-  ///
-  ///
+  /// Returns the result post-processor.
   Processor getProcessor() {
     return this.processor;
   }
 
-  ///
-  /// Get the query grammar instance.
-  ///
-  ///
+  /// Returns the query grammar.
   QueryGrammar getGrammar() {
     return this.grammar;
   }
 
-  ///
-  /// Use the write pdo for query.
-  ///
-  ///
+  /// Runs selects on the write connection (e.g. to read a row just
+  /// written, without replica lag).
   QueryBuilder useWritePdo() {
     this.useWritePdoProp = true;
     return this;
   }
 
-  /// Adds an INNER JOIN LATERAL to the query.
+  /// Adds `inner join lateral (subquery) as alias on ...`.
   ///
-  /// [subquery] can be a QueryBuilder, a Closure (Function) or a raw SQL String.
-  /// [alias] is the mandatory alias for the lateral subquery.
-  /// [onCallback] is a function receiving a JoinClause to define ON conditions.
-  /// Often for LATERAL JOIN, the condition is `ON TRUE`.
+  /// [subquery] is a [QueryBuilder], a `Function(QueryBuilder)` or raw SQL.
+  /// [onCallback] adds the `on` conditions to the [JoinClause]; a lateral
+  /// join often uses `on true`.
   QueryBuilder joinLateral(
       dynamic subquery, String alias, Function(JoinClause) onCallback) {
     return _addLateralJoin(SqlJoin.inner, subquery, alias, onCallback);
   }
 
-  /// Adds a LEFT JOIN LATERAL to the query.
-  ///
-  /// [subquery] can be a QueryBuilder, a Closure (Function) or a raw SQL String.
-  /// [alias] is the mandatory alias for the lateral subquery.
-  /// [onCallback] is a function receiving a JoinClause to define ON conditions.
-  /// Often for LATERAL JOIN, the condition is `ON TRUE`.
+  /// Adds `left join lateral (subquery) as alias on ...`; see
+  /// [joinLateral].
   QueryBuilder leftJoinLateral(
       dynamic subquery, String alias, Function(JoinClause) onCallback) {
     return _addLateralJoin(SqlJoin.left, subquery, alias, onCallback);
   }
 
-  /// Helper method to add lateral joins.
   QueryBuilder _addLateralJoin(String type, dynamic subquery, String alias,
       Function(JoinClause) onCallback) {
-    // Creates subquery and gets SQL + bindings
     final res = createSub(subquery);
 
     final sql = res[0];
     final bindings = res[1];
 
-    // Creates expression for subquery ( "(subquery) as alias" )
     final expression = QueryExpression('($sql) as ${grammar.wrapTable(alias)}');
 
-    // Adds subquery bindings to 'join' type
+    // The subquery's bindings come before those of the `on` conditions.
     addBinding(bindings, 'join');
 
-    // Creates JoinClause, marking as lateral
     final join = JoinClause(type, expression, this, true);
 
-    // Applies ON conditions using provided callback
     onCallback(join);
 
-    // Adds configured JoinClause to main query joins list
     joinsProp.add(join);
 
-    // Adds ON clause bindings to 'join' type
     addBinding(join.bindingsLocal, 'join');
 
     return this;
   }
 
-  /// Adds a JOIN with raw "table/expression" (no wrap) and optionally
-  /// allows declaring ON conditions via callback.
+  /// Adds a join on the raw SQL [tableExpression] (not quoted), with
+  /// [bindings] for its `?` placeholders.
   ///
-  /// Examples:
-  ///   // Simple JOIN, no ON (useful with ON TRUE or NATURAL, etc.)
-  ///   qb.joinRaw('(select * from foo) as f');
+  /// [on] adds the `on` conditions to the [JoinClause] (`onRaw` included).
+  /// Only a `cross` join may go without them: any other type compiles an
+  /// empty `on`.
+  ///
+  /// ```dart
+  /// qb.joinRaw('(select * from foo) as f', [], SqlJoin.inner,
+  ///     (join) => join.onRaw('true'));
+  /// ```
   QueryBuilder joinRaw(
     String tableExpression, [
     List bindings = const [],
     String type = SqlJoin.inner,
     Function(JoinClause)? on,
   ]) {
-    // Keeps raw expression, no wrap/escape
     final tableExpr = QueryExpression(tableExpression);
 
-    // Creates JoinClause and pushes to query
     final join = JoinClause(type, tableExpr, this);
     this.joinsProp.add(join);
 
-    // Bindings associated with join "table"/expression
     if (bindings.isNotEmpty) {
       this.addBinding(bindings, 'join');
     }
 
-    // Allows configuring ON via callback (including onRaw)
     if (on != null) {
       on(join);
       if (join.bindingsLocal.isNotEmpty) {
@@ -4781,54 +4314,38 @@ class QueryBuilder {
     return this;
   }
 
-  /// Executes an optimized "batch insert", generating a single SQL statement
-  /// with multiple values. Ex: INSERT INTO table (...) VALUES (...), (...), (...)
+  /// Inserts [values] in one statement:
+  /// `INSERT INTO table (...) VALUES (...), (...), ...`.
   ///
-  /// [values] is a list of maps, where each map represents a row to be inserted.
-  ///
-  /// **Important:** All maps in the list must have exactly the same keys.
-  /// Point of Attention: The Parameter Limit (Bind Limit)
-  /// SQLite: The old default was 999 variables. Modern versions allow more, but there are still limits.
-  /// PostgreSQL: The protocol supports up to ~65,535 parameters (2 bytes unsigned integer).
-  /// SQL Server: Around 2,100 parameters.
+  /// The columns are the keys of the first row; a row without one of them
+  /// binds null. Every value is bound (a [QueryExpression] is not inlined),
+  /// and nothing is returned. One statement is limited by the database's
+  /// parameter limit (65535 on PostgreSQL); [copyInto] splits large loads.
   Future<dynamic> insertMany(List<Map<String, dynamic>> values) async {
-    // 1. If list is empty, nothing to do.
     if (values.isEmpty) {
       return;
     }
-    // 2. Gets table name from QueryBuilder.
     final table = grammar.wrapTable(fromProp);
-    // 3. Gets column names from first item in list.
-    //    Assumes all maps have same keys.
     final columns = values.first.keys.toList();
     final columnsSql = grammar.columnize(columns);
-    // 4. Prepares placeholders string (?, ?, ?) for a single row.
     final singleRowPlaceholders =
         '(${List.filled(columns.length, '?').join(', ')})';
-    // 5. Creates placeholders string for all rows, comma separated.
-    //    Ex: (?, ?), (?, ?), (?, ?)
     final allPlaceholders =
         List.filled(values.length, singleRowPlaceholders).join(', ');
-    // 6. Builds final SQL statement.
     final sql = 'INSERT INTO $table ($columnsSql) VALUES $allPlaceholders';
-    // 7. Flattens map list into single values list for bindings,
-    //    ensuring values order corresponds to columns order.
+    // Row by row, in the order of the columns.
     final bindings = <dynamic>[];
     for (final row in values) {
       for (final column in columns) {
         bindings.add(row[column]);
       }
     }
-    // 8. Executes insertion using QueryBuilder connection.
-    //    Connection `insert` method executes raw query.
     await connection.insert(sql, bindings);
   }
 
-  ///
-  /// Clone the query without the given properties.
-  ///
-  ///
-  /// `update ... set a = a + 1, b = b + 2` for several columns at once.
+  /// Adds an amount to several columns at once
+  /// (`update ... set a = a + 1, b = b + 2`), also setting the [extra]
+  /// columns, and returns the number of affected rows.
   Future<int> incrementEach(Map<String, num> columns,
       [Map<String, dynamic> extra = const {}]) {
     return this.update({
@@ -4839,7 +4356,9 @@ class QueryBuilder {
     });
   }
 
-  /// `update ... set a = a - 1, b = b - 2` for several columns at once.
+  /// Subtracts an amount from several columns at once
+  /// (`update ... set a = a - 1, b = b - 2`), also setting the [extra]
+  /// columns, and returns the number of affected rows.
   Future<int> decrementEach(Map<String, num> columns,
       [Map<String, dynamic> extra = const {}]) {
     return this.update({
@@ -4850,8 +4369,8 @@ class QueryBuilder {
     });
   }
 
-  /// The SQL with its bindings inlined, for logs and debugging only (never
-  /// execute it: escaping is best-effort, dialect-aware).
+  /// Returns the SQL with its bindings inlined, for logs and debugging only
+  /// (never execute it: escaping is best-effort, dialect-aware).
   String toRawSql() {
     final bindings = this.connection.prepareBindings(
         List<dynamic>.of(this.cleanBindings(this.getBindings())));
@@ -4865,6 +4384,8 @@ class QueryBuilder {
     return this;
   }
 
+  /// Returns an independent copy of the query: its clauses, bindings,
+  /// pending insert clauses and [afterQuery] callbacks.
   QueryBuilder clone() {
     final newQuery = this.newQuery();
 
@@ -4924,9 +4445,8 @@ class QueryBuilder {
     return newQuery;
   }
 
-  ///
-  /// Handle dynamic method calls into the method.
-  /// equivalent to __call
+  /// Calls the builder method named [methodName] (PHP's `__call`); only
+  /// `select`, `from` and `where` are supported, anything else throws.
   dynamic callMethod(
     String methodName,
     List<dynamic> positionalArguments, [

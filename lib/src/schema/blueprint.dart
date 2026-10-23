@@ -2,49 +2,53 @@ import 'package:eloquent/eloquent.dart';
 import 'package:meta/meta.dart';
 import 'dart:async';
 
-/// Representa um blueprint para definir ou modificar uma tabela no schema.
-/// Mapeia a funcionalidade da classe Blueprint do Laravel/Illuminate.
+/// Describes a table to create or the changes to an existing one: columns,
+/// indexes and commands, compiled by a [SchemaGrammar] (Laravel's
+/// `Blueprint`).
 class Blueprint {
-  /// O nome da tabela que o blueprint descreve.
+  /// The name of the table the blueprint describes.
   final String _table;
 
-  /// As colunas que devem ser adicionadas ou modificadas na tabela.
+  /// The columns to add to the table or change.
   final List<Fluent> _columns = [];
 
-  /// Os comandos (ações) que devem ser executados na tabela.
+  /// The commands (actions) to run on the table.
   final List<Fluent> _commands = [];
 
-  // --- Variáveis de Configuração da Tabela (Renomeadas) ---
-  /// O storage engine a ser usado (ex: InnoDB). Acessado pela Gramática.
+  // --- Table options ---
+  /// The storage engine (e.g. InnoDB). Read by the MySQL grammar.
   String? tableEngine;
 
-  /// O character set padrão para a tabela. Acessado pela Gramática.
+  /// The table's default character set. Read by the MySQL grammar.
   String? tableCharset;
 
-  /// A collation padrão para a tabela. Acessado pela Gramática.
+  /// The table's default collation. Read by the MySQL grammar.
   String? tableCollation;
-  // --- Fim ---
+  // --- End of table options ---
 
-  /// Indica se a tabela deve ser temporária.
+  /// Whether the table is temporary (see [temporary]).
   bool temporaryV = false;
 
-  /// Cria uma nova instância de Blueprint.
+  /// Creates a blueprint for the table [tableP] and, when given, passes it
+  /// to [callback].
   Blueprint(String tableP, [Function(Blueprint)? callback]) : _table = tableP {
     if (callback != null) {
       callback(this);
     }
   }
 
-  /// Executa o blueprint contra a conexão do banco de dados.
+  /// Runs the statements of [toSql] on [connection].
   Future<void> build(Connection connection, SchemaGrammar grammar) async {
     final statements = toSql(connection, grammar);
     for (final statement in statements) {
-      // Usa `execute` para DDL pois geralmente não retorna linhas.
+      // `execute`, as DDL returns no rows.
       await connection.execute(statement);
     }
   }
 
-  /// Gera as instruções SQL para este blueprint.
+  /// Returns the SQL statements of this blueprint, compiled by [grammar].
+  ///
+  /// Throws [UnsupportedError] for a command the grammar does not know.
   List<String> toSql(Connection connection, SchemaGrammar grammar) {
     addImpliedCommands();
 
@@ -85,29 +89,34 @@ class Blueprint {
     return statements;
   }
 
-  /// Adiciona comandos implícitos (add, change) se necessário.
+  /// Adds the implied commands: `add` for new columns and `change` for
+  /// changed ones (unless the table is being created), and the commands of
+  /// the indexes declared on columns.
   @protected
   void addImpliedCommands() {
-    // Adiciona 'add' se houver colunas novas e não for 'create'
+    // 'add' when there are new columns and the table is not being created.
     if (getAddedColumns().isNotEmpty && !creating()) {
       if (!_commands.any((cmd) => cmd['name'] == 'add')) {
         _commands.insert(0, createCommand('add'));
       }
     }
-    // Adiciona 'change' se houver colunas modificadas e não for 'create'
+    // 'change' when there are changed columns and the table is not being
+    // created.
     if (getChangedColumns().isNotEmpty && !creating()) {
       if (!_commands.any((cmd) => cmd['name'] == 'change')) {
         _commands.insert(0, createCommand('change'));
       }
     }
-    // Adiciona comandos para índices definidos fluentemente nas colunas
+    // Commands for the indexes declared on columns.
     addFluentIndexes();
   }
 
-  /// Adiciona comandos para índices definidos fluentemente nas colunas.
+  /// Adds a table-level index command for each index declared on a column
+  /// (`primary`, `unique`, `index`, `spatialIndex`); a string value is the
+  /// index name.
   @protected
   void addFluentIndexes() {
-    // Itera sobre uma cópia para poder remover atributos do original com segurança
+    // Iterates over a copy so attributes can be removed from the original.
     for (final column in List.from(_columns)) {
       void checkAndAddIndex(String indexType, String commandName) {
         final indexValue = column[indexType];
@@ -115,9 +124,9 @@ class Blueprint {
           String? explicitName = (indexValue is String && indexValue.isNotEmpty)
               ? indexValue
               : null;
-          // Adiciona o comando de índice de nível de tabela
+          // Adds the table-level index command.
           indexCommand(commandName, column['name'], explicitName);
-          // Remove o atributo do Fluent original para não ser processado como modificador
+          // Removes the attribute so it is not compiled as a modifier.
           column.attributes.remove(indexType);
         }
       }
@@ -129,22 +138,25 @@ class Blueprint {
     }
   }
 
-  /// Verifica se existe um comando 'create'.
+  /// Whether the blueprint has a `create` command.
   bool creating() => _commands.any((command) => command['name'] == 'create');
 
-  /// Adiciona comando 'create'.
+  /// Adds a `create` command.
   Fluent create() => addCommand('create');
 
-  /// Marca a tabela como temporária.
+  /// Marks the table as temporary.
   void temporary() => temporaryV = true;
 
-  /// Adiciona comando 'drop'.
+  /// Adds a `drop` command.
   Fluent drop() => addCommand('drop');
 
-  /// Adiciona comando 'dropIfExists'.
+  /// Adds a `dropIfExists` command.
   Fluent dropIfExists() => addCommand('dropIfExists');
 
-  /// Adiciona comando 'dropColumn'. Aceita String ou List<String>.
+  /// Adds a `dropColumn` command for [columns], a column name or a list of
+  /// names.
+  ///
+  /// Throws [ArgumentError] for any other type.
   Fluent dropColumn(dynamic columns) {
     final List<String> columnList;
     if (columns is String) {
@@ -154,35 +166,42 @@ class Blueprint {
     } else {
       throw ArgumentError('dropColumn expects a String or a List<String>.');
     }
-    // Adiciona 'dropColumn' com a lista de colunas nos parâmetros
+    // 'dropColumn' with the list of columns in its parameters.
     return addCommand('dropColumn', {'columns': columnList});
   }
 
-  /// Adiciona comando 'renameColumn'.
+  /// Adds a `renameColumn` command.
   Fluent renameColumn(String from, String to) =>
       addCommand('renameColumn', {'from': from, 'to': to});
 
-  /// Adiciona comando 'dropPrimary'.
+  /// Adds a `dropPrimary` command.
+  ///
+  /// [index] is the constraint name, a list of columns (the name is derived
+  /// from them) or `null` (the grammar's default name).
   Fluent dropPrimary([dynamic index]) =>
       dropIndexCommand('dropPrimary', 'primary', index);
 
-  /// Adiciona comando 'dropUnique'.
+  /// Adds a `dropUnique` command.
   Fluent dropUnique(String index) =>
       dropIndexCommand('dropUnique', 'unique', index);
 
-  /// Adiciona comando 'dropIndex'.
+  /// Adds a `dropIndex` command.
   Fluent dropIndex(String index) =>
       dropIndexCommand('dropIndex', 'index', index);
 
-  /// Adiciona comando 'dropSpatialIndex'.
+  /// Adds a `dropSpatialIndex` command.
   Fluent dropSpatialIndex(String index) =>
       dropIndexCommand('dropSpatialIndex', 'spatialIndex', index);
 
-  /// Adiciona comando 'dropForeign'.
+  /// Adds a `dropForeign` command.
   Fluent dropForeign(String index) =>
       dropIndexCommand('dropForeign', 'foreign', index);
 
-  /// Adiciona um comando para dropar um índice/constraint.
+  /// Adds the [command] that drops an index or constraint of [type].
+  ///
+  /// [index] is the name, or a list of columns from which the name is
+  /// derived; `null` is accepted only for `dropPrimary`. Throws
+  /// [ArgumentError] otherwise.
   @protected
   Fluent dropIndexCommand(String command, String type, dynamic index) {
     List<String>? columns;
@@ -203,7 +222,7 @@ class Blueprint {
           "Index name is required for dropping $type constraints/indexes.");
     }
 
-    // Adiciona o comando com 'index' (nome) e opcionalmente 'columns'
+    // The command with 'index' (the name) and, if given, 'columns'.
     final parameters = <String, dynamic>{'index': finalIndexName};
     if (columns != null) parameters['columns'] = columns;
     return addCommand(command, parameters);
@@ -214,16 +233,15 @@ class Blueprint {
   void dropSoftDeletes({String column = 'deleted_at'}) => dropColumn(column);
   void dropSoftDeletesTz({String column = 'deleted_at'}) => dropColumn(column);
 
-  /// Adiciona comando 'dropRememberToken' (específico).
+  /// Drops the `remember_token` column.
   void dropRememberToken() => dropColumn(
       'remember_token'); // Adiciona comando específico se necessário pela gramática
-  // OU apenas: dropColumn('remember_token'); se a gramática não precisar de comando especial
 
   Fluent rename(String to) => addCommand('rename', {'to': to});
   Fluent renameIndex(String from, String to) =>
       addCommand('renameIndex', {'from': from, 'to': to});
 
-  // --- Métodos de Definição de Índices/Constraints (Nível de Tabela) ---
+  // --- Table-level indexes and constraints ---
   Fluent primary(dynamic columns, [String? name]) =>
       indexCommand('primary', columns, name);
   Fluent unique(dynamic columns, [String? name]) =>
@@ -233,7 +251,8 @@ class Blueprint {
   Fluent spatialIndex(dynamic columns, [String? name]) =>
       indexCommand('spatialIndex', columns, name);
 
-  /// Adiciona o comando 'foreign', retorna Fluent para encadear .references().on() etc.
+  /// Adds a `foreign` command; [references], [on], [onDelete] and the other
+  /// foreign key modifiers apply to it.
   Fluent foreign(dynamic columns, [String? name]) =>
       indexCommand('foreign', columns, name);
 
@@ -278,8 +297,7 @@ class Blueprint {
     return safeIndex;
   }
 
-  // --- Definições de Coluna (Métodos Builder) ---
-  // (Implementações como antes, chamando addColumn)
+  // --- Column definitions ---
   Fluent increments(String column) => unsignedBigInteger(column, true);
   Fluent tinyIncrements(String column) => unsignedTinyInteger(column, true);
   Fluent smallIncrements(String column) => unsignedSmallInteger(column, true);
@@ -366,7 +384,7 @@ class Blueprint {
   Map<String, dynamic> _timePrecision(int? precision) =>
       {'precision': precision ?? SchemaBuilder.defaultTimePrecision};
 
-  /// Adiciona colunas 'created_at' e 'updated_at' nullable.
+  /// Adds the nullable `created_at` and `updated_at` timestamp columns.
   void nullableTimestamps({int? precision}) {
     timestamp('created_at', precision: precision);
     this.nullable();
@@ -374,25 +392,26 @@ class Blueprint {
     this.nullable();
   }
 
-  /// Adiciona colunas 'created_at' e 'updated_at'.
+  /// Adds the `created_at` and `updated_at` timestamp columns.
   void timestamps({int? precision}) {
     timestamp('created_at', precision: precision);
     timestamp('updated_at', precision: precision);
   }
 
-  /// Adiciona colunas 'created_at' e 'updated_at' com timezone.
+  /// Adds the `created_at` and `updated_at` timestamp columns with time
+  /// zone.
   void timestampsTz({int? precision}) {
     timestampTz('created_at', precision: precision);
     timestampTz('updated_at', precision: precision);
   }
 
-  /// Adiciona coluna 'deleted_at' nullable para soft deletes.
+  /// Adds the nullable timestamp [column] for soft deletes.
   Fluent softDeletes({String column = 'deleted_at', int? precision}) {
     timestamp(column, precision: precision);
     return this.nullable();
   }
 
-  /// Adiciona coluna 'deleted_at' nullable com timezone para soft deletes.
+  /// Adds the nullable timestamp-with-time-zone [column] for soft deletes.
   Fluent softDeletesTz({String column = 'deleted_at', int? precision}) {
     timestampTz(column, precision: precision);
     return this.nullable();
@@ -451,7 +470,7 @@ class Blueprint {
     return nullable();
   }
 
-  // --- Métodos Internos ---
+  // --- Internals ---
   @protected
   Fluent addColumn(String type, String name,
       [Map<String, dynamic> parameters = const {}]) {
@@ -492,7 +511,7 @@ class Blueprint {
   List<Fluent> getChangedColumns() =>
       _columns.where((c) => c['change'] == true).toList();
 
-  // --- Chaining para Modificadores (Operam no último Fluent da coluna adicionada) ---
+  // --- Column modifiers (they apply to the last column added) ---
   Fluent _getLastColumnFluent() {
     if (_columns.isEmpty) throw StateError("No column defined yet.");
     return _columns.last;
@@ -583,7 +602,8 @@ class Blueprint {
     return _getLastColumnFluent();
   }
 
-  // --- Chaining para Foreign Keys (Operam no último comando 'foreign' adicionado) ---
+  // --- Foreign key modifiers (they apply to the last command, which must
+  // be a 'foreign' command) ---
   Fluent _getLastCommandFluent(String expectedName) {
     if (_commands.isEmpty || _commands.last['name'] != expectedName)
       throw StateError(

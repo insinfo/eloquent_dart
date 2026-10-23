@@ -1,30 +1,18 @@
 import 'package:eloquent/eloquent.dart';
 
-/// base_query_grammar.dart BaseGrammar
+/// Identifier quoting and placeholders shared by the query and schema
+/// grammars.
 abstract class BaseGrammar {
-  ///
-  /// The grammar table prefix.
-  ///
-  /// @var string
-  ///
+  /// The prefix added to table names.
   String tablePrefix = '';
 
-  ///
-  /// Wrap an array of values.
-  ///
-  /// @param  array  $values
-  /// @return array
-  ///
+  /// Wraps each of [values] with [wrap].
   List wrapArray(List values) {
     return Utils.array_map(wrap, values);
   }
 
-  ///
-  /// Wrap a table in keyword identifiers.
-  ///
-  /// @param  string|\Illuminate\Database\Query\Expression  $table
-  /// @return string
-  ///
+  /// Quotes a table name with the [tablePrefix] added (to an alias too); a
+  /// [QueryExpression] is used as is.
   String wrapTable(dynamic table) {
     if (table is QueryExpression) {
       return getValue(table);
@@ -33,27 +21,23 @@ abstract class BaseGrammar {
     return wrap(tablePrefix + table, true);
   }
 
+  /// Quotes a column or table reference: `table.column` becomes
+  /// `"table"."column"` and `column as alias` becomes `"column" as "alias"`;
+  /// a [QueryExpression] is used as is.
   ///
-  /// Wrap a value in keyword identifiers.
-  ///
-  /// @param  String |\Illuminate\Database\Query\Expression  $value
-  /// @param  bool    $prefixAlias
-  /// @return string
-  ///
+  /// [prefixAlias] adds the [tablePrefix] to the alias.
   String wrap(dynamic valueP, [bool prefixAlias = false]) {
     if (valueP is QueryExpression) {
       return getValue(valueP);
     }
 
-    // pra ter o mesmo comportamento do PHP para converter para string
+    // Any value other than a String or a QueryExpression throws here.
     final String value = valueP; // valueP is String ? : valueP.toString();
 
-    // If the value being wrapped has a column alias we will need to separate out
-    // the pieces so we can wrap each of the segments of the expression on it
-    // own, and then joins them both back together with the "as" connector.
+    // An aliased value (`x as y`) wraps each side and joins them with `as`.
     //
-    // Fast case-insensitive " as " probe avoids allocating a lowercased copy of
-    // the whole string (the previous strtolower) on every wrap().
+    // The case-insensitive " as " probe avoids allocating a lowercased copy
+    // of the whole string on every wrap().
     if (_containsAsKeyword(value)) {
       var segments = Utils.explode(' ', value);
       if (prefixAlias) {
@@ -87,8 +71,8 @@ abstract class BaseGrammar {
     return Utils.implode('.', wrapped);
   }
 
-  /// Case-insensitive scan for a `" as "` alias keyword (space, a/A, s/S, space)
-  /// without allocating a lowercased copy of the input.
+  /// Case-insensitive scan for a `" as "` alias keyword (space, a/A, s/S,
+  /// space) without allocating a lowercased copy of the input.
   static bool _containsAsKeyword(String s) {
     final n = s.length;
     for (var i = 0; i + 4 <= n; i++) {
@@ -102,12 +86,8 @@ abstract class BaseGrammar {
     return false;
   }
 
-  ///
-  /// Wrap a single string in keyword identifiers.
-  ///
-  /// @param  string  $value
-  /// @return string
-  ///
+  /// Quotes one identifier with double quotes (`"` doubled inside); `*` is
+  /// kept.
   String wrapValue(String value) {
     if (value == '*') {
       return value;
@@ -121,63 +101,34 @@ abstract class BaseGrammar {
     return '"$value"';
   }
 
-  ///
-  /// Convert an array of column names into a delimited string.
-  ///
-  /// [columns] List<dynamic> | List<String> | List<QueryExpression>
-  /// @return string
-  ///
+  /// Wraps [columns] (names or [QueryExpression]s) and joins them with
+  /// commas.
   String columnize(List<dynamic> columns) {
     return Utils.implode(', ', Utils.array_map(wrap, columns));
   }
 
-  ///
-  /// Create query parameter place-holders for an array.
-  ///
-  /// @param  array   $values
-  /// @return string
-  ///
+  /// The placeholders of [values], comma-separated: `?, ?, ...`.
   String parameterize(List values) {
     return Utils.implode(', ', Utils.array_map(parameter, values));
   }
 
-  ///
-  /// Get the appropriate query parameter place-holder for a value.
-  ///
-  /// @param  mixed   $value
-  /// @return string
-  ///
+  /// The placeholder of [value]: `?`, or the SQL of a [QueryExpression].
   String parameter(dynamic value) {
     return isExpression(value) ? getValue(value) : '?';
   }
 
-  ///
-  /// Get the value of a raw expression.
-  ///
-  /// [expression]  \Illuminate\Database\Query\Expression
-  ///  Return `String`
-  ///
+  /// The SQL of a raw [expression].
   String getValue(QueryExpression expression) {
     return expression.getValue();
   }
 
-  ///
-  /// Determine if the given value is a raw expression.
-  ///
-  /// @param  mixed  $value
-  /// @return bool
-  ///
+  /// Whether [value] is a raw [QueryExpression].
   bool isExpression(dynamic value) {
     return value is QueryExpression;
   }
 
-  ///
-  /// Get the format for database stored dates.
-  ///
-  /// @return string
-  ///
+  /// The format of the dates sent to the database: `yyyy-MM-dd HH:mm:ss`.
   String getDateFormat() {
-    // return 'Y-m-d H:i:s';
     return 'yyyy-MM-dd HH:mm:ss';
   }
 
@@ -187,21 +138,12 @@ abstract class BaseGrammar {
   String formatDateTime(DateTime value) =>
       Utils.formatDate(value, getDateFormat());
 
-  ///
-  /// Get the grammar's table prefix.
-  ///
-  /// @return string
-  ///
+  /// Returns the [tablePrefix].
   String getTablePrefix() {
     return tablePrefix;
   }
 
-  ///
-  /// Set the grammar's table prefix.
-  ///
-  /// @param  string  $prefix
-  /// @return $this
-  ///
+  /// Sets the [tablePrefix] and returns this grammar.
   dynamic setTablePrefix(String prefix) {
     tablePrefix = prefix;
 

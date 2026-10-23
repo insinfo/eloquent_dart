@@ -12,16 +12,17 @@ class Utils {
   static const int intMinValueJS = -9007199254740992;
   static const int intMaxValueJS = 9007199254740992;
 
-  /// Converte uma string CamelCase para snake_case.
+  /// Converts a camelCase or PascalCase [input] to snake_case.
   static String toSnakeCase(String input) {
-    // Insere um "_" antes de cada letra maiúscula que vem após um caractere minúsculo ou dígito
+    // Insert "_" before each upper-case letter that follows a lower-case
+    // letter or a digit.
     final RegExp exp = RegExp(r'(?<=[a-z0-9])([A-Z])');
     return input
         .replaceAllMapped(exp, (Match m) => '_${m.group(0)}')
         .toLowerCase();
   }
 
-  ///  Aplica o retorno de chamada aos elementos dos arrays fornecidos
+  /// Returns the results of calling [callback] on each element of [values].
   static List array_map(Function callback, List values) {
     var result = [];
 
@@ -32,7 +33,7 @@ class Utils {
     return result;
   }
 
-  /// Filtra elementos de um array utilizando uma função callback
+  /// Returns the elements of [array] for which [callback] returns true.
   static List array_filter(List array, Function callback) {
     var result = [];
 
@@ -45,17 +46,19 @@ class Utils {
     return result;
   }
 
-  /// in_array — Verifica se existe um valor em um array
+  /// Returns whether [array] contains [needle].
   static bool in_array(dynamic needle, List array) {
     return array.contains(needle);
   }
 
-  /// implode — Junta elementos de uma matriz em uma string
+  /// Joins [pieces] into a string, separated by [glue].
   static String implode(String glue, List pieces) {
     return pieces.join(glue);
   }
 
-  ///  Substitui todas as ocorrências da string de pesquisa pela string de substituição
+  /// Replaces every occurrence of [search] in [subject] with [replace].
+  ///
+  /// [search] is a [Pattern] or a list of patterns.
   static String str_replace(dynamic search, String replace, String subject) {
     var result = subject;
     if (search is List) {
@@ -69,23 +72,18 @@ class Utils {
     return result;
   }
 
-  ///
-  /// Return the default value of the given value.
-  ///
-  /// @param  mixed  $value
-  /// @return mixed
-  ///
+  /// Returns [value], or the result of calling it when it is a function.
   static dynamic value(dynamic value) {
     return value is Function ? value() : value;
   }
 
-  /// Converte uma string para minúsculas
+  /// Converts [str] to lower case.
   static String strtolower(String str) {
     return str.toLowerCase();
   }
 
-  /// Encontra a posição da primeira ocorrência de uma substring em uma string
-  /// return int|false
+  /// Returns the index of the first occurrence of [needle] in [str], or
+  /// `false` when there is none (as PHP's `strpos`).
   static dynamic strpos(String str, Pattern needle) {
     var index = str.indexOf(needle);
     if (index == -1) {
@@ -94,9 +92,11 @@ class Utils {
     return index;
   }
 
-  /// Dividir uma string por uma string
+  /// Splits [string] at each [separator].
   ///
-  /// PHP_INT_MAX = 9223372036854775807 [int limit = 9223372036854775807]
+  /// With [limit], only the first [limit] pieces are returned: unlike PHP,
+  /// the rest of the string is dropped, not kept in the last piece. A
+  /// [limit] of 0 or less returns an empty list.
   static List explode(Pattern separator, String string, [int? limit]) {
     var items = string.split(separator);
     if (limit == null) {
@@ -111,12 +111,12 @@ class Utils {
     }
   }
 
-  /// Conta todos os elementos em uma matriz ou em um objeto Countable
+  /// Returns the number of elements in [items].
   static int count(Iterable items) {
     return items.length;
   }
 
-  /// Torna o primeiro caractere de uma string maiúsculo
+  /// Returns [string] with its first character in upper case.
   static String ucfirst(String string) {
     if (string.length == 0) {
       return string;
@@ -127,19 +127,17 @@ class Utils {
     return string[0].toUpperCase() + string.substring(1);
   }
 
+  /// Splits the [valueP] and [keyP] arguments of [array_pluck] into paths
+  /// and returns `[value, key]`.
   ///
-  /// Explode the "value" and "key" arguments passed to "pluck".
-  ///
-  /// @param  string|array  $value
-  /// @param  string|array|null  $key
-  /// @return array return [value, key];
-  ///
+  /// Strings are trimmed and split at the dots; lists are kept, their string
+  /// segments trimmed. A null [keyP] stays null.
   static List explodePluckParameters(dynamic valueP, dynamic keyP) {
-    // Se valueP for string, primeiro trim
+    // Trim valueP when it is a String.
     if (valueP is String) {
       valueP = valueP.trim();
     }
-    // Se keyP for string, trim
+    // Trim keyP when it is a String.
     if (keyP is String) {
       keyP = keyP.trim();
     }
@@ -147,7 +145,7 @@ class Utils {
     var value = is_string(valueP) ? explode('.', valueP) : valueP;
     var key = is_null(keyP) || is_array(keyP) ? keyP : explode('.', keyP);
 
-    // Agora, se 'value' ou 'key' forem List<String>, trim cada segmento
+    // Now, when 'value' or 'key' is a list, trim each String segment.
     if (value is List) {
       value = value.map((segment) {
         if (segment is String) return segment.trim();
@@ -165,12 +163,12 @@ class Utils {
     return [value, key];
   }
 
-  /// igual a Arr.pluck
-  /// Pluck an array of values from an array.
+  /// Returns the value at the path [valueP] in each item of [arrayP] (a List,
+  /// or the values of a Map), like Laravel's `Arr::pluck`.
   ///
-  /// Se [keyP] == null, retorna uma List.
-  /// Se [keyP] != null, retorna um Map, onde cada chave é itemKey e valor é itemValue.
-  ///
+  /// Without [keyP] the result is a List; with [keyP] it is a Map from the
+  /// value at the path [keyP] in each item to the value plucked from it. An
+  /// item without a value at [keyP] is its own key.
   static array_pluck(dynamic arrayP, dynamic valueP, [dynamic keyP]) {
     if (arrayP == null) {
       return keyP != null ? <dynamic, dynamic>{} : <dynamic>[];
@@ -178,7 +176,7 @@ class Utils {
 
     var results = keyP != null ? <dynamic, dynamic>{} : <dynamic>[];
 
-    // Explode "valueP" e "keyP"
+    // Split "valueP" and "keyP" into paths.
     var re = explodePluckParameters(valueP, keyP);
     var valuePath = re[0];
     var keyPath = re[1];
@@ -192,7 +190,7 @@ class Utils {
         } else {
           var itemKey = data_get(item, keyPath);
 
-          // Se a chave não foi encontrada, fallback = item inteiro
+          // Without a key, the whole item is the key.
           if (itemKey == null) {
             itemKey = item;
           }
@@ -221,9 +219,8 @@ class Utils {
     return results;
   }
 
-  /// change all keys to case defined
-  /// Changes the case of the keys of [map] in place (nested maps too) and
-  /// returns it. It used to keep every key as it was.
+  /// Changes the case of the keys of [map] in place, nested
+  /// `Map<String, dynamic>` values included, and returns [map].
   static Map<String, dynamic> map_change_key_case_sd(Map<String, dynamic> map,
       [StringCase typeCase = StringCase.CASE_LOWER]) {
     final entries = map.entries.toList();
@@ -241,21 +238,17 @@ class Utils {
     return map;
   }
 
+  /// Returns `array[key]`, or [defaultP] (called first when it is a
+  /// function) when [array] is not a List or Map or has no such key.
   ///
-  /// Get an item from an array using "dot" notation.
-  ///
-  /// @param  \ArrayAccess|array  $array
-  /// @param  string  $key
-  /// @param  mixed   $default
-  /// @return mixed
-  /// equivalente a Arr::get($connections, $name)
-  ///
+  /// Like Laravel's `Arr::get`, without "dot" notation: [key] is a top-level
+  /// key.
   static dynamic array_get(dynamic array, String key, [dynamic defaultP]) {
     if (!array_accessible(array)) {
       return value(defaultP);
     }
 
-    // Se a key existe em nível top-level, retorna. Caso contrário, default.
+    // Return the key when it exists at the top level, else the default.
     if (array_exists(array, key)) {
       return array[key];
     }
@@ -263,22 +256,21 @@ class Utils {
     return value(defaultP);
   }
 
+  /// Returns the value at the "dot" path [originalKey] in [target], or
+  /// [defaultP] (called first when it is a function) when the path is
+  /// missing.
   ///
-  /// Get an item from an array or object using "dot" notation.
-  ///
-  /// @param  mixed   $target
-  /// @param  string|array  $key
-  /// @param  mixed   $default
-  /// @return mixed
-  ///
+  /// [originalKey] is a dotted String or a list of segments; null returns
+  /// [target]. A `*` segment plucks the rest of the path from every element
+  /// of a List.
   static dynamic data_get(dynamic target, dynamic originalKey,
       [dynamic defaultP]) {
     if (is_null(originalKey)) {
       return target;
     }
 
-    // Se 'originalKey' for string, transformamos em lista (explode),
-    // mas se for List, criamos uma cópia para não modificá-la:
+    // A String 'originalKey' is split at the dots; a List is copied so that
+    // it is not modified:
     List<dynamic> segments;
     if (is_array(originalKey)) {
       segments = List.of(originalKey); // cria cópia
@@ -306,12 +298,7 @@ class Utils {
     return target;
   }
 
-  ///
-  /// Determine whether the given value is array accessible.
-  ///
-  /// @param  mixed  $value
-  /// @return bool
-  ///
+  /// Returns whether [value] is a List or a Map.
   static bool array_accessible(dynamic value) {
     return is_array(value) ||
         is_map(value); // || $value instanceof ArrayAccess;
@@ -321,21 +308,13 @@ class Utils {
     return value is Object;
   }
 
-  /**
-     * Collapse an array of arrays into a single array.
-     *
-     * @param  array  $array
-     * @return array
-     */
+  /// Collapses a list of lists into one list.
+  ///
+  /// Elements that are not lists are skipped.
   static dynamic array_collapse(dynamic array) {
     var results = array is List ? [] : <String, dynamic>{};
 
     for (var values in array) {
-      // if ($values instanceof Collection) {
-      //     $values = $values->all();
-      // } elseif (! is_array($values)) {
-      //     continue;
-      // }
       if (!is_array(values)) {
         continue;
       }
@@ -349,10 +328,10 @@ class Utils {
     return results;
   }
 
-  /// desloca o primeiro valor do arrayoff e o retorna, encurtando o array
-  /// por um elemento e movendo tudo para baixo. Todas as chaves de matriz
-  /// numérica serão modificadas para começar a contar do zero,
-  /// enquanto as chaves literais não serão afetadas.
+  /// Removes and returns the first element of a List, or the first entry
+  /// (a [MapEntry]) of a Map.
+  ///
+  /// Returns null when [array] is empty or neither.
   static dynamic array_shift(dynamic array) {
     if (array is List && array.length > 0) {
       var fistItem = array.first;
@@ -367,17 +346,11 @@ class Utils {
     return null;
   }
 
-  /**
-     * Determine if the given key exists in the provided array or Map
-     *
-     * [array] @param  \ArrayAccess|array   Map | List
-     * @param  string|int  $key
-     * @return bool
-     */
+  /// Returns whether [key] exists in [array]: a key of a Map, or a valid
+  /// index of a List.
+  ///
+  /// Throws an [Exception] when [array] is neither.
   static bool array_exists(dynamic array, dynamic key) {
-    // if ($array instanceof ArrayAccess) {
-    //     return $array->offsetExists($key);
-    // }
     if (array is Map) {
       return map_key_exists(key, array);
     } else if (array is List) {
@@ -386,13 +359,8 @@ class Utils {
     throw Exception('array is not List or Map');
   }
 
-  ///
-  /// Determine if a given string contains a given substring.
-  ///
-  /// @param  string  $haystack
-  /// @param  string|array  $needles
-  /// @return bool
-  ///
+  /// Returns whether [haystack] contains any of [needles]; empty needles
+  /// never match.
   static bool string_contains(String haystack, List<String> needles) {
     for (var needle in needles) {
       if (needle != '' && haystack.indexOf(needle) != -1) {
@@ -403,7 +371,8 @@ class Utils {
     return false;
   }
 
-  /// array1 => ['A', 'B']  and array2 => ['C', 'D'] return ['A', 'B', 'C', 'D']
+  /// Returns the elements of [array1] followed by those of [array2]; null
+  /// counts as an empty list.
   static List array_merge(List? array1, List? array2) {
     var a1 = array1;
     var a2 = array2;
@@ -416,18 +385,20 @@ class Utils {
     return [...a1, ...a2];
   }
 
-  /// mescla duas List de String Null Safety
+  /// Returns the elements of [array1] followed by those of [array2].
   static List<String> array_merge_ss(List<String> array1, List<String> array2) {
     return [...array1, ...array2];
   }
 
-  /// mescla duas List Map String dynamic Null Safety
+  /// Returns the elements of [array1] followed by those of [array2].
   static List<Map<String, dynamic>> array_merge_ms(
       List<Map<String, dynamic>> array1, List<Map<String, dynamic>> array2) {
     return [...array1, ...array2];
   }
 
-  /// mescla duas List de String anulavel
+  /// Returns the elements of [array1] followed by those of [array2].
+  ///
+  /// Throws an [Exception] when either is null.
   static List<String> array_merge_sa(
       List<String>? array1, List<String>? array2) {
     if (array1 == null) {
@@ -441,13 +412,8 @@ class Utils {
     return [...array1, ...array2];
   }
 
-  ///
-  /// Flatten a multi-dimensional array into a single level.
-  ///
-  /// @param  array  $array
-  /// @param  int  $depth
-  /// @return array
-  ///
+  /// Flattens the nested lists of [array] into one list, down to [depth]
+  /// levels.
   static List array_flatten(List array, [int depth = intMaxValueNative]) {
     var result = [];
 
@@ -470,13 +436,14 @@ class Utils {
     return result;
   }
 
+  /// Returns a new map with the entries of [firstMap] and [secondMap], the
+  /// latter winning, as PHP's `array_merge` on associative arrays.
   ///
-  /// esquivale ao array_merge para Array Associativo do PHP
-  /// Example:
-  ///  var map1 = {'driver': 'pgsql', 'host': 'localhost'};
-  ///  var map2 = {'driver': 'mysql', 'host': '127.0.0.1'};
-  ///  print(map_merge_sd(map1, map2));
-  ///  result {driver: mysql, host: 127.0.0.1}
+  /// ```dart
+  /// var map1 = {'driver': 'pgsql', 'host': 'localhost'};
+  /// var map2 = {'driver': 'mysql', 'host': '127.0.0.1'};
+  /// print(map_merge_sd(map1, map2)); // {driver: mysql, host: 127.0.0.1}
+  /// ```
   static Map<String, dynamic> map_merge_sd(
       Map<String, dynamic> firstMap, Map<String, dynamic> secondMap) {
     return {
@@ -485,7 +452,8 @@ class Utils {
     };
   }
 
-  /// Add an element to an map of String, dynamic if it doesn't exist.
+  /// Sets [key] to [value] in [map] unless [key] is already there, and
+  /// returns [map].
   static Map<String, dynamic> map_add_sd(
       Map<String, dynamic> map, String key, dynamic value) {
     if (map.containsKey(key)) {
@@ -496,26 +464,26 @@ class Utils {
     return map;
   }
 
+  /// Removes [keys] (a String or a `List<String>`) from [map] and its nested
+  /// maps, in place, and returns [map].
   ///
-  /// Get all of the given Map except for a specified Map of items.
+  /// A key whose value is a map is not removed: its map is searched instead.
+  /// Throws an [Exception] when [keys] is neither a String nor a
+  /// `List<String>`.
   ///
-  /// [map]  Map<String, dynamic>
-  /// [keys]  List<String>|String  keys
-  /// Return Map<String, dynamic>
-  ///
-  /// Example:
-  ///  var map = {
-  ///    'driver': 'mysql',
-  ///    'host': '127.0.0.1',
-  ///    'level1': {
-  ///       'read': true,
-  ///       'write': false,
-  ///       'level2': {'banana': 'good'}
-  ///     }
-  ///   };
+  /// ```dart
+  /// var map = {
+  ///   'driver': 'mysql',
+  ///   'host': '127.0.0.1',
+  ///   'level1': {
+  ///     'read': true,
+  ///     'write': false,
+  ///     'level2': {'banana': 'good'}
+  ///   }
+  /// };
   /// map_except_sd(map, ['read', 'write']);
-  /// result: {driver: mysql, host: 127.0.0.1, level1: {level2: {banana: good}}}
-  ///
+  /// // {driver: mysql, host: 127.0.0.1, level1: {level2: {banana: good}}}
+  /// ```
   static Map<String, dynamic> map_except_sd(
       Map<String, dynamic> map, dynamic keys) {
     if (keys is List<String>) {
@@ -530,7 +498,7 @@ class Utils {
     return map;
   }
 
-  /// remove um item varrendo o map recursivamente
+  /// Removes [key] from [map] and its nested maps; see [map_except_sd].
   static void map_unset_deep_sd(Map<String, dynamic> map, String key) {
     var clone = <String, dynamic>{}..addAll(map);
     var length = clone.entries.length;
@@ -553,8 +521,11 @@ class Utils {
     return array.length;
   }
 
-  /// array_rand — Escolhe uma ou mais chaves aleatórias de um array
-  /// numero Especifica quantos elementos deseja obter.
+  /// Returns [numero] random indexes of [array], as PHP's `array_rand` picks
+  /// random keys.
+  ///
+  /// The result is always a list, even for one index, and an index can
+  /// repeat. Throws when [array] is empty.
   static dynamic array_rand(List array, [int numero = 1]) {
     var rng = Random();
     var len = array.length;
@@ -566,7 +537,7 @@ class Utils {
     return list;
   }
 
-  /// verifica se value é um List
+  /// Returns whether [value] is a List.
   static bool is_array(dynamic value) {
     return value is List;
   }
@@ -575,12 +546,12 @@ class Utils {
     return value is Map;
   }
 
-  /// verifica se value é um bool
+  /// Returns whether [value] is a bool.
   static bool is_bool(dynamic value) {
     return value is bool;
   }
 
-  /// verifica se value é um String
+  /// Returns whether [value] is a String.
   static bool is_string(dynamic value) {
     return value is String;
   }
@@ -589,8 +560,8 @@ class Utils {
     return val.isEmpty;
   }
 
-  /// replica o comportamento da função empty do PHP
-  /// retorn true se val é 0, '' ou null;
+  /// Returns whether [val] is `''`, null or 0, like PHP's `empty` (which
+  /// also counts `false`, `'0'` and empty arrays).
   static bool empty(dynamic val) {
     if (val == '') {
       return true;
@@ -602,13 +573,12 @@ class Utils {
     return false;
   }
 
-  /// Informa se a variável é null
+  /// Returns whether [val] is null.
   static bool is_null(dynamic val) {
     return val == null;
   }
 
-  /// verifica se o valor é nulo
-  /// e se val for um List ou Map verifica se esta vazio
+  /// Returns whether [val] is null or an empty List or Map.
   static bool is_null_or_empty(dynamic val) {
     if (val is List) {
       return val.isEmpty;
@@ -618,10 +588,8 @@ class Utils {
     return val == null;
   }
 
-  /// Verifica se a variável é definida.
-  /// se val == null => FALSE
-  /// se val is List empty => FALSE
-  /// se val is Map empty => FALSE
+  /// Returns whether [val] is set: false for null and for an empty List or
+  /// Map.
   static bool isset(dynamic val) {
     if (val == null) {
       return false;
@@ -649,7 +617,7 @@ class Utils {
     return map.entries.first.key;
   }
 
-  /// if array is Empty return false
+  /// Returns the last element of [array], or false when it is empty.
   static dynamic array_end(List array) {
     return array.isEmpty ? false : array.last;
   }
@@ -662,13 +630,8 @@ class Utils {
     return str.length;
   }
 
-  ///
-  /// Determine if a given string ends with a given substring.
-  ///
-  /// @param  string  $haystack
-  /// @param  string|array  $needles
-  /// @return bool
-  ///
+  /// Returns whether [haystack] ends with [needles], a String or any element
+  /// of a List.
   static bool endsWith(String haystack, dynamic needles) {
     if (needles is List) {
       for (var needle in needles) {
@@ -682,15 +645,21 @@ class Utils {
     return false;
   }
 
-  /// trim characters from the left-side of the input
-  /// chars = " \n\r\t\v\x00"
+  /// Removes the characters in [chars] from the start of [string]; null
+  /// [chars] removes whitespace.
+  ///
+  /// [chars] goes into a regular expression character class as written, so
+  /// `]`, `\`, `^` and `-` must be escaped.
   static ltrim(String string, [String? chars = " \n\r\t"]) {
     //chars =chars.replaceAll('from', replace)
     var pattern = chars != null ? RegExp('^[$chars]+') : RegExp(r'^\s+');
     return string.replaceAll(pattern, '');
   }
 
-  /// array_pop — Pop the element off the end of array
+  /// Removes the last element of a List or the last entry of a Map.
+  ///
+  /// Unlike PHP's `array_pop`, it returns nothing. Throws a [StateError]
+  /// when [array] is empty.
   static void array_pop(dynamic array) {
     var last;
     if (array is Map) {
@@ -702,25 +671,30 @@ class Utils {
     }
   }
 
-  /// equivale ao array_values do PHP para Array Associativo
+  /// Returns the values of [map] as a list (PHP's `array_values`).
   static List map_values(Map map) {
     return map.values.toList();
   }
 
+  /// Returns the part of [str] from [offset] on, at most [length] characters,
+  /// as PHP's `substr`.
   ///
-  /// Example:
-  ///  echo(substr("abcdef", -2,10));
-  ///  ef
+  /// A negative [offset] counts from the end. Unlike PHP, a negative
+  /// [length] or an [offset] past the end throws a [RangeError].
+  ///
+  /// ```dart
+  /// substr('abcdef', -2, 10); // 'ef'
+  /// ```
   static String substr(String str, int offset, [int? length]) {
-    // Se length != null, ajustamos para pegar `length` caracteres a partir de offset.
+    // With length: take `length` characters from offset.
     if (length != null) {
-      // Se offset >= 0, soma offset + length
+      // Non-negative offset: the end is offset + length.
       if (offset >= 0) {
         length = offset + length;
         if (length > str.length) length = str.length;
         return str.substring(offset, length);
       } else {
-        // Offset negativo => começa de (str.length + offset)
+        // Negative offset: start at str.length + offset.
         int start =
             str.length + offset; // por ex. offset=-2 => start = str.length-2
         int end = start + length;
@@ -729,7 +703,7 @@ class Utils {
         return str.substring(start, end);
       }
     } else {
-      // Sem length => do offset até o fim
+      // Without length: from offset to the end.
       if (offset >= 0) {
         return str.substring(offset);
       } else {
@@ -740,7 +714,7 @@ class Utils {
     }
   }
 
-  /// max — Find highest value
+  /// Returns the larger of [value1] and [value2].
   static int_max(int value1, int value2) {
     return value1 > value2 ? value1 : value2;
   }
@@ -749,9 +723,9 @@ class Utils {
     return array.isEmpty ? false : array.first;
   }
 
-  /// microtime() retorna o timestamp atual do Unix com microssegundos.
-  /// Esta função está disponível apenas em sistemas
-  /// operacionais que suportam a chamada de sistema gettimeofday().
+  /// Returns the current time in microseconds since the Unix epoch.
+  ///
+  /// PHP's `microtime(true)` returns seconds instead.
   static int microtime() {
     return DateTime.now().microsecondsSinceEpoch;
   }
@@ -766,19 +740,18 @@ class Utils {
     return formatted;
   }
 
-  /// Verifica se o método da classe existe
-  /// this use  dart:mirrors
-  /// Example:
-  /// class FooBar {
-  ///  String showMessage(String msg) {
-  ///    print("message $msg");
-  ///    return msg;
-  ///  }
-  /// }
-  /// var c = FooBar();
-  /// var result = Utils.method_exists(c, 'showMessage');
-  /// print(result);
-  /// true
+  // Whether object_or_class has a method methodName (needs dart:mirrors).
+  // Example:
+  // class FooBar {
+  //  String showMessage(String msg) {
+  //    print("message $msg");
+  //    return msg;
+  //  }
+  // }
+  // var c = FooBar();
+  // var result = Utils.method_exists(c, 'showMessage');
+  // print(result);
+  // true
   // static bool method_exists(dynamic object_or_class, String methodName) {
   //   var mirror = reflect(object_or_class);
   //   return mirror.type.instanceMembers.values
@@ -786,8 +759,7 @@ class Utils {
   //       .contains(methodName);
   // }
 
-  /// Verifica se uma propriedade da classe existe
-  /// this use  dart:mirrors
+  // Whether object_or_class has a property propName (needs dart:mirrors).
   // static bool property_exists(dynamic object_or_class, String propName) {
   //   var mirror = reflect(object_or_class);
   //   return mirror.type.declarations.values
@@ -795,8 +767,8 @@ class Utils {
   //       .contains(propName);
   // }
 
-  /// callMethod of class
-  /// somente testado em metodos sem Future
+  // Calls the method methodName of object_or_class (needs dart:mirrors).
+  // Only tested with methods that do not return a Future.
   // static dynamic call_method(
   //   dynamic object_or_class,
   //   String methodName, [

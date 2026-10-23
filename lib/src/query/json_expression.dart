@@ -1,20 +1,14 @@
 import 'expression.dart';
 
+/// The SQL of a value assigned to a JSON path in a MySQL update (see
+/// `QueryMySqlGrammar.compileJsonUpdateColumn`).
 class JsonExpression extends QueryExpression {
-  ///
-  /// Create a new raw query expression.
-  ///
-  /// @param  mixed  $value
-  /// @return void
-  ///
+  /// Creates the expression for [value]; see [getJsonBindingParameter].
   JsonExpression(dynamic value) : super(getJsonBindingParameter(value));
 
-  ///
-  /// Translate the given value into the appropriate JSON binding parameter.
-  ///
-  /// @param  mixed  $value
-  /// @return string
-  ///
+  /// Returns the SQL for [value]: `true` or `false` for a boolean, the
+  /// number itself for an int or double, and the placeholder `?` for any
+  /// other object. Throws for null.
   static getJsonBindingParameter(dynamic value) {
     if (value is bool) {
       return value ? 'true' : 'false';

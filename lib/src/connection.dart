@@ -5,63 +5,38 @@ import 'package:eloquent/src/doctrine/connection.dart' as doctrine;
 import 'package:eloquent/src/doctrine/schema/mysql_schema_manager.dart';
 import 'package:eloquent/src/doctrine/schema/postgres_schema_manager.dart';
 
-/// posgresql Connection implementation
+/// A database connection: runs statements on a [PDOExecutionContext],
+/// creates query and schema builders and manages transactions.
+///
+/// [PostgresConnection] and [MySqlConnection] add each driver's grammars and
+/// post processor.
 class Connection with DetectsLostConnections implements ConnectionInterface {
-  /// default query Timeout =  300 seconds
+  /// A query timeout of 300 seconds. Not read by the driver adapters, which
+  /// have their own defaults.
   static const defaultTimeout = const Duration(seconds: 300);
 
-  ///
-  /// The active PDO connection.
-  ///
-  /// @var PDO
-  ///
+  /// The PDO execution context that runs the statements (and the reads, when
+  /// [readPdo] is null).
   PDOExecutionContext pdo;
 
-  ///
-  /// The active PDO connection used for reads.
-  ///
-  /// @var PDO
-  ///
+  /// The PDO execution context for reads, or null to read through [pdo].
   PDOExecutionContext? readPdo;
 
-  ///
-  /// The reconnector instance for the connection.
-  ///
-  /// @var callable
-  ///
+  /// Called with this connection to reconnect after the connection was lost;
+  /// see [setReconnector].
   Future<dynamic> Function(Connection)? reconnector;
 
-  ///
-  /// The query grammar implementation.
-  ///
-  /// @var \Illuminate\Database\Query\Grammars\Grammar
-  ///
+  /// The grammar that compiles queries.
   late QueryGrammar queryGrammar;
 
-  ///
-  /// The schema grammar implementation.
-  ///
-  /// @var \Illuminate\Database\Schema\Grammars\Grammar
-  ///
+  /// The grammar that compiles schema statements, set by [getSchemaBuilder]
+  /// when null.
   SchemaGrammar? schemaGrammar;
 
-  ///
-  /// The query post processor implementation.
-  ///
-  /// @var \Illuminate\Database\Query\Processors\Processor
-  ///
+  /// The processor applied to query results.
   Processor? postProcessor;
 
-  ///
-  /// The event dispatcher instance.
-  ///
-  /// @var \Illuminate\Contracts\Events\Dispatcher
-  ///
-  //protected events;
-
-  ///
-  /// The number of active transactions.
-  ///
+  /// The transaction depth.
   @Deprecated('Use transactionLevel() / isInTransaction.')
   int get transactions => transactionLevel();
 
@@ -70,46 +45,26 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   /// and reported like the others.
   _QueryObservers _observers = _QueryObservers();
 
-  ///
-  /// All of the queries run against the connection: maps with `query`,
-  /// `bindings` and `time` (milliseconds), as in Laravel.
-  ///
+  /// The queries run on this connection while logging is on: maps with
+  /// `query`, `bindings` and `time` (milliseconds), as in Laravel.
   List get queryLog => _observers.log;
   set queryLog(List value) => _observers.log = value;
 
-  ///
-  /// Indicates whether queries are being logged.
-  ///
+  /// Whether queries are being logged.
   bool get loggingQueries => _observers.logging;
   set loggingQueries(bool value) => _observers.logging = value;
 
-  ///
-  /// Indicates if the connection is in a "dry run".
-  ///
-  /// @var bool
-  ///
+  /// Whether the connection is in a "dry run"; see [pretend].
   bool get pretendingProp => _observers.pretending;
   set pretendingProp(bool value) => _observers.pretending = value;
 
-  ///
   /// The name of the connected database.
-  ///
-  /// @var string
-  ///
   late String _databaseName;
 
-  ///
   /// The table prefix for the connection.
-  ///
-  /// @var string
-  ///
   String _tablePrefix = '';
 
-  ///
   /// The database connection configuration options.
-  ///
-  /// @var array
-  ///
   Map<String, dynamic> _config = {};
 
   String? _cachedDriverName;
@@ -120,15 +75,8 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   int tryReconnectLimit = 10;
   int tryReconnectCount = 0;
 
-  ///
-  /// Create a new database connection instance.
-  ///
-  /// @param  \PDO     pdo
-  /// @param  String   database
-  /// @param  String   tablePrefix
-  /// @param  array    config
-  /// @return void
-  ///
+  /// Creates a connection over [pdo], with the database name, table prefix
+  /// and configuration options.
   Connection(this.pdo,
       [this._databaseName = '',
       this._tablePrefix = '',
@@ -146,63 +94,38 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
     useDefaultPostProcessor();
   }
 
-  ///
-  /// Set the query grammar to the default implementation.
-  ///
-  /// @return void
-  ///
+  /// Sets the query grammar to [getDefaultQueryGrammar].
   void useDefaultQueryGrammar() {
     this.queryGrammar = getDefaultQueryGrammar();
   }
 
-  ///
-  /// Get the default query grammar instance.
-  ///
-  /// @return \Illuminate\Database\Query\Grammars\Grammar
-  ///
+  /// Returns the query grammar a new connection uses; driver subclasses
+  /// return their dialect's.
   QueryGrammar getDefaultQueryGrammar() {
     return QueryGrammar();
   }
 
-  ///
-  /// Set the schema grammar to the default implementation.
-  ///
-  /// @return void
-  ///
+  /// Sets the schema grammar to [getDefaultSchemaGrammar].
   void useDefaultSchemaGrammar() {
     this.schemaGrammar = getDefaultSchemaGrammar();
   }
 
-  ///
-  /// Get the default schema grammar instance.
-  ///
-  /// @return \Illuminate\Database\Schema\Grammars\Grammar
-  ///
+  /// Returns the schema grammar [useDefaultSchemaGrammar] sets: null here,
+  /// driver subclasses return their dialect's.
   dynamic getDefaultSchemaGrammar() {}
 
-  ///
-  /// Set the query post processor to the default implementation.
-  ///
-  /// @return void
-  ///
+  /// Sets the post processor to [getDefaultPostProcessor].
   void useDefaultPostProcessor() {
     this.postProcessor = getDefaultPostProcessor();
   }
 
-  ///
-  /// Get the default post processor instance.
-  ///
-  /// @return \Illuminate\Database\Query\Processors\Processor
-  ///
+  /// Returns the post processor a new connection uses.
   Processor getDefaultPostProcessor() {
     return Processor();
   }
 
-  ///
-  /// Get a schema builder instance for the connection.
-  ///
-  /// @return \Illuminate\Database\Schema\Builder
-  ///
+  /// Returns a schema builder for this connection, setting the default
+  /// schema grammar first when none is set.
   SchemaBuilder getSchemaBuilder() {
     if (Utils.is_null(schemaGrammar)) {
       useDefaultSchemaGrammar();
@@ -210,12 +133,7 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
     return SchemaBuilder(this);
   }
 
-  ///
-  /// Begin a fluent query against a database table.
-  ///
-  /// @param  String  $table
-  /// @return \Illuminate\Database\Query\Builder
-  ///
+  /// Returns a [QueryBuilder] on [table].
   QueryBuilder table(String table) {
     return this.query().from(table);
   }
@@ -226,58 +144,36 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
     return QueryBuilder2(this, table);
   }
 
-  ///
-  /// Get a new query builder instance.
-  ///
-  /// @return \Illuminate\Database\Query\Builder
-  ///
+  /// Returns a [QueryBuilder] with this connection's grammar and post
+  /// processor.
   QueryBuilder query() {
     return QueryBuilder(this, this.getQueryGrammar(), this.getPostProcessor());
   }
 
-  ///
-  /// Get a new raw query expression.
-  ///
-  /// @param  mixed  $value
-  /// @return \Illuminate\Database\Query\Expression
-  ///
+  /// Returns a raw SQL expression: [value] goes into the query as written,
+  /// not as a binding.
   QueryExpression raw(dynamic value) {
     return QueryExpression(value);
   }
 
-  ///
-  /// Run a select statement and return a single result.
-  ///
-  /// @param  String  $query
-  /// @param  array   $bindings
-  /// @return mixed
-  ///
+  /// Runs a select statement and returns its first row, or null when there
+  /// is none.
   Future<Map<String, dynamic>?> selectOne(String query,
       [bindings = const [], int? timeoutInSeconds]) async {
     final records = await this.select(query, bindings, true, timeoutInSeconds);
     return records.isNotEmpty ? records.first : null;
   }
 
-  ///
-  /// Run a select statement against the database.
-  ///
-  /// @param  String  $query
-  /// @param  array   $bindings
-  /// @return array
-  ///
+  /// Runs a select statement on the write PDO ([pdo]) and returns its rows.
   Future<List<Map<String, dynamic>>> selectFromWriteConnection(query,
       [bindings = const []]) {
     return this.select(query, bindings, false);
   }
 
+  /// Runs a select statement and returns its rows.
   ///
-  /// Run a select statement against the database.
-  ///
-  /// @param  String  $query
-  /// @param  array  $bindings
-  /// @param  bool  $useReadPdo
-  /// @return array
-  ///
+  /// With [useReadPdo] it runs on [getReadPdo], else on [pdo]. In a "dry
+  /// run" ([pretend]) it returns no rows.
   Future<List<Map<String, dynamic>>> select(String query,
       [List bindings = const [],
       bool useReadPdo = true,
@@ -289,9 +185,8 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
       if (me.pretending()) {
         return <Map<String, dynamic>>[];
       }
-      // For select statements, we'll simply execute the query and return an array
-      // of the database result set. Each element in the array will be a single
-      // row from the database table, and will either be an array or objects.
+      // For select statements, we'll simply execute the query and return the
+      // rows of the result set, one map per row.
       final pdoL = me.getPdoForSelect(useReadPdo);
       final params = me.prepareBindings(bindings);
       return pdoL.query(query, params, timeoutInSeconds);
@@ -300,9 +195,9 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
     return res as List<Map<String, dynamic>>;
   }
 
-  ///
-  /// Stream a select statement's rows using a server-side cursor / incremental
-  /// reader, keeping memory roughly constant regardless of result-set size.
+  /// Streams the rows of a select statement through a server-side cursor or
+  /// incremental reader, keeping memory roughly constant regardless of the
+  /// size of the result set.
   ///
   /// Throws [UnsupportedError] on driver adapters without streaming support
   /// (only the `dpgsql` adapter implements it today). [fetchSize] is an
@@ -419,9 +314,8 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
     }
   }
 
-  ///
-  /// Direct, driver-specific access (COPY, pipelining, LISTEN/NOTIFY, raw
-  /// connection). Returns `null` when the active driver adapter has no such
+  /// Returns direct, driver-specific access (COPY, pipelining, LISTEN/NOTIFY,
+  /// raw connection), or `null` when the active driver adapter has no such
   /// capabilities (only the `dpgsql` adapter implements it today).
   @override
   DriverAccess? driver() {
@@ -438,8 +332,7 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   /// Whether the driver adapter implements PostgreSQL LISTEN/NOTIFY.
   bool get supportsNotifications => pdo.pdoInstance.supportsNotifications;
 
-  ///
-  /// PostgreSQL `NOTIFY` via `pg_notify(channel, payload)`. Inside a
+  /// Sends a PostgreSQL `NOTIFY` via `pg_notify(channel, payload)`. Inside a
   /// transaction (on the `ctx` connection) the notification is delivered only
   /// when the transaction commits, and dropped on rollback. The payload must
   /// be shorter than 8000 bytes.
@@ -450,26 +343,26 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   ///   await ctx.notify('tramita_fila', '${item['id']}');
   /// });
   /// ```
-  ///
   Future<void> notify(String channel, [String payload = '']) async {
     _assertNotifications('notify');
     await this.select(
         'select 1 from pg_notify(?::text, ?::text)', [channel, payload], false);
   }
 
+  /// Returns a stream of the notifications sent to [channel] (PostgreSQL
+  /// `LISTEN`).
   ///
-  /// PostgreSQL `LISTEN` on [channel]: a stream of the notifications sent to
-  /// it. All channels share one dedicated connection (outside the pool) that
+  /// All channels share one dedicated connection (outside the pool) that
   /// reconnects by itself; see [notificationListener] for `ready()`,
   /// `onReconnect` and `onError`.
   ///
   /// ```dart
-  /// final sub = db.notifications('tramita_fila').listen((n) => acordarWorker());
+  /// final sub =
+  ///     db.notifications('tramita_fila').listen((n) => acordarWorker());
   /// await db.notificationListener.ready();
   /// // ...
   /// await sub.cancel(); // UNLISTEN
   /// ```
-  ///
   Stream<DriverNotification> notifications(String channel) {
     return notificationListener.channel(channel);
   }
@@ -493,8 +386,7 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
 
   // ------------------------------------------------------ advisory locks
 
-  ///
-  /// PostgreSQL transaction-level advisory lock on [key]
+  /// Takes a PostgreSQL transaction-level advisory lock on [key]
   /// (`pg_advisory_xact_lock`): waits until no other transaction holds the
   /// same key, and keeps it until this transaction commits or rolls back
   /// (there is no unlock). It serializes only the code that asks for the
@@ -513,7 +405,6 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   ///   // check the name, insert: one transaction at a time
   /// });
   /// ```
-  ///
   Future<void> advisoryLock(Object key, [int? timeoutInSeconds]) async {
     await this.select(
         'select 1 from pg_advisory_xact_lock(${_advisoryKey(key, 'advisoryLock')})',
@@ -522,11 +413,9 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
         timeoutInSeconds);
   }
 
-  ///
-  /// [advisoryLock] without waiting (`pg_try_advisory_xact_lock`): true when
-  /// the lock was taken (held until the transaction ends), false when
-  /// another transaction holds [key].
-  ///
+  /// Takes the lock of [advisoryLock] without waiting
+  /// (`pg_try_advisory_xact_lock`): true when the lock was taken (held until
+  /// the transaction ends), false when another transaction holds [key].
   Future<bool> tryAdvisoryLock(Object key) async {
     final rows = await this.select(
         'select pg_try_advisory_xact_lock(${_advisoryKey(key, 'tryAdvisoryLock')}) as locked',
@@ -552,65 +441,38 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
     throw ArgumentError.value(key, 'key', 'Expected a String or an int.');
   }
 
-  ///
-  /// Get the PDO connection to use for a select query.
-  ///
-  /// @param  bool  $useReadPdo
-  /// @return \PDO
-  ///
+  /// Returns [getReadPdo] when [useReadPdo] is true, else [getPdo].
   PDOExecutionContext getPdoForSelect([bool useReadPdo = true]) {
     return useReadPdo ? this.getReadPdo() : this.getPdo();
   }
 
-  ///
-  /// Run an insert statement against the database.
-  ///
-  /// @param  String  $query
-  /// @param  array   $bindings
-  /// @return bool
-  ///
+  /// Runs an insert statement and returns its [PDOResults]; the same as
+  /// [statement].
   Future<PDOResults> insert(query,
       [bindings = const [], int? timeoutInSeconds]) async {
     return this.statement(query, bindings, timeoutInSeconds);
   }
 
-  /// alias for statement
+  /// The same as [statement].
   Future<PDOResults> rawQuery(query,
       [bindings = const [], int? timeoutInSeconds]) async {
     return this.statement(query, bindings, timeoutInSeconds);
   }
 
-  ///
-  /// Run an update statement against the database.
-  ///
-  /// @param  String  $query
-  /// @param  array   $bindings
-  /// @return int
-  ///
+  /// Runs an update statement and returns the number of rows affected.
   Future<int> update(String query,
       [List bindings = const [], int? timeoutInSeconds]) {
     return this.affectingStatement(query, bindings, timeoutInSeconds);
   }
 
-  ///
-  /// Run a delete statement against the database.
-  ///
-  /// @param  String  $query
-  /// @param  array   $bindings
-  /// @return int
-  ///
+  /// Runs a delete statement and returns the number of rows affected.
   Future<int> delete(String query,
       [List bindings = const [], int? timeoutInSeconds]) {
     return this.affectingStatement(query, bindings, timeoutInSeconds);
   }
 
-  ///
-  /// Execute an SQL statement and return the boolean result.
-  ///
-  /// @param  String  $query
-  /// @param  array   $bindings
-  /// @return bool
-  ///
+  /// Runs an SQL statement on [pdo] and returns its [PDOResults] (empty in
+  /// a "dry run").
   Future<PDOResults> statement(String query,
       [bindingsP = const [], int? timeoutInSeconds]) async {
     final resp = await this.run(query, bindingsP,
@@ -627,8 +489,8 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
     return resp as PDOResults;
   }
 
-  /// simple execute command on database
-  ///  Executa uma instrução SQL e retornar o número de linhas afetadas
+  /// Runs [query] without bindings and returns a one-element list with the
+  /// number of rows affected, or `true` in a "dry run" ([pretend]).
   Future<dynamic> execute(String query, [int? timeoutInSeconds]) async {
     final resp = await this.run(query, [],
         (me, query, bindings, timeoutInSeconds) async {
@@ -645,13 +507,8 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
     return resp;
   }
 
-  ///
-  /// Run an SQL statement and get the number of rows affected.
-  ///
-  /// @param  String  $query
-  /// @param  array   $bindings
-  /// @return int
-  ///
+  /// Runs an SQL statement and returns the number of rows affected (0 in a
+  /// "dry run").
   Future<int> affectingStatement(String query,
       [List<dynamic> bindingsP = const [], int? timeoutInSeconds]) async {
     final resp = await this.run(query, bindingsP,
@@ -660,9 +517,8 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
         return 0;
       }
 
-      // For update or delete statements, we want to get the number of rows affected
-      // by the statement and return that back to the developer. We'll first need
-      // to execute the statement and then we'll use PDO to fetch the affected.
+      // For update or delete statements, we want to get the number of rows
+      // affected by the statement and return that back to the developer.
       final _pdo = me.getPdo();
       final params = me.prepareBindings(bindings);
       final res = await _pdo.query(query, params, timeoutInSeconds);
@@ -672,14 +528,12 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
     return resp as int;
   }
 
-  ///
-  /// Run a raw, unprepared query against the PDO connection (Laravel's
+  /// Runs a raw, unprepared query against the PDO connection (Laravel's
   /// `DB::unprepared`, PHP's `PDO::exec`): no bindings, through the simple
   /// query protocol on every PostgreSQL adapter, so [query] may hold several
   /// statements (a script). They run as one implicit transaction unless the
   /// text has its own `BEGIN`/`COMMIT`, so `CREATE INDEX CONCURRENTLY` and
   /// `VACUUM` must be alone. Returns the rows affected.
-  ///
   Future<int> unprepared(String query, [int? timeoutInSeconds]) async {
     final resp = await this.run(query, [],
         (me, query, bindings, timeoutInSeconds) async {
@@ -692,12 +546,12 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
     return resp as int;
   }
 
+  /// Returns [bindingsP] converted for the driver.
   ///
-  /// Prepare the query bindings for execution.
-  ///
-  /// @param  array  bindings
-  /// @return array
-  ///
+  /// [DateTime] values become date strings in the grammar's format (unless
+  /// the `datetime_bindings` option is `'native'`) and `false` becomes `0`
+  /// on drivers other than PostgreSQL. The conversions go into a copy:
+  /// [bindingsP] itself is not modified.
   dynamic prepareBindings(List<dynamic> bindingsP) {
     var grammar = getQueryGrammar();
     String? driverName;
@@ -757,11 +611,7 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
     _cachedNativeDateTimeBindings = null;
   }
 
-  ///
-  /// Execute a Closure within a transaction.
-  ///
-  /// @param  Function  callback
-  /// @return mixed
+  /// Runs [callback] in a transaction and returns its result.
   ///
   /// Outside a transaction this opens one (`BEGIN`/`COMMIT`, `ROLLBACK` on
   /// error). Called on a connection that is already inside a transaction (the
@@ -866,8 +716,7 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
     return null;
   }
 
-  ///
-  /// [transaction] with an *ambient* transaction: while [callback] runs, the
+  /// Runs [callback] in an *ambient* [transaction]: while [callback] runs, the
   /// connection it was called on (`db`, the one made by the manager) also
   /// runs in the transaction, so code that uses `db` instead of `ctx` (a
   /// repository called from the callback) takes part in it instead of
@@ -889,11 +738,11 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   /// ```dart
   /// await db.transactionScope((ctx) async {
   ///   await processoRepository.encaminhar(dados); // uses `db` inside
-  ///   await pecaRepository.juntar(dados);         // db.transaction -> SAVEPOINT
+  ///   // db.transaction inside becomes a SAVEPOINT:
+  ///   await pecaRepository.juntar(dados);
   ///   await db.outsideTransaction(() => logRepository.gravar(evento));
   /// });
   /// ```
-  ///
   Future<T> transactionScope<T>(Future<T> Function(Connection ctx) callback,
       [int? timeoutInSeconds]) {
     final root = _root ?? this;
@@ -947,66 +796,9 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
         pdoContext, this._databaseName, this._tablePrefix, this._config);
   }
 
-  ///
-  /// Start a new database transaction.
-  ///
-  /// @return void
-  ///
-  // Future<dynamic> beginTransaction() async {
-  // this.transactions++;
-  // if (this.transactions == 1) {
-  //   this.pdo!.beginTransaction();
-  // } else if (this.transactions > 1 &&
-  //     this.queryGrammar.supportsSavepoints()) {
-  //   this.pdo!.exec(this
-  //       .queryGrammar
-  //       .compileSavepoint('trans' + this.transactions.toString()));
-  // }
-  // this.fireConnectionEvent('beganTransaction');
-  //throw UnimplementedError();
-  // this.pdo!.beginTransaction();
-  // }
-
-  ///
-  /// Commit the active database transaction.
-  ///
-  /// @return void
-  ///
-  // Future<dynamic> commit([dynamic transaction]) async {
-  // if (this.transactions == 1) {
-  //   this.pdo!.commit();
-  // }
-  // --this.transactions;
-  // this.fireConnectionEvent('committed');
-  //throw UnimplementedError();
-  // return this.pdo!.commit(transaction);
-  //}
-
-  ///
-  /// Rollback the active database transaction.
-  ///
-  /// @return void
-  ///
-  //Future<dynamic> rollBack([dynamic transaction]) async {
-  // if (this.transactions == 1) {
-  //   await this.pdo!.rollBack();
-  // } else if (this.transactions > 1 &&
-  //     this.queryGrammar.supportsSavepoints()) {
-  //   //  await this.pdo!.exec(this
-  //   //       .queryGrammar
-  //   //       .compileSavepointRollBack('trans' + this.transactions.toString()));
-  //   throw UnimplementedError();
-  // }
-
-  // this.transactions = Utils.int_max(0, this.transactions - 1);
-  // this.fireConnectionEvent('rollingBack');
-  //return this.pdo!.rollBack(transaction);
-  //}
-
-  ///
-  /// Transaction depth of this connection: `0` outside a transaction, `1` in
-  /// the callback of a top-level [transaction], `2+` inside SAVEPOINTs.
-  ///
+  /// Returns the transaction depth of this connection: `0` outside a
+  /// transaction, `1` in the callback of a top-level [transaction], `2+`
+  /// inside SAVEPOINTs.
   @override
   int transactionLevel() {
     return _ambient()?.transactionLevel() ?? pdo.transactionLevel;
@@ -1022,12 +814,12 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   @override
   bool get supportsSavepoints => pdo.supportsSavepoints;
 
+  /// Runs [callback] in "dry run" mode and returns the queries it would have
+  /// run.
   ///
-  /// Execute the given callback in "dry run" mode.
-  ///
-  /// @param  \Closure  $callback
-  /// @return array
-  ///
+  /// [callback] receives this connection. No statement reaches the
+  /// database: selects return no rows and other statements report nothing
+  /// done. The result holds query log entries ([queryLog]).
   Future<dynamic> pretend(Function callback) async {
     final loggingQueries = this.loggingQueries;
     final previousLog = this.queryLog;
@@ -1036,9 +828,9 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
     this.pretendingProp = true;
     this.queryLog = [];
 
-    // Basically to make the database connection "pretend", we will just return
-    // the default values for all the query methods, then we will return an
-    // array of queries that were "executed" within the Closure callback.
+    // Basically to make the database connection "pretend", we will just
+    // return the default values for all the query methods, then we will
+    // return the queries that were "executed" within the callback.
     // The callback is awaited (it used to return before an async callback
     // ran, giving an empty log).
     final List log;
@@ -1053,16 +845,13 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
     return log;
   }
 
+  /// Runs [query] through [callback] and returns what it returns.
   ///
-  /// Run a SQL statement and log its execution context.
-  ///
-  /// @param  String    $query
-  /// @param  array     $bindings
-  /// @param  \Closure  $callback
-  /// @return mixed
-  ///
-  /// @throws \Illuminate\Database\QueryException
-  ///
+  /// The statement is timed and reported to the query log and the
+  /// [listen] listeners when any is active. A unique constraint violation
+  /// is rethrown as a [UniqueConstraintViolationException]; after a lost
+  /// connection the statement may be run again, see
+  /// [tryAgainIfCausedByLostConnection].
   Future<dynamic> run(
       String query,
       dynamic bindings,
@@ -1102,9 +891,10 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
 
     //var start = Utils.microtime();
     var result;
-    // Here we will run this query. If an exception occurs we'll determine if it was
-    // caused by a connection that has been lost. If that is the cause, we'll try
-    // to re-establish connection and re-run the query with a fresh connection.
+    // Here we will run this query. If an exception occurs we'll determine if
+    // it was caused by a connection that has been lost. If that is the cause,
+    // we'll try to re-establish connection and re-run the query with a fresh
+    // connection.
     try {
       // print('Connection@run');
       result = await this
@@ -1122,16 +912,8 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
     return result;
   }
 
-  ///
-  /// Run a SQL statement.
-  ///
-  /// @param  String    $query
-  /// @param  array     $bindings
-  /// @param  \Closure  $callback
-  /// @return mixed
-  ///
-  /// @throws \Illuminate\Database\QueryException
-  ///
+  /// Calls [callback] with this connection, [query], [bindings] and
+  /// [timeoutInSeconds] and returns its result.
   Future<dynamic> runQueryCallback(
       String query,
       bindings,
@@ -1139,35 +921,24 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
               int? timeoutInSeconds)
           callback,
       int? timeoutInSeconds) async {
-    // To execute the statement, we'll simply call the callback, which will actually
-    // run the SQL against the PDO connection. Then we can calculate the time it
-    // took to execute and log the query SQL, bindings and time in our memory.
+    // The callback runs the SQL against the PDO connection; [run] times and
+    // logs it.
     var result;
-    //try {
     result = await callback(this, query, bindings, timeoutInSeconds);
-    //}
-
-    // If an exception occurs when attempting to run a query, we'll format the error
-    // message to include the bindings with SQL, which will make this exception a
-    // lot more helpful to the developer instead of just the database's errors.
-    // catch (e) {
-    //   throw new QueryException(query, this.prepareBindings(bindings), e);
-    // }
 
     return result;
   }
 
+  /// Runs the statement again after [e] if [e] was caused by a lost
+  /// connection.
   ///
-  /// Handle a query exception that occurred during query execution.
-  ///
-  /// @param  \Illuminate\Database\QueryException  $e
-  /// @param  String    $query
-  /// @param  array     $bindings
-  /// @param  \Closure  $callback
-  /// @return mixed
-  ///
-  /// @throws \Illuminate\Database\QueryException
-  ///
+  /// Rethrows [e] (with [stackTrace]) when it was not caused by a lost
+  /// connection, inside a transaction (the transaction was lost with the
+  /// connection) or without a [reconnector]. Otherwise it reconnects and
+  /// runs [callback] again, up to [tryReconnectLimit] times, waiting
+  /// [delay] milliseconds times the attempt number (at most 5 s) before
+  /// each one. An error not caused by a lost connection is rethrown at
+  /// once; when the attempts run out, the last error is thrown.
   Future<dynamic> tryAgainIfCausedByLostConnection(
       dynamic e,
       String query,
@@ -1211,11 +982,9 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
     throw lastError;
   }
 
+  /// Closes the LISTEN listener and the PDO of this connection.
   ///
-  /// Disconnect from the underlying PDO connection.
-  ///
-  /// @return void
-  ///
+  /// An error closing the PDO is printed, not thrown.
   Future<void> disconnect() async {
     final pdoInstance = this.pdo.pdoInstance;
     final listener = _notificationListeners[pdoInstance];
@@ -1230,13 +999,9 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
     }
   }
 
+  /// Reconnects through [reconnector].
   ///
-  /// Reconnect to the database.
-  ///
-  /// @return void
-  ///
-  /// @throws \LogicException
-  ///
+  /// Throws a [LogicException] when there is no [reconnector].
   Future<void> reconnect() async {
     //print('Connection@reconnect() ${this.reconnector}');
     if (this.reconnector != null) {
@@ -1246,25 +1011,15 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
     throw LogicException('Lost connection and no reconnector available.');
   }
 
-  ///
-  /// Reconnect to the database if a PDO connection is missing.
-  ///
-  /// @return void
-  ///
+  /// Reconnects when the PDO or the read PDO is missing.
   Future<void> reconnectIfMissingConnection() async {
     if (Utils.is_null(this.getPdo()) || Utils.is_null(this.getReadPdo())) {
       await this.reconnect();
     }
   }
 
-  ///
-  /// Log a query in the connection's query log.
-  ///
-  /// @param  String  $query
-  /// @param  array   $bindings
-  /// @param  float|null  $time
-  /// @return void
-  ///
+  /// Adds [query] to the query log when logging is on; [time] is in
+  /// milliseconds.
   dynamic logQuery(String query, bindings, [time = null]) {
     if (this.loggingQueries) {
       this.queryLog.add({'query': query, 'bindings': bindings, 'time': time});
@@ -1293,21 +1048,16 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
     }
   }
 
-  ///
-  /// Register a database query listener with the connection.
-  ///
-  /// @param  \Closure  $callback
-  /// @return void
-  ///
+  /// Registers a database query listener with the connection.
   ///
   /// [callback] receives every statement run on this connection (and on the
   /// connections given to its transaction callbacks), with its time and
   /// error. Returns a function that removes the listener.
   ///
   /// ```dart
-  /// final stop = db.listen((q) => print('${q.time.inMilliseconds} ms ${q.sql}'));
+  /// final stop =
+  ///     db.listen((q) => print('${q.time.inMilliseconds} ms ${q.sql}'));
   /// ```
-  ///
   void Function() listen(void Function(QueryExecuted query) callback) {
     _observers.listeners.add(callback);
     return () => _observers.listeners.remove(callback);
@@ -1330,65 +1080,39 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
     _observers.total = Duration.zero;
   }
 
-  ///
-  /// Fire an event for this connection.
-  ///
-  /// @param  String  $event
-  /// @return void
-  ///
+  /// Not implemented: throws [UnimplementedError].
   void fireConnectionEvent(String event) {
-    // if (! isset(this.events)) {
-    //     return;
-    // }
-
-    // switch ($event) {
-    //     case 'beganTransaction':
-    //         return this.events->fire(new Events\TransactionBeginning($this));
-    //     case 'committed':
-    //         return this.events->fire(new Events\TransactionCommitted($this));
-    //     case 'rollingBack':
-    //         return this.events->fire(new Events\TransactionRolledBack($this));
-    // }
     throw UnimplementedError();
   }
 
+  /// Returns the time elapsed since [start], a [Utils.microtime] value,
+  /// times 1000 and rounded.
   ///
-  /// Get the elapsed time since a given starting point.
-  ///
-  /// @param  int    $start
-  /// @return float
-  ///
+  /// In Laravel `microtime(true)` is in seconds, so this gives
+  /// milliseconds; [Utils.microtime] is in microseconds, so here the
+  /// result is in nanoseconds.
   dynamic getElapsedTime(int start) {
     return Utils.round((Utils.microtime() - start) * 1000);
   }
 
-  ///
-  /// Is Doctrine available?
-  ///
-  /// @return bool
-  ///
+  /// Returns true: the Doctrine schema port is part of this package.
   bool isDoctrineAvailable() {
     return true;
   }
 
-  ///
-  /// Get a Doctrine Schema Column instance.
-  ///
-  /// @param  String  $table
-  /// @param  String  $column
-  /// @return \Doctrine\DBAL\Schema\Column
-  ///
+  /// Returns the column [column] of [table] as the Doctrine schema manager
+  /// reads it.
   Future<Column> getDoctrineColumn(String table, String column) async {
     final schema = getDoctrineSchemaManager();
     final tableDetails = await schema.listTableDetails(table);
     return tableDetails.getColumn(column);
   }
 
+  /// Returns the Doctrine schema manager of this connection's driver,
+  /// created on first use.
   ///
-  /// Get the Doctrine DBAL schema manager for the connection.
-  ///
-  /// @return \Doctrine\DBAL\Schema\AbstractSchemaManager
-  ///
+  /// Throws an [UnsupportedError] on drivers other than PostgreSQL and
+  /// MySQL/MariaDB.
   AbstractSchemaManager getDoctrineSchemaManager() {
     doctrineSchemaManager ??= _createDoctrineSchemaManager();
     return doctrineSchemaManager!;
@@ -1407,11 +1131,8 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
     };
   }
 
-  ///
-  /// Get the Doctrine DBAL database connection instance.
-  ///
-  /// @return \Doctrine\DBAL\Connection
-  ///
+  /// Returns the Doctrine connection over this connection's PDO, created on
+  /// first use.
   doctrine.DoctrineConnection getDoctrineConnection() {
     doctrineConnection ??= doctrine.DoctrineConnection(
       pdo: pdo,
@@ -1442,20 +1163,13 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
         'Doctrine schema manager is not available for driver "$driver".');
   }
 
-  ///
-  /// Get the current PDO connection.
-  ///
-  /// @return \PDO
-  ///
+  /// Returns [pdo].
   PDOExecutionContext getPdo() {
     return this.pdo;
   }
 
-  ///
-  /// Get the current PDO connection used for reading.
-  ///
-  /// @return \PDO
-  ///
+  /// Returns the PDO context for reads: [readPdo] when set, else [pdo];
+  /// inside a transaction always [pdo].
   PDOExecutionContext getReadPdo() {
     if (isInTransaction) {
       return this.getPdo();
@@ -1464,12 +1178,10 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
     return this.readPdo ?? this.pdo;
   }
 
+  /// Replaces [pdo] and drops the cached Doctrine connection and schema
+  /// manager.
   ///
-  /// Set the PDO connection.
-  ///
-  /// @param  \PDO|null  $pdo
-  /// @return $this
-  ///
+  /// Throws an [Exception] inside a transaction.
   dynamic setPdo(PDOExecutionContext pdo) {
     if (isInTransaction) {
       //RuntimeException
@@ -1483,45 +1195,25 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
     return this;
   }
 
-  ///
-  /// Set the PDO connection used for reading.
-  ///
-  /// @param  \PDO|null  $pdo
-  /// @return $this
-  ///
+  /// Sets [readPdo]; null makes reads use [pdo].
   dynamic setReadPdo(PDOExecutionContext? pdo) {
     this.readPdo = pdo;
     return this;
   }
 
-  ///
-  /// Set the reconnect instance on the connection.
-  ///
-  /// @param  callable  $reconnector
-  /// @return $this
-  ///
+  /// Sets [reconnector].
   dynamic setReconnector(Future<dynamic> Function(Connection) reconnectorP) {
     this.reconnector = reconnectorP;
     return this;
   }
 
-  ///
-  /// Get the database connection name.
-  ///
-  /// @return string|null
-  ///
+  /// Returns the connection name (the `name` option), or null.
   dynamic getName() {
     return this.getConfig('name');
   }
 
-  ///
-  /// Get an option from the configuration options.
-  ///
-  /// @param  String  $option
-  /// @return mixed
-  ///
+  /// Returns the configuration option [option], or null when it is not set.
   dynamic getConfig(String option) {
-    //return Arr::get(this.config, $option);
     //print('getConfig ${this._config}');
     //throw UnimplementedError();
     return this._config[option];
@@ -1531,11 +1223,11 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
     return this._config;
   }
 
+  /// Returns the driver name in lower case.
   ///
-  /// Get the PDO driver name.
-  ///
-  /// @return string
-  ///
+  /// It is the `driver` option, else the driver of the PDO configuration,
+  /// else derived from the `driver_implementation` option (the PostgreSQL
+  /// implementations give `'pgsql'`), else `''`.
   String getDriverName() {
     final configuredDriver = getConfig('driver')?.toString().toLowerCase();
     if (configuredDriver != null && configuredDriver.isNotEmpty) {
@@ -1564,68 +1256,39 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
     return implementation;
   }
 
-  ///
-  /// Get the query grammar used by the connection.
-  ///
-  /// @return \Illuminate\Database\Query\Grammars\Grammar
-  ///
+  /// Returns the query grammar used by the connection.
   QueryGrammar getQueryGrammar() {
     return this.queryGrammar;
   }
 
-  ///
-  /// Set the query grammar used by the connection.
-  ///
-  /// @param  \Illuminate\Database\Query\Grammars\Grammar  $grammar
-  /// @return void
-  ///
+  /// Sets the query grammar used by the connection.
   void setQueryGrammar(QueryGrammar grammarP) {
     this.queryGrammar = grammarP;
   }
 
+  /// Returns the schema grammar used by the connection.
   ///
-  /// Get the schema grammar used by the connection.
-  ///
-  /// @return \Illuminate\Database\Schema\Grammars\Grammar
-  ///
+  /// Fails when none is set yet; [getSchemaBuilder] sets the default one.
   SchemaGrammar getSchemaGrammar() {
     return this.schemaGrammar!;
   }
 
-  ///
-  /// Set the schema grammar used by the connection.
-  ///
-  /// @param  \Illuminate\Database\Schema\Grammars\Grammar  $grammar
-  /// @return void
-  ///
+  /// Sets the schema grammar used by the connection.
   void setSchemaGrammar(SchemaGrammar grammarP) {
     this.schemaGrammar = grammarP;
   }
 
-  ///
-  /// Get the query post processor used by the connection.
-  ///
-  /// @return \Illuminate\Database\Query\Processors\Processor
-  ///
+  /// Returns the query post processor used by the connection.
   dynamic getPostProcessor() {
     return this.postProcessor;
   }
 
-  ///
-  /// Set the query post processor used by the connection.
-  ///
-  /// @param  \Illuminate\Database\Query\Processors\Processor  $processor
-  /// @return void
-  ///
+  /// Sets the query post processor used by the connection.
   dynamic setPostProcessor(Processor processor) {
     this.postProcessor = processor;
   }
 
-  ///
-  /// Get the event dispatcher used by the connection.
-  ///
-  /// @return \Illuminate\Contracts\Events\Dispatcher
-  ///
+  /// Returns the event dispatcher given to [setEventDispatcher].
   dynamic getEventDispatcher() {
     return this._events;
   }
@@ -1634,75 +1297,43 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   /// query events are delivered through [listen]).
   dynamic _events;
 
-  ///
-  /// Set the event dispatcher instance on the connection.
-  ///
-  /// @param  \Illuminate\Contracts\Events\Dispatcher  $events
-  /// @return void
-  ///
+  /// Sets the event dispatcher (kept for Laravel parity; query events are
+  /// delivered through [listen]).
   dynamic setEventDispatcher($events) {
     this._events = $events;
   }
 
-  ///
-  /// Determine if the connection in a "dry run".
-  ///
-  /// @return bool
-  ///
+  /// Returns whether the connection is in a "dry run"; see [pretend].
   bool pretending() {
     return this.pretendingProp == true;
   }
 
-  ///
-  /// Get the connection query log.
-  ///
-  /// @return array
-  ///
+  /// Returns the query log; see [queryLog].
   dynamic getQueryLog() {
     return this.queryLog;
   }
 
-  ///
-  /// Clear the query log.
-  ///
-  /// @return void
-  ///
+  /// Clears the query log.
   dynamic flushQueryLog() {
     this.queryLog = [];
   }
 
-  ///
-  /// Enable the query log on the connection.
-  ///
-  /// @return void
-  ///
+  /// Enables the query log on the connection.
   dynamic enableQueryLog() {
     this.loggingQueries = true;
   }
 
-  ///
-  /// Disable the query log on the connection.
-  ///
-  /// @return void
-  ///
+  /// Disables the query log on the connection.
   void disableQueryLog() {
     this.loggingQueries = false;
   }
 
-  ///
-  /// Determine whether we're logging queries.
-  ///
-  /// @return bool
-  ///
+  /// Returns whether queries are being logged.
   bool logging() {
     return this.loggingQueries;
   }
 
-  ///
-  /// Get the name of the connected database.
-  ///
-  /// @return string
-  ///
+  /// Returns the name of the connected database.
   String getDatabaseName() {
     return this._databaseName;
   }
@@ -1711,43 +1342,24 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   //   return pdo.getConfig().database;
   // }
 
-  ///
-  /// Set the name of the connected database.
-  ///
-  /// @param  String  $database
-  /// @return string
-  ///
+  /// Sets the name of the connected database.
   void setDatabaseName(String database) {
     this._databaseName = database;
   }
 
-  ///
-  /// Get the table prefix for the connection.
-  ///
-  /// @return string
-  ///
+  /// Returns the table prefix for the connection.
   String getTablePrefix() {
     return this._tablePrefix;
   }
 
-  ///
-  /// Set the table prefix in use by the connection.
-  ///
-  /// @param  String  $prefix
-  /// @return void
-  ///
+  /// Sets the table prefix of the connection and of its query grammar.
   void setTablePrefix(String prefix) {
     this._tablePrefix = prefix;
 
     this.getQueryGrammar().setTablePrefix(prefix);
   }
 
-  ///
-  /// Set the table prefix and return the grammar.
-  ///
-  /// @param  \Illuminate\Database\Grammar  $grammar
-  /// @return \Illuminate\Database\Grammar
-  ///
+  /// Sets this connection's table prefix on [grammar] and returns it.
   dynamic withTablePrefix(BaseGrammar grammar) {
     grammar.setTablePrefix(this._tablePrefix);
 

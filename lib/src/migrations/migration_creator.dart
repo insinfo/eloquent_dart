@@ -98,14 +98,13 @@ class CreateClassName extends Migration {
   /// Create a new migration creator instance.
   MigrationCreator(); // Filesystem operations are static in dart:io
 
-  /// Create a new migration file at the given path.
+  /// Creates a migration file for [name] (e.g. `create_users_table`) in the
+  /// directory [path] and returns the file's path.
   ///
-  /// [name] The descriptive name of the migration (e.g., 'create_users_table').
-  /// [path] The directory path where the migration file should be created.
-  /// [table] The table name associated with the migration (optional).
-  /// [create] Whether the migration creates the table (true) or modifies it (false). Ignored if [table] is null.
-  /// Returns the full path to the created migration file.
-  /// Throws [FileSystemException] on file system errors.
+  /// The file is `<date prefix>_<name>.dart`; the directory is created when
+  /// missing. With [table], the stub creates that table ([create] `true`) or
+  /// alters it; without it, the stub is blank. Throws [FileSystemException]
+  /// when the file already exists or cannot be written.
   Future<String> create(String name, String path,
       {String? table, bool create = false}) async {
     // Ensure the directory exists
@@ -146,7 +145,7 @@ class CreateClassName extends Migration {
 
   /// Populate the place-holders in the migration stub.
   String _populateStub(String name, String stub, String? table) {
-    // Replace DummyClass with the StudlyCase version of the migration name
+    // Replace CreateClassName with the StudlyCase version of the name
     String content = stub.replaceAll('CreateClassName', _getClassName(name));
 
     // Replace DummyTable if a table name was provided
@@ -200,10 +199,4 @@ class CreateClassName extends Migration {
       await dir.create(recursive: true);
     }
   }
-
-  // StubPath is not directly applicable as stubs are inline strings
-  // String getStubPath() { ... }
-
-  // Filesystem instance is not held as a member variable
-  // Filesystem getFilesystem() { ... }
 }

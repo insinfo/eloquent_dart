@@ -1,34 +1,18 @@
-/// class Expression
+/// A raw SQL fragment: the grammars write it as is, without quoting it or
+/// binding it.
 class QueryExpression {
-  ///
-  ///  The value of the expression.
-  ///
-  ///  @var mixed
-  ///
+  /// The SQL of the expression.
   dynamic value;
 
-  ///
-  ///  Create a new raw query expression.
-  ///
-  ///  @param  mixed  $value
-  ///  @return void
-  ///
+  /// Creates a raw expression with the SQL [value].
   QueryExpression(this.value);
 
-  ///
-  ///  Get the value of the expression.
-  ///
-  ///  @return mixed
-  ///
+  /// Returns the SQL of the expression.
   dynamic getValue() {
     return value;
   }
 
-  ///
-  ///  Get the value of the expression.
-  ///
-  ///  @return string
-  ///
+  /// Returns the SQL of the expression as a string.
   @override
   String toString() {
     return getValue().toString();

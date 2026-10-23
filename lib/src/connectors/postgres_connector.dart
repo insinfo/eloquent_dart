@@ -5,74 +5,20 @@ import 'package:eloquent/src/pdo/postgres/postgres_pdo.dart';
 import 'package:eloquent/src/pdo/postgres_v3/postgres_v3_pdo.dart';
 
 class PostgresConnector extends Connector implements ConnectorInterface {
-  ///
-  /// The default PDO connection options.
-  ///
-  /// @var array
-  ///
+  /// The default connection options.
   Map<dynamic, dynamic> options = {};
 
-  ///
-  /// Establish a database connection.
-  ///
-  /// [config] Map<String, dynamic>
-  /// @return PostgreSQLConnection \PDO
-  ///
+  /// Opens a PostgreSQL connection with the settings in [config].
   Future<PDOInterface> connect(Map<String, dynamic> config) async {
-    // First we'll create the basic DSN and connection instance connecting to the
-    // using the configuration option specified by the developer. We will also
-    // set the default character set on the connections to UTF-8 by default.
-
-    //var dsn = getDsn(config);
-    //var options = getOptions(config);
+    // The charset, time zone, schema (search path) and application name are
+    // not set here: they go to the driver in the PDOConfig, and the PDO
+    // implementation applies them to its connections.
     final connection = await createConnection(config);
-
-    // if (config.containsKey('charset') && config['charset'] != null) {
-    //   var charset = config['charset'];
-    //   //await connection.execute("set names '$charset'");
-    // }
-
-    // Next, we will check to see if a timezone has been specified in this config
-    // and if it has we will issue a statement to modify the timezone with the
-    // database. Setting this DB timezone is an optional configuration item.
-
-    // if (config.containsKey('timezone') && config['timezone'] != null) {
-    //   var timezone = config['timezone'];
-    //   await connection.execute("set timezone TO '$timezone'");
-    // }
-
-    // Unlike MySQL, Postgres allows the concept of "schema" and a default schema
-    // may have been specified on the connections. If that is the case we will
-    // set the default schema search paths to the specified database schema.
-    // if (config.containsKey('schema') && config['schema'] != null) {
-    //   var schema = formatSchema(config['schema']);
-    //   await connection.execute("set search_path to $schema");
-    // }
-
-    // Postgres allows an application_name to be set by the user and this name is
-    // used to when monitoring the application with pg_stat_activity. So we'll
-    // determine if the option has been specified and run a statement if so.
-
-    // if (config.containsKey('application_name') &&
-    //     config['application_name'] != null) {
-    //   var applicationName = config['application_name'];
-    //   try {
-    //     await connection.execute("set application_name to '$applicationName'");
-    //   } catch (e) {
-    //     print(
-    //         'Eloquent: Unable to set the application_name for this PostgreSQL driver.');
-    //   }
-    // }
 
     return connection;
   }
 
-  ///
-  /// Create a DSN string from a configuration.
-  ///
-  /// @param  array   $config
-  /// @return string
-  ///
+  /// Builds a DSN string (`pgsql:host=...;dbname=...`) from [config].
   String getDsn(Map<String, dynamic> config) {
     // First we will create the basic DSN setup as well as the port if it is in
     // in the configuration options. This will give us the basic DSN we will
@@ -96,7 +42,7 @@ class PostgresConnector extends Connector implements ConnectorInterface {
     if (config.containsKey('charset') && config['charset'] != null) {
       dsn = "$dsn;charset=${config['charset']}";
     }
-    // add Pool opttions to DSN
+    // add pool options to DSN
     if (config['pool'] != null) {
       dsn += ";pool=${config['pool']}";
     }
@@ -124,18 +70,18 @@ class PostgresConnector extends Connector implements ConnectorInterface {
     return dsn;
   }
 
-  /// Converte o parâmetro `schema` (String ou List<String>) no formato
-  /// `"esquema1","esquema2"` aceito pelo comando
-  /// `SET search_path TO …`.
+  /// Formats [schema] as the `"schema1","schema2"` list that
+  /// `SET search_path TO ...` accepts.
   ///
-  /// *  Aceita `null`, string vazia ou itens vazios no meio da lista
-  ///    – eles são simplesmente ignorados.
-  /// *  Mantém itens que **já** estejam entre aspas duplas, sem duplicá-las.
-  /// *  Remove espaços em volta de cada nome.
-  /// *  Elimina esquemas duplicados, preservando a primeira ocorrência.
+  /// [schema] is a comma-separated `String` or a list of strings; `null`
+  /// returns `''` and any other type throws [ArgumentError].
   ///
+  /// - Empty names are skipped.
+  /// - Names are trimmed; names already in double quotes are kept as they
+  ///   are, the others are quoted.
+  /// - Duplicates are dropped, keeping the first occurrence.
   String formatSchema(dynamic schema) {
-    // 1. Quebra em partes
+    // 1. Split into names.
     final List<String> parts;
     if (schema is String) {
       parts = schema.split(',');
@@ -147,14 +93,14 @@ class PostgresConnector extends Connector implements ConnectorInterface {
       throw ArgumentError('schema deve ser String ou List<String>');
     }
 
-    // 2. Normaliza, filtra vazios, evita duplicatas
+    // 2. Normalize, skip empty names, drop duplicates.
     final seen = <String>{};
     final buffer = StringBuffer();
     for (var raw in parts) {
       var s = raw.trim();
       if (s.isEmpty) continue;
 
-      // já está entre aspas? mantém
+      // Already quoted? Keep it.
       if (!(s.startsWith('"') && s.endsWith('"'))) {
         s = '"$s"';
       }
@@ -168,17 +114,13 @@ class PostgresConnector extends Connector implements ConnectorInterface {
     return buffer.toString();
   }
 
+  /// Opens the driver connection with the settings in [conf].
   ///
-  /// Create a new PDO connection.
-  ///
-  /// @param  string  $dsn
-  /// @param  array   $config
-  /// @param  array   $options
-  /// @return \PDO
-  /// Aqui que cria a conexão com o Banco de Dados de fato
-  ///
+  /// The `driver_implementation` key picks the driver: `postgres` (the
+  /// default), `postgres_v3`, `dargres` or `dpgsql`. A `schema` key is
+  /// formatted with [formatSchema].
   Future<PDOInterface> createConnection(Map<String, dynamic> conf) async {
-    // clone – evita side-effects entre requisições
+    // A copy, so formatting the schema does not change the caller's map.
     final config = Map<String, dynamic>.from(conf);
 
     if (config.containsKey('schema')) {

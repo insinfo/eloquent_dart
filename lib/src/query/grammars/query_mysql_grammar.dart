@@ -71,12 +71,10 @@ class QueryMySqlGrammar extends QueryGrammar {
     'lock',
   ];
 
+  /// Compiles a select query into SQL.
   ///
-  /// Compile a select query into SQL.
-  ///
-  /// @param  QueryBuilder  query
-  /// @return string
-  ///
+  /// With unions every operand is parenthesized:
+  /// `[with ...] (select ...) union (select ...)`.
   String compileSelect(QueryBuilder query) {
     if (query.unionsProp.isEmpty || query.expressionsProp.isEmpty) {
       var sql = super.compileSelect(query);
@@ -99,45 +97,30 @@ class QueryMySqlGrammar extends QueryGrammar {
     return '$ctes ($sql) ${this.compileUnions(query)}';
   }
 
-  ///
-  /// Compile a "JSON contains" statement into SQL.
-  ///
-  /// @param  string  $column
-  /// @param  string  $value
-  /// @return string
-  ///
+  /// Compiles `json_contains(column, value)`, with [value] already SQL (a
+  /// placeholder).
   String compileJsonContains(column, value) {
     return 'json_contains(' + this.wrap(column) + ', ' + value + ')';
   }
 
-  ///
-  /// Compile a single union statement.
-  ///
-  /// @param  array  $union
-  /// @return string
-  ///
+  /// Compiles one union with its query parenthesized:
+  /// ` union (select ...)` or ` union all (select ...)`.
   String compileUnion(Map union) {
     var conjunction = union['all'] ? ' union all ' : ' union ';
     return conjunction + '(' + union['query'].toSql() + ')';
   }
 
-  ///
-  /// Compile the random statement into SQL.
-  ///
-  /// @param  string  $seed
-  /// @return string
-  ///
+  /// Compiles the expression of a random order: `RAND(seed)`, or `RAND()`
+  /// with an empty seed.
   String compileRandom(seed) {
     return 'RAND(' + seed + ')';
   }
 
+  /// Compiles the row lock.
   ///
-  /// Compile the lock into SQL.
-  ///
-  /// @param QueryBuilder  $query
-  /// @param  bool|string  $value
-  /// @return string
-  ///
+  /// A [QueryLock] gives `for update` or `for share`, with `of tables`,
+  /// `skip locked` and `nowait`; `true` gives `for update`, `false`
+  /// `lock in share mode`, and a string is used as given.
   String compileLock(QueryBuilder query, value) {
     if (value is QueryLock) {
       // Modifiers need the MySQL 8.0 syntax (`FOR SHARE`, not
@@ -156,14 +139,8 @@ class QueryMySqlGrammar extends QueryGrammar {
     return value;
   }
 
-  ///
-  /// Compile an insert and get ID statement into SQL.
-  ///
-  ///  [query]  QueryBuilder
-  ///  [values] Map<String,dynamic>
-  /// @param  String  $sequence
-  ///  `Return` String
-  ///
+  /// Compiles a plain insert: MySQL has no `returning`, so the processor
+  /// reads the generated id from the insert result and [sequence] is unused.
   @override
   String compileInsertGetId(
       QueryBuilder query, Map<String, dynamic> values, String? sequence) {
@@ -277,21 +254,16 @@ class QueryMySqlGrammar extends QueryGrammar {
     );
   }
 
+  /// Compiles an update: `[with ...] update table [joins] set ... [where]
+  /// [order by] [limit]`.
   ///
-  /// Compile an update statement into SQL.
-  ///
-  /// @param  QueryBuilder  $query
-  /// @param  array  $values
-  /// @return string
-  ///
+  /// A JSON selector key (`column->path`) is set with `json_set` (see
+  /// [compileJsonUpdateColumn]).
   String compileUpdate(QueryBuilder query, Map<String, dynamic> values) {
     final table = this.wrapTable(query.fromProp);
 
     final columns = <String>[];
 
-    // Each one of the columns in the update statements needs to be wrapped in the
-    // keyword identifiers, also a place-holder needs to be created for each of
-    // the values in the list of bindings so we can make the sets statements.
     for (var entry in values.entries) {
       var key = entry.key;
       var value = entry.value;
@@ -305,17 +277,11 @@ class QueryMySqlGrammar extends QueryGrammar {
 
     final columnsStr = columns.join(', ');
 
-    // If the query has any "join" clauses, we will setup the joins on the builder
-    // and compile them so we can attach them to this update, as update queries
-    // can get join statements to attach to other tables when they're needed.
     var joins = '';
     if (query.joinsProp.isNotEmpty) {
       joins = ' ' + this.compileJoins(query, query.joinsProp);
     }
 
-    // Of course, update queries may also be constrained by where clauses so we'll
-    // need to compile the where clauses and attach it to the query so only the
-    // intended records are updated by the SQL statements we generate to run.
     final where = this.compileWheres(query);
 
     var sql = ("${this.compileExpressions(query)} update $table$joins "
@@ -333,34 +299,21 @@ class QueryMySqlGrammar extends QueryGrammar {
     return (sql).trimRight();
   }
 
-  ///
-  /// Prepares a JSON column being updated using the JSON_SET function.
-  ///
-  /// @param  string  $key
-  /// @param  \Illuminate\Database\JsonExpression  $value
-  /// @return string
-  ///
+  /// Compiles the assignment of a JSON selector [key] (`column->a->b`):
+  /// `` `column` = json_set(`column`, "$.a.b", value) ``.
   String compileJsonUpdateColumn(key, JsonExpression value) {
-    //var path = explode('->', key);
     List<String> path = key.split('->');
 
-    //var field = this.wrapValue(array_shift(path));
     var field = this.wrapValue(path.removeAt(0));
 
     var accessor = '"\$.' + path.join('.') + '"';
 
-    //return "{$field} = json_set({$field}, {$accessor}, {$value->getValue()})";
     return '$field = json_set($field, $accessor, ${value.getValue()})';
   }
 
+  /// Bindings of an UPDATE, in SQL order:
+  /// `[with] update t [joins] set ... [where] [order by] [limit]`.
   ///
-  /// Prepare the bindings for an update statement.
-  ///
-  /// [bindings] List<dynamic> bindings
-  /// [values] Map<String, dynamic>
-  /// @return array
-  ///
-  /// SQL order: `[with] update t [joins] set ... [where] [order by] [limit]`.
   /// A boolean assigned to a JSON selector is emitted inline by
   /// [compileJsonUpdateColumn], so it has no binding.
   @override
@@ -376,7 +329,11 @@ class QueryMySqlGrammar extends QueryGrammar {
     ];
   }
 
-  /// SQL order: `[with] delete ... [joins] [where] [order by] [limit]`.
+  /// Bindings of a DELETE, in SQL order:
+  /// `[with] delete ... [joins] [where] [order by] [limit]`.
+  ///
+  /// A delete with joins has no `order by`, so its order bindings are left
+  /// out.
   @override
   List<dynamic> prepareBindingsForDelete(QueryBuilder query) {
     return [
@@ -387,26 +344,14 @@ class QueryMySqlGrammar extends QueryGrammar {
     ];
   }
 
-  /**
-     * Compile an insert statement using a subquery into SQL.
-     *
-     * @param \Illuminate\Database\Query\Builder $query
-     * @param array $columns
-     * @param string $sql
-     * @return string
-     */
+  /// Compiles an insert of the rows selected by [sql], the compiled subquery:
+  /// `insert into table (columns) [with ...] select ...`.
   String compileInsertUsing(QueryBuilder query, columns, String sql) {
     final insert =
         "insert into ${this.wrapTable(query.fromProp)} (${this.columnize(columns)}) ";
     return insert + this.compileExpressions(query) + ' ' + sql;
   }
 
-  ///
-  /// Compile a delete statement into SQL.
-  ///
-  /// @param  QueryBuilder $query
-  /// @return string
-  ///
   /// `column like ?`, or `like binary ?` when case-sensitive (Laravel).
   @override
   String whereLike(QueryBuilder query, Map<String, dynamic> where) {
@@ -450,6 +395,8 @@ class QueryMySqlGrammar extends QueryGrammar {
         '(MariaDB), or filter a depth column.');
   }
 
+  /// Compiles `[with ...] delete from table [where] [order by] [limit]`, or
+  /// with joins `[with ...] delete table from table joins [where]`.
   String compileDelete(QueryBuilder query) {
     final table = this.wrapTable(query.fromProp);
     final ctes = this.compileExpressions(query);
@@ -473,12 +420,8 @@ class QueryMySqlGrammar extends QueryGrammar {
     }
   }
 
-  ///
-  /// Wrap a single string in keyword identifiers.
-  ///
-  /// @param  string  $value
-  /// @return string
-  ///
+  /// Quotes one identifier with backticks (`` ` `` doubled inside); `*` is
+  /// kept and a JSON selector goes to [wrapJsonSelector].
   String wrapValue(value) {
     if (value == '*') {
       return value;
@@ -488,30 +431,18 @@ class QueryMySqlGrammar extends QueryGrammar {
       return this.wrapJsonSelector(value);
     }
 
-    // return '`'.str_replace('`', '``', $value).'`';
     return '`' + value.replaceAll('`', '``') + '`';
   }
 
-  ///
-  /// Wrap the given JSON selector.
-  ///
-  /// @param  string  $value
-  /// @return string
-  ///
+  /// Compiles a JSON selector `column->a->b` as `` `column`->"$.a.b" ``.
   String wrapJsonSelector(String value) {
     final path = value.split('->');
     final field = this.wrapValue(path.removeAt(0));
     return field + '->' + '"\$.' + path.join('.') + '"';
   }
 
-  ///
-  /// Determine if the given string is a JSON selector.
-  ///
-  /// @param  string  $value
-  /// @return bool
-  ///
+  /// Whether [value] is a JSON selector (contains `->`).
   bool isJsonSelector(String value) {
     return value.contains('->');
-    //Str::contains($value, '->');
   }
 }

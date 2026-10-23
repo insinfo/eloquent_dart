@@ -3,57 +3,37 @@ import 'package:eloquent/eloquent.dart';
 import 'container/container.dart';
 
 class DatabaseManager implements ConnectionResolverInterface {
-  ///
-  /// The application instance.
-  ///
-  /// @var \Illuminate\Foundation\Application
-  ///
+  /// The container with the `config` binding (and, optionally, `events`).
   Container app;
 
-  ///
-  /// The database connection factory instance.
-  ///
-  /// @var \Illuminate\Database\Connectors\ConnectionFactory
-  ///
+  /// Creates the connections from their configuration.
   ConnectionFactory factory;
 
-  ///
-  /// The active connection instances.
-  ///
-  /// @var array
-  ///
+  /// The connections made so far, by name.
   Map<String, dynamic> connectionsProp = {};
 
-  ///
-  /// The custom connection resolvers.
-  ///
-  /// @var array
-  ///
+  /// The custom connection resolvers, by connection or driver name; see
+  /// [extend].
   Map<String, dynamic> extensions = {};
 
-  ///
-  /// Create a new database manager instance.
-  ///
-  /// @param  \Illuminate\Foundation\Application  $app
-  /// @param  \Illuminate\Database\Connectors\ConnectionFactory  $factory
-  /// @return void
-  ///
+  /// Creates a manager that reads the configuration from [app] and makes
+  /// the connections with [factory].
   DatabaseManager(this.app, this.factory);
 
+  /// Returns the connection [nameP], making it on first use.
   ///
-  /// Get a database connection instance.
-  ///
-  /// @param  string  $name
-  /// @return \Illuminate\Database\Connection
-  ///
+  /// [nameP] defaults to [getDefaultConnection]. A `::read` or `::write`
+  /// suffix makes the connection use only its read or only its write PDO;
+  /// see [setPdoForType]. The connection is kept under the name without the
+  /// suffix.
   Future<Connection> connection([String? nameP]) async {
     var re = this.parseConnectionName(nameP);
 
     var name = re[0];
     var type = re[1];
-    // If we haven't created this connection, we'll create it based on the config
-    // provided in the application. Once we've created the connections we will
-    // set the "fetch mode" for PDO which determines the query return types.
+    // If we haven't created this connection, we'll create it based on the
+    // config provided in the application. Once we've created the connection
+    // we will set its read / write type.
 
     if (!Utils.isset(this.connectionsProp[name])) {
       final connection = await this.makeConnection(name);
@@ -66,23 +46,17 @@ class DatabaseManager implements ConnectionResolverInterface {
     return this.connectionsProp[name];
   }
 
-  /// Get a schema builder instance for a connection.
-  ///
-  /// [connectionName] O nome da conexão (opcional, usa default se null).
-  /// Retorna um Future<SchemaBuilder>.
+  /// Returns a schema builder for the connection [connectionName] (default:
+  /// the default connection).
   Future<SchemaBuilder> schema([String? connectionName]) async {
-    // 1. Resolve a conexão (espera que retorne uma Connection concreta)
+    // 1. Resolve the connection.
     final Connection resolvedConnection = await connection(connectionName);
-    // 2. Obtém o SchemaBuilder a partir da conexão resolvida
+    // 2. Get the schema builder of the resolved connection.
     return resolvedConnection.getSchemaBuilder();
   }
 
-  ///
-  /// Parse the connection into an array of the name and read / write type.
-  ///
-  /// @param  string  $name
-  /// @return array
-  ///
+  /// Splits [name] (default: [getDefaultConnection]) into `[name, type]`,
+  /// where type is `'read'`, `'write'` or null.
   List parseConnectionName(String? name) {
     name = name ?? this.getDefaultConnection();
 
@@ -91,23 +65,15 @@ class DatabaseManager implements ConnectionResolverInterface {
         : [name, null];
   }
 
-  ///
-  /// Disconnect from the given database and remove from local cache.
-  ///
-  /// [name] Connection name
-  /// @return void
-  ///
+  /// Disconnects from the connection [name] and forgets it, so the next
+  /// [connection] call makes it again.
   Future<void> purge([String? name]) async {
     await this.disconnect(name);
     this.connectionsProp.remove(name);
   }
 
-  ///
-  /// Disconnect from the given database.
-  ///
-  /// @param  string  $name
-  /// @return void
-  ///
+  /// Disconnects from the connection [name] (default: the default
+  /// connection), if it was made. The connection is kept.
   Future<void> disconnect([String? name]) async {
     name = name ?? this.getDefaultConnection();
 
@@ -116,12 +82,10 @@ class DatabaseManager implements ConnectionResolverInterface {
     }
   }
 
+  /// Reconnects the connection [name] (default: the default connection).
   ///
-  /// Reconnect to the given database.
-  ///
-  /// @param  string  $name
-  /// @return \Illuminate\Database\Connection
-  ///
+  /// A connection that was made gets the PDOs of a new one (see
+  /// [refreshPdoConnections]); otherwise it is made.
   Future<Connection> reconnect([String? name]) {
     name = name ?? this.getDefaultConnection();
     this.disconnect(name);
@@ -133,12 +97,8 @@ class DatabaseManager implements ConnectionResolverInterface {
     return this.refreshPdoConnections(name);
   }
 
-  ///
-  /// Refresh the PDO connections on a given connection.
-  ///
-  /// @param  string  $name
-  /// @return \Illuminate\Database\Connection
-  ///
+  /// Gives the connection [name] the PDOs of a newly made connection and
+  /// returns it.
   Future<Connection> refreshPdoConnections(String name) async {
     var fresh = await this.makeConnection(name);
 
@@ -148,26 +108,24 @@ class DatabaseManager implements ConnectionResolverInterface {
         .setReadPdo(fresh.getReadPdo());
   }
 
+  /// Makes a new connection [name] from its configuration.
   ///
-  /// Make the database connection instance.
-  ///
-  /// @param  string  $name
-  /// @return \Illuminate\Database\Connection
-  ///
+  /// It uses the resolver registered with [extend] for the name, else the
+  /// one for its driver, else [factory].
   Future<Connection> makeConnection(String name) {
     var config = this.getConfig(name);
 
-    // First we will check by the connection name to see if an extension has been
-    // registered specifically for that connection. If it has we will call the
-    // Closure and pass it the config allowing it to resolve the connection.
+    // First we will check by the connection name to see if an extension has
+    // been registered specifically for that connection. If it has we will
+    // call it and pass it the config allowing it to resolve the connection.
     if (Utils.isset(this.extensions[name])) {
       return this.extensions[name](config, name);
     }
 
     var driver = config['driver'];
 
-    // Next we will check to see if an extension has been registered for a driver
-    // and will call the Closure if so, which allows us to have a more generic
+    // Next we will check to see if an extension has been registered for a
+    // driver and will call it if so, which allows us to have a more generic
     // resolver for the drivers themselves which applies to all connections.
     if (Utils.isset(this.extensions[driver])) {
       return this.extensions[driver](config, name);
@@ -176,20 +134,17 @@ class DatabaseManager implements ConnectionResolverInterface {
     return this.factory.make(config, name);
   }
 
-  ///
-  /// Prepare the database connection instance.
-  ///
-  /// @param  \Illuminate\Database\Connection  $connection
-  /// @return \Illuminate\Database\Connection
-  ///
+  /// Sets the event dispatcher of [connection] (when [app] has `events`)
+  /// and a reconnector that calls [reconnect], and returns [connection].
   Connection prepare(Connection connection) {
     if (this.app.bound('events')) {
       connection.setEventDispatcher(this.app['events']);
     }
 
-    // Here we'll set a reconnector callback. This reconnector can be any callable
-    // so we will set a Closure to reconnect from this manager with the name of
-    // the connection, which will allow us to reconnect from the connections.
+    // Here we'll set a reconnector callback. This reconnector can be any
+    // function so we will set one to reconnect from this manager with the
+    // name of the connection, which will allow us to reconnect from the
+    // connections.
     connection.setReconnector((con) async {
       await this.reconnect(con.getName());
     });
@@ -197,13 +152,9 @@ class DatabaseManager implements ConnectionResolverInterface {
     return connection;
   }
 
-  ///
-  /// Prepare the read write mode for database connection instance.
-  ///
-  /// @param  \Illuminate\Database\Connection  $connection
-  /// @param  string  $type
-  /// @return \Illuminate\Database\Connection
-  ///
+  /// Makes [connection] use only its read PDO (`type == 'read'`) or only
+  /// its write PDO (`'write'`), and returns it. Other values change
+  /// nothing.
   ConnectionInterface setPdoForType(Connection connection, [String? type]) {
     if (type == 'read') {
       connection.setPdo(connection.getReadPdo());
@@ -214,19 +165,16 @@ class DatabaseManager implements ConnectionResolverInterface {
     return connection;
   }
 
+  /// Returns the configuration of the connection [name] (default: the
+  /// default connection) from `database.connections`.
   ///
-  /// Get the configuration for a connection.
-  ///
-  /// @param  string  $name
-  /// @return array
-  ///
-  /// @throws \ArgumentError
-  ///
+  /// Throws an [ArgumentError] when it is not configured.
   Map<String, dynamic> getConfig(String? name) {
     name = name ?? this.getDefaultConnection();
 
-    // To get the database connection configuration, we will just pull each of the
-    // connection configurations and get the configurations for the given name.
+    // To get the database connection configuration, we will just pull each of
+    // the connection configurations and get the configurations for the given
+    // name.
     // If the configuration doesn't exist, we'll throw an exception and bail.
     var connections = this.app['config']['database.connections'];
 
@@ -239,72 +187,42 @@ class DatabaseManager implements ConnectionResolverInterface {
     return config;
   }
 
-  ///
-  /// Get the default connection name.
-  ///
-  /// @return string
-  ///
+  /// Returns the name of the default connection (`database.default`).
   String getDefaultConnection() {
     return this.app['config']['database.default'];
   }
 
-  ///
-  /// Set the default connection name.
-  ///
-  /// @param  string  $name
-  /// @return void
-  ///
+  /// Sets the name of the default connection.
   void setDefaultConnection(String name) {
     this.app['config']['database.default'] = name;
   }
 
-  ///
-  /// Get all of the support drivers.
-  ///
-  /// @return array
-  ///
+  /// Returns the driver names Laravel supports. Only `mysql` and `pgsql`
+  /// have connectors in this package.
   List supportedDrivers() {
     return ['mysql', 'pgsql', 'sqlite', 'sqlsrv'];
   }
 
-  ///
-  /// Get all of the drivers that are actually available.
-  ///
-  /// @return array
-  ///
+  /// Returns the same list as [supportedDrivers].
   List availableDrivers() {
-    //return array_intersect($this->supportedDrivers(), str_replace('dblib', 'sqlsrv', PDO::getAvailableDrivers()));
     return supportedDrivers();
   }
 
+  /// Registers [resolver] for the connection or driver [name].
   ///
-  /// Register an extension connection resolver.
-  ///
-  /// @param  string    $name
-  /// @param  callable  $resolver
-  /// @return void
-  ///
+  /// [resolver] is called with the configuration and the connection name
+  /// and must return a `Future<Connection>`.
   dynamic extend(String name, Function resolver) {
     this.extensions[name] = resolver;
   }
 
-  ///
-  /// Return all of the created connections.
-  ///
-  /// @return array
-  ///
+  /// Returns the connections made so far, by name.
   dynamic getConnections() {
     return this.connectionsProp;
   }
 
-  ///
-  /// Dynamically pass methods to the default connection.
-  ///
-  /// @param  string  $method
-  /// @param  array   $parameters
-  /// @return mixed
-  ///
+  /// Does nothing and returns null.
   dynamic call(String method, List parameters) {
-    //return call_user_func_array([$this->connection(), $method], $parameters);
+    // Laravel forwards the call to the default connection (PHP's __call).
   }
 }

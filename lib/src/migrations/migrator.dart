@@ -4,7 +4,6 @@ import 'dart:async';
 import 'dart:io'; // For Directory and File access
 import 'package:path/path.dart' as p; // For path manipulation
 import 'package:eloquent/eloquent.dart'; // Main package imports
-//import '../support/str.dart';
 
 /// Manages and runs database migrations.
 /// Corresponds to Illuminate\Database\Migrations\Migrator.
@@ -14,10 +13,6 @@ class Migrator {
 
   /// The database connection resolver instance.
   final ConnectionResolverInterface resolver;
-
-  // Filesystem interaction needs adaptation for Dart.
-  // We might pass a directory path or use dart:io directly.
-  // final Filesystem files; // Replace with Dart equivalent if needed
 
   /// The name of the default connection.
   String? connection;
@@ -46,13 +41,11 @@ class Migrator {
   /// Advisory lock key of [isolated].
   static const lockKey = 'eloquent.migrations';
 
-  /// Create a new migrator instance.
+  /// Creates a migrator that logs to [repository] and runs the migrations
+  /// of [migrationRegistry] on connections from [resolver].
   ///
-  /// [repository] Stores migration history.
-  /// [resolver] Resolves database connections.
-  /// [migrationRegistry] Maps migration names to factories.
-  /// [databaseManager] Injected into migrations for schema access. If omitted
-  /// and [resolver] is a [DatabaseManager], that resolver is used.
+  /// [databaseManager] is injected into the migrations; when omitted and
+  /// [resolver] is a [DatabaseManager], that resolver is used.
   Migrator(this.repository, this.resolver, this.migrationRegistry,
       {this.databaseManager});
 
@@ -63,10 +56,11 @@ class Migrator {
     return r is DatabaseManager ? r : null;
   }
 
-  /// Runs the outstanding migrations found in the specified paths.
+  /// Runs the migrations whose files are in the directories [paths] and
+  /// that have not run yet; each one must be in [migrationRegistry].
   ///
-  /// [paths] A list of directory paths containing migration files.
-  /// [options] Options map, supporting 'pretend' (bool) and 'step' (bool).
+  /// Only notes an error when the migration table does not exist. See
+  /// [runMigrationList] for [pretend] and [step].
   Future<void> run(List<String> paths,
       {bool pretend = false, bool step = false}) async {
     notes.clear();
@@ -150,10 +144,11 @@ class Migrator {
     }
   }
 
-  /// Run a specific list of migrations.
+  /// Runs [migrations], by name, in order.
   ///
-  /// [migrations] List of migration file names to run.
-  /// [options] Options map, supporting 'pretend' (bool) and 'step' (bool).
+  /// They share the next batch number, or get one batch each with [step].
+  /// With [pretend], nothing runs or is logged; it only notes what would
+  /// run.
   Future<void> runMigrationList(List<String> migrations,
       {bool pretend = false, bool step = false}) async {
     if (migrations.isEmpty) {
@@ -212,11 +207,10 @@ class Migrator {
     }
   }
 
-  /// Rollback the last migration operation.
+  /// Rolls back the migrations of the last [steps] batches and returns how
+  /// many there were.
   ///
-  /// [steps] How many batches to roll back.
-  /// [pretend] If true, simulate the rollback.
-  /// Returns the number of migrations rolled back.
+  /// With [pretend], nothing is rolled back; it only notes what would run.
   Future<int> rollback({int steps = 1, bool pretend = false}) async {
     notes.clear();
 
@@ -243,10 +237,10 @@ class Migrator {
     return count;
   }
 
-  /// Rolls all of the currently applied migrations back.
+  /// Rolls back every migration that has run and returns how many there
+  /// were.
   ///
-  /// [pretend] If true, simulate the reset.
-  /// Returns the number of migrations rolled back.
+  /// With [pretend], nothing is rolled back; it only notes what would run.
   Future<int> reset({bool pretend = false}) async {
     notes.clear();
 
@@ -371,12 +365,12 @@ class Migrator {
     return files;
   }
 
-  // Dart doesn't require files explicitly like PHP's requireOnce.
-  // Instantiation happens via the registry.
-  // void requireFiles(String path, List<String> files) { }
-
-  /// Pretend to run the migrations.
-  /// REQUIRES connection.pretend() to be implemented.
+  /// Notes the queries that [method] (`up` or `down`) of [migration] would
+  /// run, captured with [Connection.pretend], without running them.
+  ///
+  /// Meant for a connection whose `pretend` config is `true`; with `false`
+  /// (or a connection that is not a [Connection]) it only notes that it would
+  /// run [method].
   Future<void> _pretendToRun(Migration migration, String method) async {
     final conn = await _resolveConnection(migration.getConnectionName());
 
@@ -390,8 +384,6 @@ class Migrator {
         note(" -> Would run down() method.");
       }
       return;
-      // Or throw an exception?
-      // throw UnsupportedError("Pretend mode requires a Connection object with the 'pretend' config option enabled.");
     }
 
     try {
@@ -432,17 +424,9 @@ class Migrator {
     }
     // Call the factory function to get a new instance
     return migrationRegistry[file]!();
-
-    // PHP logic to derive class name:
-    // final parts = file.split('_');
-    // if (parts.length < 5) throw Exception("Invalid migration filename format: $file");
-    // final namePart = parts.sublist(4).join('_');
-    // final className = Str.studly(namePart); // Requires Str.studly utility
-    // // Instantiation would need reflection or registry here in Dart
-    // throw UnimplementedError("Cannot dynamically instantiate class '$className' from file '$file' without reflection or registry.");
   }
 
-  /// Raise a note event for the migrator.
+  /// Prints [message] and adds it to [notes].
   @protected
   void note(String message) {
     // Simple print for now, replace with proper logging/output
@@ -485,7 +469,4 @@ class Migrator {
   Future<bool> repositoryExists() {
     return repository.repositoryExists();
   }
-
-  // Filesystem instance is not directly used in this Dart version
-  // Filesystem getFilesystem() { return files; }
 }

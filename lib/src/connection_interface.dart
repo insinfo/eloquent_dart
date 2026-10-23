@@ -3,156 +3,80 @@ import 'package:eloquent/eloquent.dart';
 const listVoid = [];
 
 abstract class ConnectionInterface {
-  ///
-  /// Begin a fluent query against a database table.
-  ///
-  /// [table]  String  table
-  ///  @return \Illuminate\Database\Query\Builder
-  ///
+  /// Returns a [QueryBuilder] on [table].
   QueryBuilder table(String table);
 
-  ///
-  /// Get a new raw query expression.
-  ///
-  /// [value]  dynamic
-  /// @return Expression
-  ///
+  /// Returns a raw SQL expression: [value] goes into the query as written,
+  /// not as a binding.
   QueryExpression raw(dynamic value);
 
-  ///
-  /// Run a select statement and return a single result.
-  ///
-  /// [query]  String
-  /// [bindings]  List
-  /// @return dynamic
-  ///
+  /// Runs a select statement and returns its first row, or null when there
+  /// is none.
   Future<Map<String, dynamic>?> selectOne(String query,
       [List bindings = listVoid, int? timeoutInSeconds]);
 
+  /// Runs a select statement and returns its rows.
   ///
-  /// Run a select statement against the database.
-  ///
-  /// [query]  String
-  /// [bindings]  List
-  /// @return array
-  ///
+  /// With [useReadPdo] it runs on the read connection.
   Future<List<Map<String, dynamic>>> select(String query,
       [List bindings = listVoid,
       bool useReadPdo = true,
       int? timeoutInSeconds]);
 
+  /// Streams the rows of a select statement through a server-side cursor or
+  /// incremental reader, keeping memory roughly constant for very large
+  /// result sets.
   ///
-  /// Stream a select statement's rows using a server-side cursor / incremental
-  /// reader, keeping memory roughly constant for very large result sets.
-  ///
-  /// [query]  String
-  /// [bindings]  List
-  /// [useReadPdo]  bool
-  /// [fetchSize]  advisory rows-per-round-trip hint
-  /// @return Stream of row maps
-  ///
+  /// [fetchSize] is an advisory hint for the rows fetched per round trip.
   Stream<Map<String, dynamic>> cursor(String query,
       [List bindings = listVoid, bool useReadPdo = true, int? fetchSize]);
 
-  ///
-  /// Direct, driver-specific access (COPY, pipelining, LISTEN/NOTIFY, raw
-  /// connection). Returns `null` when unsupported by the active driver.
-  ///
+  /// Returns direct, driver-specific access (COPY, pipelining, LISTEN/NOTIFY,
+  /// raw connection), or `null` when the active driver has none.
   DriverAccess? driver();
 
-  ///
-  /// Run an insert statement against the database.
-  ///
-  /// [query]  String
-  /// [bindings]  List
-  /// @return bool
-  ///
+  /// Runs an insert statement and returns its [PDOResults].
   Future<PDOResults> insert(String query,
       [List bindings = listVoid, int? timeoutInSeconds]);
 
-  ///
-  /// Run an update statement against the database.
-  ///
-  /// [query]  String
-  /// [bindings]  List
-  /// @return int
-  ///
+  /// Runs an update statement and returns the number of rows affected.
   Future<int> update(String query,
       [List bindings = listVoid, int? timeoutInSeconds]);
 
-  ///
-  /// Run a delete statement against the database.
-  ///
-  /// [query]  String
-  /// [bindings]  List
-  /// @return int
-  ///
+  /// Runs a delete statement and returns the number of rows affected.
   Future<int> delete(String query,
       [List bindings = listVoid, int? timeoutInSeconds]);
 
-  ///
-  /// Execute an SQL statement and return the boolean result.
-  ///
-  /// [query] string
-  /// [bindings]  List
-  /// @return bool
-  ///
+  /// Runs an SQL statement and returns its [PDOResults].
   Future<PDOResults> statement(String query,
       [List bindings = listVoid, int? timeoutInSeconds]);
 
-  ///
-  /// Run an SQL statement and get the number of rows affected.
-  ///
-  /// [query] String
-  /// [bindings]  List
-  /// @return int
-  ///
+  /// Runs an SQL statement and returns the number of rows affected.
   Future<int> affectingStatement(String query,
       [List bindings = listVoid, int? timeoutInSeconds]);
 
-  ///
-  /// Run a raw, unprepared query against the PDO connection.
-  ///
-  /// [query]  String
-  /// @return bool
-  ///
+  /// Runs [query] as written, without bindings, and returns the number of
+  /// rows affected; see [Connection.unprepared].
   Future<int> unprepared(String query, int? timeoutInSeconds);
 
-  ///
-  /// Prepare the query bindings for execution.
-  ///
-  /// [bindings]  List
-  ///  Returns `List`
-  ///
+  /// Returns [bindings] converted for the driver; see
+  /// [Connection.prepareBindings].
   dynamic prepareBindings(List bindings);
 
-  ///
-  /// Execute a Closure within a transaction.
-  ///
-  /// [callback] Function \Closure
-  /// Returns `dynamic`
-  ///
-  /// @throws \Throwable
+  /// Runs [callback] in a transaction and returns its result.
   ///
   /// Inside an existing transaction this nests through a SAVEPOINT; see
   /// [Connection.transaction].
-  ///
   Future<T> transaction<T>(Future<T> Function(Connection ctx) callback,
       [int? timeoutInSeconds]);
 
-  ///
   /// Runs [callback] in a transaction, reusing the current one (without a
   /// SAVEPOINT) when this connection is already inside a transaction.
-  ///
   Future<T> transactionIfNeeded<T>(Future<T> Function(Connection ctx) callback,
       [int? timeoutInSeconds]);
 
-  ///
-  /// Transaction depth: 0 outside a transaction, 1 in the outer transaction,
-  /// 2+ inside nested SAVEPOINTs.
-  ///
-  /// Returns `int`
-  ///
+  /// Returns the transaction depth: 0 outside a transaction, 1 in the outer
+  /// transaction, 2+ inside nested SAVEPOINTs.
   int transactionLevel();
 
   /// Whether this connection runs inside a transaction.
@@ -161,12 +85,8 @@ abstract class ConnectionInterface {
   /// Whether [transaction] can nest through SAVEPOINT on this connection.
   bool get supportsSavepoints;
 
-  ///
-  /// Execute the given callback in "dry run" mode.
-  ///
-  /// [callback]  Function
-  /// Returns `List`
-  ///
+  /// Runs [callback] in "dry run" mode and returns the queries it would have
+  /// run.
   Future<dynamic> pretend(Function callback);
 
   String getDatabaseName();

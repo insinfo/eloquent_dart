@@ -35,11 +35,7 @@ class QueryPostgresGrammar extends QueryGrammar {
         '<<', '>>', '<<=', '>>=', '-|-', '&<', '&>',
       };
 
-  ///
-  ///All of the available clause operators.
-  ///
-  ///protected @var array
-  ///
+  /// All of the available clause operators.
   List<String> operators = [
     '=',
     '<',
@@ -75,13 +71,7 @@ class QueryPostgresGrammar extends QueryGrammar {
     'is not distinct from',
   ];
 
-  ///
-  /// Compile a "where date" clause.
-  ///
-  /// [query] QueryBuilder
-  /// [where] dynamic/map/array
-  /// @return string
-  ///
+  /// Compiles `column::date <operator> ?`.
   String whereDate(QueryBuilder query, dynamic where) {
     var value = this.parameter(where['value']);
     return this.wrap(where['column']) +
@@ -91,14 +81,8 @@ class QueryPostgresGrammar extends QueryGrammar {
         value;
   }
 
-  ///
-  /// Compile a date based where clause.
-  ///
-  /// @param  string  $type
-  /// @param  \Illuminate\Database\Query\Builder  $query
-  /// @param  array  $where
-  /// @return string
-  ///
+  /// Compiles `extract(type from column) <operator> ?`, with [type] a field
+  /// such as `day`, `month` or `year`.
   String dateBasedWhere(type, QueryBuilder query, dynamic where) {
     var value = this.parameter(where['value']);
     return 'extract(' +
@@ -111,20 +95,15 @@ class QueryPostgresGrammar extends QueryGrammar {
         value;
   }
 
-  ///
-  /// Compile a "JSON contains" statement into SQL.
-  ///
-  /// @param  string  $column
-  /// @param  string  $value
-  /// @return string
-  ///
+  /// Compiles `(column)::jsonb @> value`, with [value] already SQL (a
+  /// placeholder). The `->>` of a JSON selector becomes `->`, so the path
+  /// yields JSON instead of text.
   String compileJsonContains(dynamic column, dynamic value) {
-    //column = str_replace('->>', '->', this.wrap(column));
     final newCol = this.wrap(column).replaceAll('->>', '->');
     return '(' + newCol + ')::jsonb @> ' + value;
   }
 
-  /// `("column")::jsonb @> ?` (optionally negated), used by `whereJsonContains`.
+  /// `[not] ("column")::jsonb @> ?`, used by `whereJsonContains`.
   @override
   String whereJsonContains(QueryBuilder query, Map<String, dynamic> where) {
     final not = where['not'] == true ? 'not ' : '';
@@ -174,13 +153,11 @@ class QueryPostgresGrammar extends QueryGrammar {
         '${parameter(where['value'])}';
   }
 
+  /// Compiles the row lock.
   ///
-  /// Compile the lock into SQL.
-  ///
-  /// [query] QueryBuilder
-  /// [value]  bool|String
-  /// @return String
-  ///
+  /// A [QueryLock] gives `for update` or `for share`, with `of tables`,
+  /// `skip locked` and `nowait`; `true` gives `for update`, `false`
+  /// `for share`, and a string is used as given.
   String compileLock(QueryBuilder query, dynamic value) {
     if (value is QueryLock) {
       final sql = StringBuffer(value.forUpdate ? 'for update' : 'for share');
@@ -212,13 +189,8 @@ class QueryPostgresGrammar extends QueryGrammar {
         '${noWait ? ' nowait' : ''}';
   }
 
-  ///
-  ///  Compile an insert statement into SQL.
-  ///
-  ///  [query]  QueryBuilder
-  ///  [values] Map<String,dynamic>
-  ///  `Return` String
-  ///
+  /// Compiles a single-row insert; with no [values],
+  /// `insert into table DEFAULT VALUES`.
   String compileInsert(QueryBuilder query, Map<String, dynamic> values) {
     final table = this.wrapTable(query.fromProp);
     return values.isEmpty
@@ -226,14 +198,9 @@ class QueryPostgresGrammar extends QueryGrammar {
         : super.compileInsert(query, values);
   }
 
-  ///
-  /// Compile an insert and get ID statement into SQL.
-  ///
-  ///  [query]  QueryBuilder
-  ///  [values] Map<String,dynamic>
-  /// @param  String  $sequence
-  ///  `Return` String
-  ///
+  /// Compiles an insert that returns the generated id:
+  /// `insert ... returning "id"`, with [sequence] the id column (`id` when
+  /// null).
   @override
   String compileInsertGetId(
       QueryBuilder query, Map<String, dynamic> values, String? sequence) {
@@ -246,20 +213,15 @@ class QueryPostgresGrammar extends QueryGrammar {
         this.wrap(sequence);
   }
 
+  /// Compiles `[with ...] update table set ... [from joins] [where]`.
   ///
-  ///Compile an update statement into SQL.
-  ///
-  ///@param  \Illuminate\Database\Query\Builder  $query
-  ///@param  array  $values
-  ///@return String
-  ///
+  /// Joins become `from` plus their conditions in the where, and only inner
+  /// and cross joins are accepted. A limit restricts the rows by `ctid`
+  /// instead (and cannot be combined with joins).
   String compileUpdate(QueryBuilder query, dynamic values) {
     var table = this.wrapTable(query.fromProp);
     final ctes = this.compileExpressions(query);
 
-    // Each one of the columns in the update statements needs to be wrapped in the
-    // keyword identifiers, also a place-holder needs to be created for each of
-    // the values in the list of bindings so we can make the sets statements.
     var columns = this.compileUpdateColumns(values);
 
     // PostgreSQL has no UPDATE ... LIMIT: restrict the target rows by ctid.
@@ -276,10 +238,6 @@ class QueryPostgresGrammar extends QueryGrammar {
     return '$ctes update $table set $columns$from $where'.trim();
   }
 
-  ///
-  /// Compile a delete statement. Joins become `USING` (PostgreSQL has no
-  /// `DELETE ... JOIN`) and a limit restricts the rows by `ctid`.
-  ///
   /// PostgreSQL has no per-query recursion limit for recursive CTEs.
   @override
   String compileRecursionLimit(QueryBuilder query) {
@@ -365,6 +323,8 @@ class QueryPostgresGrammar extends QueryGrammar {
     return super.escapeRawValue(value);
   }
 
+  /// Compiles a delete statement. Joins become `USING` (PostgreSQL has no
+  /// `DELETE ... JOIN`) and a limit restricts the rows by `ctid`.
   String compileDelete(QueryBuilder query) {
     final table = this.wrapTable(query.fromProp);
     final ctes = this.compileExpressions(query);
@@ -420,11 +380,9 @@ class QueryPostgresGrammar extends QueryGrammar {
     }
   }
 
-  ///
   /// Bindings of an UPDATE in SQL order:
   /// `[with] update t set ... [from joins] where <wheres> <join conditions>`,
   /// or with a limit `... where ctid in (select ... where ... order by ...)`.
-  ///
   @override
   List<dynamic> prepareBindingsForUpdate(
       QueryBuilder query, Map<String, dynamic> values) {
@@ -437,10 +395,8 @@ class QueryPostgresGrammar extends QueryGrammar {
     ];
   }
 
-  ///
   /// Bindings of a DELETE in SQL order:
   /// `[with] delete from t [using joins] where <wheres> <join conditions>`.
-  ///
   @override
   List<dynamic> prepareBindingsForDelete(QueryBuilder query) {
     return [
@@ -451,18 +407,10 @@ class QueryPostgresGrammar extends QueryGrammar {
     ];
   }
 
-  ///
-  /// Compile the columns for the update statement.
-  ///
-  /// @param  array   $values
-  /// @return String
-  ///
+  /// Compiles the `set` list of an update: `"column" = ?, ...`.
   String compileUpdateColumns(Map<String, dynamic> values) {
     final columns = <String>[];
 
-    // When gathering the columns for an update statement, we'll wrap each of the
-    // columns and convert it to a parameter value. Then we will concatenate a
-    // list of the columns that can be added into this update query clauses.
     for (var items in values.entries) {
       final key = items.key;
       final value = items.value;
@@ -471,12 +419,8 @@ class QueryPostgresGrammar extends QueryGrammar {
     return columns.join(', ');
   }
 
-  ///
-  ///Compile the "from" clause for an update with a join.
-  ///
-  ///@param  \Illuminate\Database\Query\Builder  $query
-  ///@return String|null
-  ///
+  /// Compiles ` from table, ...` with the joined tables of an update, or an
+  /// empty string without joins.
   String? compileUpdateFrom(QueryBuilder query) {
     if (!Utils.isset(query.joinsProp)) {
       return '';
@@ -484,9 +428,8 @@ class QueryPostgresGrammar extends QueryGrammar {
 
     var froms = <String>[];
 
-    // When using Postgres, updates with joins list the joined tables in the from
-    // clause, which is different than other systems like MySQL. Here, we will
-    // compile out the tables that are joined and add them to a from clause.
+    // PostgreSQL lists the joined tables of an update in its `from`, unlike
+    // MySQL's `update t join ...`.
     for (var join in query.joinsProp) {
       froms.add(wrapTable(join.table));
     }
@@ -498,12 +441,8 @@ class QueryPostgresGrammar extends QueryGrammar {
     return null;
   }
 
-  ///
-  ///Compile the additional where clauses for updates with joins.
-  ///
-  ///@param  QueryBuilder  $query
-  ///@return String
-  ///
+  /// Compiles the where of an update or delete with joins: the query's where
+  /// clauses followed by the join conditions.
   String compileUpdateWheres(QueryBuilder query) {
     var baseWhere = this.compileWheres(query);
 
@@ -511,9 +450,8 @@ class QueryPostgresGrammar extends QueryGrammar {
       return baseWhere;
     }
 
-    // Once we compile the join constraints, we will either use them as the where
-    // clause or append them to the existing base where clauses. If we need to
-    // strip the leading boolean we will do so when using as the only where.
+    // Without where clauses the join conditions are the whole where, so the
+    // first one loses its boolean.
     var joinWhere = this.compileUpdateJoinWheres(query);
 
     if (Utils.trim(baseWhere) == '') {
@@ -523,18 +461,11 @@ class QueryPostgresGrammar extends QueryGrammar {
     return baseWhere + ' ' + joinWhere;
   }
 
-  ///
-  ///Compile the "join" clauses for an update.
-  ///
-  ///@param  QueryBuilder  $query
-  ///@return String
-  ///
+  /// Compiles the conditions of every join, each with its boolean, for the
+  /// where of an update or delete.
   String compileUpdateJoinWheres(QueryBuilder query) {
     var joinWheres = <String>[];
 
-    // Here we will just loop through all of the join constraints and compile them
-    // all out then implode them. This should give us "where" like syntax after
-    // everything has been built and then we will join it to the real wheres.
     for (var join in query.joinsProp) {
       for (var clause in join.clauses) {
         joinWheres.add(this.compileJoinConstraint(clause));
@@ -544,12 +475,8 @@ class QueryPostgresGrammar extends QueryGrammar {
     return Utils.implode(' ', joinWheres);
   }
 
-  ///
-  /// Compile a truncate table statement into SQL.
-  ///
-  /// @param  \Illuminate\Database\Query\Builder  $query
-  /// @return array
-  ///
+  /// Compiles `truncate table restart identity`, as a map from each statement
+  /// to its bindings.
   Map<String, dynamic> compileTruncate(QueryBuilder query) {
     return {
       'truncate ' + this.wrapTable(query.fromProp) + ' restart identity': []
@@ -586,20 +513,17 @@ class QueryPostgresGrammar extends QueryGrammar {
     return select + this.columnize(columns);
   }
 
+  /// Compiles a JSON selector `column->a->b` as `"column"->'a'->>'b'`: the
+  /// last key is read as text (`->>`).
   String wrapJsonSelector(String value) {
-    // Divide a string pelo separador '->'
     List<String> path = value.split('->');
 
-    // Obtém o campo inicial e aplica wrapValue nele
     String field = wrapValue(path.removeAt(0));
 
-    // Envolve os demais atributos do caminho
     List<String> wrappedPath = wrapJsonPathAttributes(path);
 
-    // Remove o último atributo, que será tratado de forma especial
     String attribute = wrappedPath.removeLast();
 
-    // Se existirem outros atributos no caminho, junta-os com '->'
     if (wrappedPath.isNotEmpty) {
       return '$field->${wrappedPath.join("->")}->>$attribute';
     }
@@ -607,18 +531,14 @@ class QueryPostgresGrammar extends QueryGrammar {
     return '$field->>$attribute';
   }
 
+  /// Quotes each key of a JSON path as a string literal: `'key'`.
   List<String> wrapJsonPathAttributes(List<String> path) {
-    // Para cada atributo do caminho, envolve-o com aspas simples
     return path.map((attribute) => "'$attribute'").toList();
   }
 
-  ///
-  ///  Compile the "join" portions of the query.
-  ///
-  ///  @param  \Illuminate\Database\Query\Builder  $query
-  ///  @param  array  $joins
-  ///  @return String
-  ///
+  /// Compiles the joins: `<type> join [LATERAL] table on ...`, or
+  /// `cross join table` for a cross join without conditions. A lateral join
+  /// without conditions gets `on TRUE`.
   String compileJoins(QueryBuilder query, List<JoinClause> joins) {
     final sql = <String>[];
 
@@ -626,23 +546,21 @@ class QueryPostgresGrammar extends QueryGrammar {
       final table = this.wrapTable(join.table);
       final type = join.type.toLowerCase();
 
-      // Adiciona a palavra-chave LATERAL se join.isLateral for true
       final lateral = join.isLateral ? ' LATERAL' : '';
 
-      // Se for um cross join sem cláusulas, retorna apenas "cross join <table>"
+      // A cross join without conditions has no `on`.
       if (type == 'cross' && (join.clauses.isEmpty)) {
         sql.add("cross join $table");
         continue;
       }
 
-      // Compila as cláusulas ON para os demais joins
       final clauses = <String>[];
 
       // for (var clause in join.clauses) {
       //   clauses.add(this.compileJoinConstraint(clause));
       // }
       for (var clause in join.clauses) {
-        // ADICIONA A VERIFICAÇÃO DO TIPO DA CLÁUSULA
+        // Raw conditions (JoinClause.onRaw) are written as given.
         if (clause['type'] == 'raw') {
           clauses.add('${clause['boolean']} ${clause['sql']}');
         } else {
@@ -652,19 +570,15 @@ class QueryPostgresGrammar extends QueryGrammar {
 
       var clausesString = '';
       if (clauses.isNotEmpty) {
-        // Remove o booleano inicial (AND/OR) da primeira cláusula
+        // The first condition takes no leading `and`/`or`.
         clauses[0] = this.removeLeadingBoolean(clauses[0]);
         clausesString = clauses.join(' ');
       } else if (join.isLateral) {
-        // Para JOIN LATERAL, é comum não ter ON ou usar ON TRUE.
-        // Se nenhuma cláusula ON foi fornecida explicitamente,
-        // podemos assumir ON TRUE ou deixar vazio dependendo do dialeto SQL.
-        // Adicionar ON TRUE é mais seguro e explícito para LATERAL.
+        // A lateral join needs a join condition; `on TRUE` keeps every row.
         clausesString = 'TRUE'; // Compila para ON TRUE
       }
 
-      // Junta as partes: TIPO JOIN [LATERAL] TABELA ON CONDICOES
-      // Garante que haja 'on' apenas se houver cláusulas ou se for lateral (assumindo ON TRUE)
+      // `type join [LATERAL] table [on conditions]`.
       final onClause = clausesString.isNotEmpty ? ' on $clausesString' : '';
       sql.add("$type join$lateral $table$onClause");
     }
@@ -672,22 +586,19 @@ class QueryPostgresGrammar extends QueryGrammar {
     return sql.join(' '); // Junta todos os joins com espaço
   }
 
-  // ///
-  // ///  Create a join clause constraint segment.
-  // ///
-  // ///  @param  array  $clause
-  // ///  @return String
-  // ///
+  /// Compiles one join condition, its boolean first: `and first = second`.
+  ///
+  /// [JoinClause.onTrue] compiles to `and TRUE`. `second` is a column, or a
+  /// placeholder for a `where` condition.
   String compileJoinConstraint(Map<String, dynamic> clause) {
     bool isNested = clause['nested'] ?? false;
     if (isNested) {
       return this.compileNestedJoinConstraint(clause);
     }
 
-    // Se o primeiro elemento for QueryExpression('TRUE'), retorna 'TRUE'
+    // `on TRUE` (JoinClause.onTrue) has no operator or second operand.
     if (clause['first'] is QueryExpression &&
         (clause['first'] as QueryExpression).getValue() == 'TRUE') {
-      // Ignora operador e segundo operando para ON TRUE
       return "${clause['boolean']} TRUE";
     }
 
@@ -696,17 +607,11 @@ class QueryPostgresGrammar extends QueryGrammar {
     bool isWhereClause = clause['where'] ?? false;
 
     if (isWhereClause) {
-      // Lógica para WHERE IN / NOT IN (placeholders)
       if ((clause['operator'] == 'in' || clause['operator'] == 'not in') &&
           clause['second'] is List) {
-        // O número de placeholders é baseado no número de valores nos bindings.
-        // Precisamos acessar os bindings originais aqui, o que complica.
-        // A abordagem mais simples é deixar o parameterize lidar com listas.
-        // O valor aqui pode ser a lista diretamente, e parameterize tratará.
+        // Only the placeholders are compiled here; the values are bound by
+        // JoinClause.
         second = this.parameterize(clause['second']); // Gera (?, ?, ?)
-        // Nota: Isso assume que compileJoinConstraint não precisa mais dos
-        // valores reais, apenas dos placeholders, e que os valores
-        // estão sendo adicionados aos bindings corretamente em outro lugar.
       } else {
         second = '?'; // Placeholder para where simples
       }
