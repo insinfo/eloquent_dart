@@ -17,3 +17,7 @@ tags:
   # Database-integration tests (require a live PostgreSQL / MySQL). Select with
   # `dart test -t integration` or exclude with `dart test -x integration`.
   integration:
+  # Load tests (HTTP servers on several isolates bombarded by clients). Small
+  # by default; their environment variables make them heavier. Exclude with
+  # `dart test -x stress`.
+  stress:

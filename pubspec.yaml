@@ -24,7 +24,7 @@ dependencies:
   path: ^1.9.1
 
   dargres: ^4.0.1
-  dpgsql: ^1.1.0
+  dpgsql: ^1.1.1
   # postgres v2
   postgres_fork: ^3.0.0
   mysql_dart: ^3.0.3

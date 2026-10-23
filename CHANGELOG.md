@@ -25,7 +25,9 @@ Details and migration notes: [doc/release_notes_4.0.0.md](doc/release_notes_4.0.
   `keyParametersByArgument`, `getFunctionHint`) and the static
   `Container.object` removed.
 - The dargres adapter requires dargres 4.0.1.
-- The dpgsql adapter requires dpgsql 1.1.0 (`DpgsqlCommand.simpleQuery`).
+- The dpgsql adapter requires dpgsql 1.1.1 (`DpgsqlCommand.simpleQuery`; the
+  session settings no longer time out after 100 ms, which failed connections
+  and, on a pool, handed them out without the settings under load).
 - The mysql adapter requires mysql_dart 3.0.3. A DATE/DATETIME that
   `DateTime` cannot represent (the zero date `0000-00-00`, a zero month or
   day, `2024-02-30` under ALLOW_INVALID_DATES) reads as `null`; it came back
@@ -69,7 +71,7 @@ Details and migration notes: [doc/release_notes_4.0.0.md](doc/release_notes_4.0.
   warm, in one row and inside a transaction must give the same Dart type and
   value on the four adapters.
 - `QueryBuilder2` (`db.table2()`): Dart 3 API with fixed-meaning arguments
-  (`where(column, value, {operator})`), `ComparisonOperator`/`SortDirection`
+  (`where(column, value, {operator})`), `CompOperator`/`SortDirection`
   enums, typed group/join builders, `whereSqlOperator` validated per dialect
   and typed results, `paginate`/`simplePaginate` (`PageResult`),
   `OnConflict`, `insertReturning`/`updateReturning`/`deleteReturning`,

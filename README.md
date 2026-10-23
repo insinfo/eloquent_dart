@@ -16,6 +16,10 @@ for now it only works with PostgreSQL and MySQL. PostgreSQL has four driver
 implementations (`postgres`, `postgres_v3`, `dargres`, `dpgsql`) that return
 the same Dart types.
 
+Runnable examples, one per topic (query builders, transactions, both ORM
+styles, migrations, bulk and streaming, PostgreSQL features, MySQL,
+connection options), are in [example/](example/README.md).
+
 ### What's new in 4.0
 
 Details, breaking changes and migration notes:
@@ -43,13 +47,18 @@ Details, breaking changes and migration notes:
   PostgreSQL adapter, [LISTEN/NOTIFY](#postgresql-listen--notify),
   [direct driver access](#direct-driver-access-copy-listennotify-raw-connection).
 - [ORM](#orm-active-record-or-data-mapper-no-code-generation-no-reflection)
-  without code generation (Active Record and Data Mapper),
+  without code generation or reflection: Active Record with plain fields
+  (`toMap()`/`fill()`) or a map of attributes (`AttributeModel`), `fillable`,
+  `hidden`, relations with eager loading, scopes, soft deletes, observers;
+  and Data Mapper,
   [migrations, seeders and CLI](#migrations-seeders-and-cli),
   [Doctrine schema port](#schema-objects-and-platforms-doctrine-dbal-port)
   and `schema:diff`.
 - [Uniform PostgreSQL types](#postgresql-value-types-pg_types-and-driver-options)
   (`pg_types`), `driver_options` and
-  [`datetime_bindings`](#datetime-bindings-datetime_bindings).
+  [`datetime_bindings`](#datetime-bindings-datetime_bindings); MySQL dates
+  that `DateTime` cannot represent (`0000-00-00`) read as `null`
+  ([`zeroDateBehavior`](#mysql-example)).
 
 
 ## Creating a connection executing a simple select
@@ -119,7 +128,7 @@ final usuarios = await db
     .table2('usuarios')
     .select(['id', 'nome'])
     .where('ativo', true)                                  // "ativo" = ?
-    .where('idade', 18, operator: ComparisonOperator.greaterThanOrEqualTo)
+    .where('idade', 18, operator: CompOperator.greaterThanOrEqualTo)
     .whereLessThan('tentativas', 5)                        // descriptive form
     .whereIn('perfil', ['administrador', 'operador'])
     .whereNull('excluido_em')
@@ -1115,6 +1124,15 @@ await drv.withRawConnection((conn) async {
 ```
 ## using connection pool (works for mysql and postgresql)
 
+With `'pool': true` the `Connection` of a `Manager` can be shared by every
+request of a server: concurrent calls take different pooled connections, and
+a transaction keeps its own. Opening a connection per request (a new
+`Manager` and `disconnect()` at the end) costs a connection open, with its
+authentication, on every request: in the load test
+(`test/stress_newsali_style_integration_test.dart`, an HTTP server on several
+isolates) it served about 70 requests/s against 500 to 1200 with a pool of 8,
+and under load it can exceed the server's `max_connections`.
+
 ```dart
     var manager = new Manager();
     manager.addConnection({
@@ -1234,7 +1252,10 @@ manager.addConnection({
 });
 ```
 
-See the release notes for the full type table and the keys of each adapter.
+See the release notes for the full type table and the keys of each adapter
+(MySQL: `autoPreparedStatementCacheCapacity`, `allowPublicKeyRetrieval`,
+`serverPublicKey`, `zeroDateBehavior`, `queueConcurrentCalls`, and the pool
+settings).
 
 ## DateTime bindings (`datetime_bindings`)
 
@@ -1297,6 +1318,9 @@ void main(List<String> args) async {
     'sslmode': 'require',
     // 'pool': true,
     // 'poolsize': 2,
+    // A DATE/DATETIME that DateTime cannot represent (0000-00-00, a zero
+    // month or day, 2024-02-30) reads as null; 'exception' throws instead.
+    // 'driver_options': {'zeroDateBehavior': 'exception'},
   });
 
   manager.setAsGlobal();
@@ -1384,5 +1408,7 @@ void main(List<String> args) async {
     'schema': ['public'],
     // require | disable
     //'sslmode' : 'require',
+    // shown in pg_stat_activity
+    'application_name': 'my_app',
   });
 ```

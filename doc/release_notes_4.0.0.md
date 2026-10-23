@@ -172,7 +172,7 @@ bool get supportsSavepoints;
 
 ### dpgsql
 
-`DpgsqlPDO` requires dpgsql 1.1.0: `execute()`/`unprepared()` set
+`DpgsqlPDO` requires dpgsql 1.1.1 (1.1.0 for this): `execute()`/`unprepared()` set
 `DpgsqlCommand.simpleQuery`, so a script runs through the simple query
 protocol while the other queries keep the extended protocol (binary results,
 auto-prepare). postgres_v3's `execute()` passes `QueryMode.simple` for the
@@ -267,7 +267,7 @@ Design rules:
   as the operator; `where('simbolo', '=')` here is `"simbolo" = ?` with
   binding `'='`. Subqueries, callbacks and `QueryExpression` are rejected
   as values, with a hint to the right method.
-- **Enums.** `ComparisonOperator` (`equalTo`, `notEqualTo`, `greaterThan`,
+- **Enums.** `CompOperator` (`equalTo`, `notEqualTo`, `greaterThan`,
   `greaterThanOrEqualTo`, `lessThan`, `lessThanOrEqualTo`), `SortDirection`
   and `JoinType`, plus the descriptive methods `whereGreaterThan`, ... for
   literal queries. Dynamic operators use the enum.
