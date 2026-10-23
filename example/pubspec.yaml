@@ -1,14 +1,10 @@
 name: example_eloquent
-version: 1.0.0
-description: example of eloquent
+description: Runnable examples of the eloquent package.
 publish_to: none
 
 environment:
-  sdk: '>=3.0.0 <4.0.0'
+  sdk: ^3.6.0
 
 dependencies:
   eloquent:
     path: ../
-
-#dev_dependencies:
- 
