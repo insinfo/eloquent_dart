@@ -12,13 +12,13 @@ part of 'active_record.dart';
 ///     .orderBy('nome')
 ///     .get();
 /// ```
-final class ModelQuery<T extends Model> with WhereConditions<ModelQuery<T>> {
+final class ModelQuery<T extends Model<T>> with WhereConditions<ModelQuery<T>> {
   ModelQuery._(this.connection, this.definition, this._base);
 
   final Connection connection;
   final ModelDefinition<T> definition;
   final QueryBuilder2 _base;
-  final List<Relation<T, Model>> _relations = [];
+  final List<Relation<T, dynamic>> _relations = [];
   final Set<String> _removedScopes = {};
   bool _withoutAllScopes = false;
   _Trashed _trashed = _Trashed.exclude;
@@ -115,7 +115,7 @@ final class ModelQuery<T extends Model> with WhereConditions<ModelQuery<T>> {
 
   /// Loads [relation] for every model returned, in batches (one query per
   /// relation, not one per model).
-  ModelQuery<T> withRelation(Relation<T, Model> relation) {
+  ModelQuery<T> withRelation(Relation<T, dynamic> relation) {
     _relations.add(relation);
     return this;
   }
@@ -270,7 +270,7 @@ final class ModelQuery<T extends Model> with WhereConditions<ModelQuery<T>> {
 enum _Trashed { exclude, include, only }
 
 /// A page of models, from [ModelQuery.paginate].
-final class ModelPage<T extends Model> {
+final class ModelPage<T extends Model<T>> {
   const ModelPage(
       {required this.items,
       required this.total,
@@ -285,9 +285,9 @@ final class ModelPage<T extends Model> {
   int get lastPage => total == 0 ? 1 : (total + perPage - 1) ~/ perPage;
   bool get hasMorePages => currentPage < lastPage;
 
-  /// Laravel's JSON shape, with every model as [Model.toMap].
+  /// Laravel's JSON shape, with every model as [Model.toJson].
   Map<String, dynamic> toMap() => {
-        'data': [for (final model in items) model.toMap()],
+        'data': [for (final model in items) model.toJson()],
         'total': total,
         'per_page': perPage,
         'current_page': currentPage,

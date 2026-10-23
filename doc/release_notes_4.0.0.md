@@ -623,17 +623,79 @@ It also migrates a live schema with `compareSchemas` +
 ## Active Record
 
 `lib/src/orm/active_record.dart` (exported). It has no code generation and
-no reflection: `ModelDefinition(create: User.new)` gives the constructor,
-and the model exposes typed getters and setters over
-`readAttribute<T>`/`writeAttribute`.
+no reflection. A model has plain Dart fields and implements three members,
+which the compiler requires:
 
-- **State.** A model keeps its raw attributes, the values last read or
-  saved, whether it exists, its connection and its loaded relations.
-  `getDirty()` compares them with deep equality. A column that was not
-  selected throws on read, and `save()` updates only dirty columns.
-  `save()` on a new model inserts it; on PostgreSQL it reads the row back
-  with `insert ... returning *`, which brings the key and the defaults.
-  `timestamps: true` fills `created_at`/`updated_at`.
+```dart
+class Post extends Model<Post> {
+  static final definition = ModelDefinition<Post>(
+    table: 'posts',
+    create: Post.new,                 // PHP's `new static`
+    fillable: ['title', 'body'],      // Laravel's $fillable
+    hidden: ['secret'],               // Laravel's $hidden
+    timestamps: true,
+  );
+
+  @override
+  ModelDefinition<Post> get modelDefinition => definition;
+
+  // Optional: the Post::query() shortcut (Dart statics are not inherited).
+  static ModelQuery<Post> query(Connection db) => definition.query(db);
+
+  int? id;
+  String title = '';
+  String? body;
+
+  @override
+  Map<String, dynamic> toMap() => {'id': id, 'title': title, 'body': body};
+
+  @override
+  void fill(Map<String, dynamic> row) {
+    id = row['id'] as int?;
+    title = row['title'] as String;
+    body = row['body'] as String?;
+  }
+}
+```
+
+Why each piece exists:
+
+- **`create: Post.new`.** Laravel's `Post::query()` is `(new static)->
+  newQuery()`: PHP's late static binding creates the class the call was made
+  on, and `newFromBuilder()` fills one per row. Dart has no late static
+  binding and cannot create a `T` from a type parameter, so the definition
+  holds the constructor. The ORM calls it for every row read, for related
+  models and for `make()`.
+- **`static final definition` + `modelDefinition`.** Dart cannot require a
+  static member, but it requires abstract instance members: the getter makes
+  every model point at its definition, and the static field (a convention)
+  creates it once. They need different names: a class cannot have a static
+  and an instance member with the same name, so scopes and the `query`
+  shortcut must not share a field's name either.
+- **`toMap()` / `fill()`.** PHP reads `$post->title` through `__get`; Dart
+  has no such hook without `dynamic`, so the model maps its fields to
+  columns. `fill(toMap())` must leave the model unchanged.
+
+- **State.** Besides the fields, a model keeps the database values last read
+  or written (`getOriginal(column)`, also for columns it does not map,
+  e.g. `selectRaw('count(*) as total')`), `toMap()` as of the last read or
+  save, whether it exists, its connection and its loaded relations.
+  `getDirty()` compares `toMap()` with that snapshot (deep equality), and
+  `save()` writes only the dirty columns. A column that was not selected
+  keeps the field's initial value and is not written (`hasColumn(column)`
+  tells); fields therefore need an initial value or a nullable type.
+  `save()` on a new model inserts the non-null fields, so a null field gets
+  the column default; on PostgreSQL it reads the row back with
+  `insert ... returning *`, which brings the key and the defaults.
+  `timestamps: true` fills `created_at`/`updated_at`. A model built with its
+  constructor (`Post()..title = 'x'`) is saved with `save(using: db)`;
+  `definition.make(db, values)` binds the connection.
+- **Mass assignment and serialization.** `assign(input)` sets only the
+  `fillable` columns (Laravel's `fill()`; it throws when `fillable` is
+  empty). `toJson()` is `toMap()` without the `hidden` columns, plus the
+  pivot values and the loaded relations, with `DateTime` as ISO-8601 text
+  and enums by name, so `jsonEncode(model)` works. `ModelPage.toMap()` uses
+  it.
 - **Queries.** `ModelQuery<T>` mixes in `WhereConditions`, so it has the
   whole `QueryBuilder2` where API, plus `find`, `findMany`, `firstOrFail`,
   `paginate` (`ModelPage`), `count`, `exists`, `lazyById` and bulk
@@ -650,7 +712,10 @@ and the model exposes typed getters and setters over
   fk order by column, pk desc)`, one query per relation, with keys in chunks
   of 5000.
 - **Casts.** `Casts.boolean`, `integer`, `decimal`, `dateTime`, `json` and
-  `enumByName`; `AttributeCast<T>` for others.
+  `enumByName`; `AttributeCast<T>` for others. `fill()` receives the
+  converted values (MySQL `tinyint` as `bool`, PostgreSQL `numeric` text as
+  `double`) and `toMap()`'s values are converted back when written. A cast
+  also accepts a value that is already converted.
 
 Also:
 
@@ -661,7 +726,7 @@ Also:
   write the pivot table and forget the loaded relation on the parent.
 - **Scopes.** `globalScopes: {'name': (w) => ...}` apply to every query,
   relations included, and `withoutGlobalScope(name)`/`withoutGlobalScopes()`
-  remove them. Local scopes are plain functions, applied with
+  remove them. Local scopes are plain static functions, applied with
   `apply(scope)`. When scopes or soft deletes add conditions, a query's own
   conditions are grouped if they contain an `or`.
 - **Soft deletes.** With `softDeletes: true`, `delete()` sets `deleted_at`
@@ -674,7 +739,8 @@ Also:
 - **Observers.** `ModelObserver<T>` has `saving/saved`, `creating/created`,
   `updating/updated`, `deleting/deleted` and `restoring/restored`. Register
   one with `definition.observe(...)` and remove it with `unobserve(...)`.
-  An exception in a callback stops the operation.
+  An exception in a callback stops the operation; a `...ing` callback may
+  change fields before they are written.
 
 Tests: `test/active_record_step4_integration_test.dart` on the five
 drivers.
@@ -687,8 +753,10 @@ Tests: `test/active_record_integration_test.dart` on the four PostgreSQL
 adapters and MariaDB. It covers insert, partial select and save, the two
 "one of many" relations with a price tie, a user with only null prices and a
 user without orders, eager loading with one query per relation, `belongsTo`,
-filters, pagination, delete, refresh and rollback. Also
-`test/active_record_casts_test.dart`.
+filters, pagination, delete, refresh and rollback, `assign` and `fillable`,
+`toJson` and `hidden`, a model built with its constructor, the `query`
+shortcut and `newQuery`, and `getOriginal` for a column the model does not
+map. Also `test/active_record_casts_test.dart`.
 
 ## Lightweight ORM
 

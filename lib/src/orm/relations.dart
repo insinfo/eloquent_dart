@@ -28,7 +28,7 @@ const _pivotPrefix = '__pivot_';
 ///
 /// The related definition is a function so models can refer to each other.
 /// [constraints] filters the candidate rows (e.g. only paid orders).
-abstract class Relation<P extends Model, R extends Model> {
+abstract class Relation<P extends Model<P>, R extends Model<R>> {
   Relation(this.name, this._related, this.constraints);
 
   /// The key of the relation in [Model.toMap] and in error messages.
@@ -41,18 +41,18 @@ abstract class Relation<P extends Model, R extends Model> {
   ModelDefinition<R> get related => _related();
 
   /// Whether the relation was loaded on [parent].
-  bool isLoaded(P parent) => parent._state._relations.containsKey(this);
+  bool isLoaded(P parent) => parent._state.relations.containsKey(this);
 
   Object? _loadedValue(P parent) {
     if (!isLoaded(parent)) {
       throw StateError('Relation "$name" was not loaded on '
           '${parent.modelDefinition.table}: use withRelation(...) or fetch(...).');
     }
-    return parent._state._relations[this];
+    return parent._state.relations[this];
   }
 
   void _store(P parent, Object? value) {
-    parent._state._relations[this] = value;
+    parent._state.relations[this] = value;
   }
 
   ModelQuery<R> _relatedQuery(Connection connection) {
@@ -70,7 +70,7 @@ List<Object> _distinctKeys(Iterable<Model> models, String column) {
   final seen = <String>{};
   final keys = <Object>[];
   for (final model in models) {
-    final value = model._state._raw(column);
+    final value = model._relationKey(column);
     if (value != null && seen.add(_keyOf(value))) keys.add(value);
   }
   return keys;
@@ -94,7 +94,8 @@ Iterable<List<Object>> _chunks(List<Object> keys) sync* {
 ///
 /// Without a choice, when several rows match, the lowest primary key wins;
 /// a real one-to-one relation should have a UNIQUE foreign key.
-final class HasOne<P extends Model, R extends Model> extends Relation<P, R> {
+final class HasOne<P extends Model<P>, R extends Model<R>>
+    extends Relation<P, R> {
   HasOne(String name, ModelDefinition<R> Function() related,
       {required this.foreignKey,
       this.localKey = 'id',
@@ -133,7 +134,7 @@ final class HasOne<P extends Model, R extends Model> extends Relation<P, R> {
   /// The query of [parent]'s related row.
   ModelQuery<R> of(P parent, {Connection? using}) {
     final query = _relatedQuery(using ?? parent.connection);
-    final value = parent._state._raw(localKey);
+    final value = parent._relationKey(localKey);
     if (value == null) {
       query.whereIn(foreignKey, const []);
     } else {
@@ -176,8 +177,7 @@ final class HasOne<P extends Model, R extends Model> extends Relation<P, R> {
             .orderBy(related.primaryKey)
             .get();
         for (final model in models) {
-          found.putIfAbsent(
-              _keyOf(model._state._attributes[foreignKey]), () => model);
+          found.putIfAbsent(_keyOf(model._value(foreignKey)), () => model);
         }
       } else {
         for (final row in await _rankedRows(connection, chunk)) {
@@ -187,7 +187,7 @@ final class HasOne<P extends Model, R extends Model> extends Relation<P, R> {
       }
     }
     for (final parent in parents) {
-      final value = parent._state._raw(localKey);
+      final value = parent._relationKey(localKey);
       _store(parent, value == null ? null : found[_keyOf(value)]);
     }
   }
@@ -230,7 +230,8 @@ final class _OneOfMany {
 }
 
 /// The related models (`orders.user_id = users.id`), by primary key.
-final class HasMany<P extends Model, R extends Model> extends Relation<P, R> {
+final class HasMany<P extends Model<P>, R extends Model<R>>
+    extends Relation<P, R> {
   HasMany(String name, ModelDefinition<R> Function() related,
       {required this.foreignKey,
       this.localKey = 'id',
@@ -242,7 +243,7 @@ final class HasMany<P extends Model, R extends Model> extends Relation<P, R> {
 
   ModelQuery<R> of(P parent, {Connection? using}) {
     final query = _relatedQuery(using ?? parent.connection);
-    final value = parent._state._raw(localKey);
+    final value = parent._relationKey(localKey);
     return value == null
         ? query.whereIn(foreignKey, const [])
         : query.where(foreignKey, value);
@@ -268,12 +269,12 @@ final class HasMany<P extends Model, R extends Model> extends Relation<P, R> {
           .get();
       for (final model in models) {
         found
-            .putIfAbsent(_keyOf(model._state._attributes[foreignKey]), () => [])
+            .putIfAbsent(_keyOf(model._value(foreignKey)), () => [])
             .add(model);
       }
     }
     for (final parent in parents) {
-      final value = parent._state._raw(localKey);
+      final value = parent._relationKey(localKey);
       _store(
           parent,
           List<R>.unmodifiable(
@@ -283,7 +284,8 @@ final class HasMany<P extends Model, R extends Model> extends Relation<P, R> {
 }
 
 /// The owner model (`orders.user_id` -> `users.id`).
-final class BelongsTo<P extends Model, R extends Model> extends Relation<P, R> {
+final class BelongsTo<P extends Model<P>, R extends Model<R>>
+    extends Relation<P, R> {
   BelongsTo(String name, ModelDefinition<R> Function() related,
       {required this.foreignKey,
       this.ownerKey = 'id',
@@ -298,7 +300,7 @@ final class BelongsTo<P extends Model, R extends Model> extends Relation<P, R> {
 
   ModelQuery<R> of(P parent, {Connection? using}) {
     final query = _relatedQuery(using ?? parent.connection);
-    final value = parent._state._raw(foreignKey);
+    final value = parent._relationKey(foreignKey);
     return value == null
         ? query.whereIn(ownerKey, const [])
         : query.where(ownerKey, value);
@@ -319,11 +321,11 @@ final class BelongsTo<P extends Model, R extends Model> extends Relation<P, R> {
       final models =
           await _relatedQuery(connection).whereIn(ownerKey, chunk).get();
       for (final model in models) {
-        found[_keyOf(model._state._attributes[ownerKey])] = model;
+        found[_keyOf(model._value(ownerKey))] = model;
       }
     }
     for (final parent in parents) {
-      final value = parent._state._raw(foreignKey);
+      final value = parent._relationKey(foreignKey);
       _store(parent, value == null ? null : found[_keyOf(value)]);
     }
   }
@@ -344,7 +346,7 @@ final class BelongsTo<P extends Model, R extends Model> extends Relation<P, R> {
 ///
 /// Columns in [constraints] and later conditions should be qualified
 /// (`roles.nome`): the query joins the pivot table.
-final class BelongsToMany<P extends Model, R extends Model>
+final class BelongsToMany<P extends Model<P>, R extends Model<R>>
     extends Relation<P, R> {
   BelongsToMany(String name, ModelDefinition<R> Function() related,
       {required this.pivotTable,
@@ -388,7 +390,7 @@ final class BelongsToMany<P extends Model, R extends Model>
 
   ModelQuery<R> of(P parent, {Connection? using}) {
     final query = _pivotQuery(using ?? parent.connection);
-    final value = parent._state._raw(parentKey);
+    final value = parent._relationKey(parentKey);
     return value == null
         ? query.whereIn('$pivotTable.$foreignPivotKey', const [])
         : query.where('$pivotTable.$foreignPivotKey', value);
@@ -406,7 +408,7 @@ final class BelongsToMany<P extends Model, R extends Model>
 
   /// The pivot values of [model], read through this relation.
   Map<String, Object?> pivot(R model) {
-    final values = model._state._pivot;
+    final values = model._state.pivot;
     if (values == null) {
       throw StateError('$model was not read through "$name".');
     }
@@ -418,7 +420,7 @@ final class BelongsToMany<P extends Model, R extends Model>
       {Map<String, Object?> pivot = const {}, Connection? using}) async {
     final key = _parentKeyOf(parent);
     final ids = related.map(_relatedKeyOf).toList();
-    parent._state._relations.remove(this);
+    parent._state.relations.remove(this);
     if (ids.isEmpty) return 0;
     return QueryBuilder2(using ?? parent.connection, pivotTable).insertMany([
       for (final id in ids)
@@ -431,7 +433,7 @@ final class BelongsToMany<P extends Model, R extends Model>
       {Iterable<Object>? related, Connection? using}) async {
     final query = QueryBuilder2(using ?? parent.connection, pivotTable)
         .where(foreignPivotKey, _parentKeyOf(parent));
-    parent._state._relations.remove(this);
+    parent._state.relations.remove(this);
     if (related != null) {
       final ids = related.map(_relatedKeyOf).toList();
       if (ids.isEmpty) return 0;
@@ -468,18 +470,18 @@ final class BelongsToMany<P extends Model, R extends Model>
     if (attached.isNotEmpty) {
       await attach(parent, attached, pivot: pivot, using: connection);
     }
-    parent._state._relations.remove(this);
+    parent._state.relations.remove(this);
     return (attached: attached, detached: detached);
   }
 
   Object _parentKeyOf(P parent) =>
-      parent._state._raw(parentKey) ??
+      parent._relationKey(parentKey) ??
       (throw StateError('${parent.modelDefinition.table}: "$parentKey" is null '
           '(save the model first).'));
 
   Object _relatedKeyOf(Object value) {
     if (value is Model) {
-      return value._state._raw(relatedKey) ??
+      return value._relationKey(relatedKey) ??
           (throw ArgumentError.value(value, 'related', 'Not saved.'));
     }
     return value;
@@ -496,13 +498,12 @@ final class BelongsToMany<P extends Model, R extends Model>
           .get();
       for (final model in models) {
         found
-            .putIfAbsent(
-                _keyOf(model._state._pivot![foreignPivotKey]), () => [])
+            .putIfAbsent(_keyOf(model._state.pivot![foreignPivotKey]), () => [])
             .add(model);
       }
     }
     for (final parent in parents) {
-      final value = parent._state._raw(parentKey);
+      final value = parent._relationKey(parentKey);
       _store(
           parent,
           List<R>.unmodifiable(

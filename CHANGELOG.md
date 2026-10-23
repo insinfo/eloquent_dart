@@ -108,7 +108,9 @@ Details and migration notes: [doc/release_notes_4.0.0.md](doc/release_notes_4.0.
   `getAlterSchemaSQL()`, `introspectSchema()`, namespaces, MATCH/DEFERRABLE
   foreign keys, UNLOGGED tables.
 - ORM without code generation or reflection, in two styles: Active Record
-  (`Model`, `ModelDefinition`, `ModelQuery`, casts, `save()` of the changed
+  (`Model<T>` with plain fields, `toMap()`/`fill()` and `modelDefinition`;
+  `ModelDefinition` with `fillable` (`assign()`) and `hidden` (`toJson()`),
+  `ModelQuery`, casts, `save()` of the changed
   columns, `HasOne`/`HasMany`/`BelongsTo`/`BelongsToMany`,
   `latestOfMany`/`ofMany`, eager loading in batches, global and local scopes,
   soft deletes, observers) and Data Mapper (`Repository<T>`,

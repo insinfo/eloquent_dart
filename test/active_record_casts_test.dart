@@ -27,6 +27,10 @@ void main() {
     final cast = Casts.enumByName(Situacao.values);
     expect(cast.fromDatabase('arquivada'), Situacao.arquivada);
     expect(cast.toDatabase(Situacao.ativa), 'ativa');
+    // Values from Model.toMap() are already Dart values.
+    expect(cast.fromDatabase(Situacao.ativa), Situacao.ativa);
+    expect(Casts.boolean.fromDatabase(false), isFalse);
+    expect(Casts.decimal.fromDatabase(2.5), 2.5);
     expect(() => cast.fromDatabase('x'), throwsArgumentError);
   });
 }

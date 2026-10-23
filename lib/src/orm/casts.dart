@@ -4,7 +4,9 @@ part of 'active_record.dart';
 abstract class AttributeCast<T> {
   const AttributeCast();
 
-  /// The Dart value of a database value (`null` stays `null`).
+  /// The Dart value of a database value (`null` stays `null`). It also
+  /// receives values that are already Dart values (from [Model.toMap]) and
+  /// returns them unchanged.
   T? fromDatabase(Object? value);
 
   /// The value written to the database.
@@ -117,8 +119,11 @@ final class _EnumCast<E extends Enum> extends AttributeCast<E> {
   final List<E> values;
 
   @override
-  E? fromDatabase(Object? value) =>
-      value == null ? null : values.byName(value.toString());
+  E? fromDatabase(Object? value) => switch (value) {
+        null => null,
+        E e => e,
+        _ => values.byName(value.toString()),
+      };
 
   @override
   Object? toDatabase(Object? value) => value is Enum ? value.name : value;

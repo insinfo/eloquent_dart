@@ -4,20 +4,28 @@
 @Tags(['integration'])
 library;
 
+import 'dart:convert';
+
 import 'package:eloquent/eloquent.dart';
 import 'package:test/test.dart';
 
 enum OrderStatus { pago, pendente }
 
-class User extends Model {
-  User(super.state);
-
+class User extends Model<User> {
   static final definition = ModelDefinition<User>(
     table: 'ar_users',
     create: User.new,
     timestamps: true,
     casts: {'ativo': Casts.boolean},
+    fillable: ['name'],
+    hidden: ['updated_at'],
   );
+
+  @override
+  ModelDefinition<User> get modelDefinition => definition;
+
+  /// The `Post::query()` shortcut.
+  static ModelQuery<User> query(Connection db) => definition.query(db);
 
   /// The last order (highest id).
   static final latestOrder = HasOne<User, Order>(
@@ -38,16 +46,32 @@ class User extends Model {
       'paidOrders', () => Order.definition,
       foreignKey: 'user_id', where: (w) => w.where('status', 'pago'));
 
-  int get id => readAttribute<int>('id');
-  String get name => readAttribute<String>('name');
-  set name(String value) => writeAttribute('name', value);
-  bool get ativo => readAttribute<bool>('ativo');
-  set ativo(bool value) => writeAttribute('ativo', value);
+  int? id;
+  String name = '';
+  bool? ativo;
+  DateTime? createdAt;
+  DateTime? updatedAt;
+
+  @override
+  Map<String, dynamic> toMap() => {
+        'id': id,
+        'name': name,
+        'ativo': ativo,
+        'created_at': createdAt,
+        'updated_at': updatedAt,
+      };
+
+  @override
+  void fill(Map<String, dynamic> row) {
+    id = row['id'] as int?;
+    name = row['name'] as String;
+    ativo = row['ativo'] as bool?;
+    createdAt = row['created_at'] as DateTime?;
+    updatedAt = row['updated_at'] as DateTime?;
+  }
 }
 
-class Order extends Model {
-  Order(super.state);
-
+class Order extends Model<Order> {
   static final definition = ModelDefinition<Order>(
     table: 'ar_orders',
     create: Order.new,
@@ -58,12 +82,28 @@ class Order extends Model {
     },
   );
 
+  @override
+  ModelDefinition<Order> get modelDefinition => definition;
+
   static final user = BelongsTo<Order, User>('user', () => User.definition,
       foreignKey: 'user_id');
 
-  int get id => readAttribute<int>('id');
-  double? get price => readAttribute<double?>('price');
-  OrderStatus get status => readAttribute<OrderStatus>('status');
+  int? id;
+  int? userId;
+  double? price;
+  OrderStatus? status;
+
+  @override
+  Map<String, dynamic> toMap() =>
+      {'id': id, 'user_id': userId, 'price': price, 'status': status};
+
+  @override
+  void fill(Map<String, dynamic> row) {
+    id = row['id'] as int?;
+    userId = row['user_id'] as int?;
+    price = row['price'] as double?;
+    status = row['status'] as OrderStatus?;
+  }
 }
 
 Map<String, dynamic> _config(String driver) => driver == 'mysql'
@@ -146,10 +186,10 @@ void main() {
         if (!mysql) {
           expect(ana.ativo, isTrue, reason: 'column default read back');
         }
-        final found = await User.definition.query(db).findOrFail(ana.id);
+        final found = await User.definition.query(db).findOrFail(ana.id!);
         expect(found.name, 'Ana');
         expect(found.ativo, isTrue);
-        expect(found.readAttribute<DateTime?>('created_at'), isNotNull);
+        expect(found.createdAt, isNotNull);
         expect(await User.definition.query(db).find(99), isNull);
       });
 
@@ -159,13 +199,14 @@ void main() {
             .select(['id', 'name'])
             .where('id', bia.id)
             .first())!;
-        expect(() => partial.ativo, throwsStateError,
-            reason: 'not selected is not null');
+        expect(partial.hasColumn('name'), isTrue);
+        expect(partial.hasColumn('ativo'), isFalse,
+            reason: 'not selected: the field keeps its initial value');
         partial.name = 'Beatriz';
         expect(partial.getDirty().keys, ['name']);
         await partial.save();
 
-        final again = (await User.definition.query(db).find(bia.id))!;
+        final again = (await User.definition.query(db).find(bia.id!))!;
         expect(again.name, 'Beatriz');
         expect(again.ativo, isFalse, reason: 'untouched column kept');
         expect(again.isDirty(), isFalse);
@@ -209,13 +250,14 @@ void main() {
         expect(User.paidOrders.getLoaded(a).map((o) => o.id), [11, 13]);
         expect(User.paidOrders.getLoaded(a).first.status, OrderStatus.pago);
 
-        final map = a.toMap();
-        expect((map['latestOrder'] as Map)['id'], 13);
-        expect((map['orders'] as List), hasLength(3));
+        final json = a.toJson();
+        expect((json['latestOrder'] as Map)['id'], 13);
+        expect((json['orders'] as List), hasLength(3));
+        expect((json['latestOrder'] as Map)['status'], 'pago');
       });
 
       test('a relation that was not loaded throws', () async {
-        final user = (await User.definition.query(db).find(ana.id))!;
+        final user = (await User.definition.query(db).find(ana.id!))!;
         expect(() => User.latestOrder.getLoaded(user), throwsStateError);
         expect(User.latestOrder.isLoaded(user), isFalse);
       });
@@ -238,6 +280,50 @@ void main() {
         expect(page.total, 5);
         expect(page.items.map((o) => o.id), [13, 14]);
         expect((page.toMap()['data'] as List).first['user']['name'], 'Ana');
+      });
+
+      test('assign sets only the fillable columns', () async {
+        final user = User.definition.make(db);
+        user.assign({'name': 'Duda', 'id': 99, 'ativo': false});
+        expect(user.name, 'Duda');
+        expect(user.id, isNull, reason: 'id is not fillable');
+        expect(user.ativo, isNull, reason: 'ativo is not fillable');
+        expect(() => Order.definition.make(db).assign({'price': 1}),
+            throwsStateError,
+            reason: 'no fillable columns declared');
+      });
+
+      test('toJson leaves out the hidden columns and is encodable', () async {
+        final json = ana.toJson();
+        expect(json.containsKey('updated_at'), isFalse);
+        expect(json['created_at'], isA<String>(), reason: 'ISO-8601 text');
+        expect(jsonDecode(jsonEncode(ana))['name'], 'Ana');
+        expect(ana.toMap().containsKey('updated_at'), isTrue,
+            reason: 'toMap keeps every column');
+      });
+
+      test('a model created with its constructor; query shortcuts', () async {
+        final eva = User()..name = 'Eva';
+        expect(() => eva.connection, throwsStateError);
+        await eva.save(using: db);
+        expect(eva.exists, isTrue);
+        expect(eva.id, 4);
+        expect(eva.isDirty(), isFalse);
+        expect(await User.query(db).where('name', 'Eva').count(), 1);
+        expect(await User().newQuery(db).count(), 4);
+      });
+
+      test('getOriginal reads columns the model does not map', () async {
+        final user = (await User.query(db)
+            .configure(
+                (q) => q.select(['ar_users.*']).selectRaw('2 + 3 as extra'))
+            .where('id', ana.id!)
+            .first())!;
+        expect(user.getOriginal('extra'), 5);
+        expect(user.toMap().containsKey('extra'), isFalse);
+        user.name = 'Ana Maria';
+        await user.save(); // writes name only
+        expect((await User.query(db).find(ana.id!))!.name, 'Ana Maria');
       });
 
       test('delete, refresh, transaction', () async {

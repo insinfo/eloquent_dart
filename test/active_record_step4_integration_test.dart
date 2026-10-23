@@ -7,15 +7,16 @@ library;
 import 'package:eloquent/eloquent.dart';
 import 'package:test/test.dart';
 
-class Member extends Model {
-  Member(super.state);
-
+class Member extends Model<Member> {
   static final definition = ModelDefinition<Member>(
     table: 'ar4_members',
     create: Member.new,
     softDeletes: true,
     globalScopes: {'tenant': (w) => w.where('ar4_members.tenant', 1)},
   );
+
+  @override
+  ModelDefinition<Member> get modelDefinition => definition;
 
   static final roles = BelongsToMany<Member, Role>(
       'roles', () => Role.definition,
@@ -30,24 +31,59 @@ class Member extends Model {
   /// Local scope.
   static void named(ModelQuery<Member> q) => q.whereLike('name', 'a%');
 
-  int get id => readAttribute<int>('id');
-  String get name => readAttribute<String>('name');
-  set name(String value) => writeAttribute('name', value);
+  int? id;
+  String name = '';
+  int? tenant;
+  DateTime? deletedAt;
+
+  @override
+  Map<String, dynamic> toMap() =>
+      {'id': id, 'name': name, 'tenant': tenant, 'deleted_at': deletedAt};
+
+  @override
+  void fill(Map<String, dynamic> row) {
+    id = row['id'] as int?;
+    name = row['name'] as String;
+    tenant = row['tenant'] as int?;
+    deletedAt = row['deleted_at'] as DateTime?;
+  }
 }
 
-class Role extends Model {
-  Role(super.state);
+class Role extends Model<Role> {
   static final definition =
       ModelDefinition<Role>(table: 'ar4_roles', create: Role.new);
-  int get id => readAttribute<int>('id');
-  String get name => readAttribute<String>('name');
+
+  @override
+  ModelDefinition<Role> get modelDefinition => definition;
+
+  int? id;
+  String name = '';
+
+  @override
+  Map<String, dynamic> toMap() => {'id': id, 'name': name};
+
+  @override
+  void fill(Map<String, dynamic> row) {
+    id = row['id'] as int?;
+    name = row['name'] as String;
+  }
 }
 
-class Post extends Model {
-  Post(super.state);
+/// Maps only its key: `member_id` and `deleted_at` stay in the row.
+class Post extends Model<Post> {
   static final definition = ModelDefinition<Post>(
       table: 'ar4_posts', create: Post.new, softDeletes: true);
-  int get id => readAttribute<int>('id');
+
+  @override
+  ModelDefinition<Post> get modelDefinition => definition;
+
+  int? id;
+
+  @override
+  Map<String, dynamic> toMap() => {'id': id};
+
+  @override
+  void fill(Map<String, dynamic> row) => id = row['id'] as int?;
 }
 
 class Recorder extends ModelObserver<Member> {
@@ -57,7 +93,7 @@ class Recorder extends ModelObserver<Member> {
   @override
   void creating(Member m) {
     events.add('creating');
-    m.writeAttribute('tenant', 1); // observers may change attributes
+    m.tenant = 1; // observers may change fields
   }
 
   @override
@@ -194,6 +230,8 @@ void main() {
         final bia = (await Member.definition.query(db).find(2))!;
         await bia.delete();
         expect(bia.trashed, isTrue);
+        expect(bia.deletedAt, isNotNull, reason: 'the field follows');
+        expect(bia.isDirty(), isFalse);
         expect(bia.exists, isTrue);
         expect(await Member.definition.query(db).count(), 1);
         expect(await Member.definition.query(db).withTrashed().count(), 2);
@@ -226,7 +264,7 @@ void main() {
         expect(roles.map((r) => r.name), ['admin', 'editor']);
         expect(Member.roles.pivot(roles.first)['level'], 5);
         expect(Member.roles.pivot(roles.first)['member_id'], 1);
-        expect(roles.first.toMap()['pivot'], isA<Map>());
+        expect(roles.first.toJson()['pivot'], isA<Map>());
 
         final members = await Member.definition
             .query(db)
@@ -257,7 +295,7 @@ void main() {
         try {
           final novo = Member.definition.make(db, {'name': 'novo'});
           await novo.save();
-          expect(novo.readAttribute<int>('tenant'), 1);
+          expect(novo.tenant, 1);
           novo.name = 'novo2';
           await novo.save();
           await novo.save(); // nothing changed: saving/saved only

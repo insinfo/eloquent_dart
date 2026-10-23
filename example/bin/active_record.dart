@@ -1,23 +1,33 @@
-// Active Record models: no code generation and no reflection, so it works
-// with AOT and Flutter. Relations, eager loading, casts, scopes, soft deletes
-// and observers.
+// Active Record models: plain Dart fields, no code generation and no
+// reflection, so it works with AOT and Flutter. Each model implements
+// modelDefinition, toMap() and fill(). Relations, eager loading, casts,
+// mass assignment, hidden columns, scopes, soft deletes and observers.
 //
 //   dart run bin/active_record.dart
+import 'dart:convert';
+
 import 'package:eloquent/eloquent.dart';
 import 'package:example_eloquent/config.dart';
 
 enum OrderStatus { paid, pending }
 
-class User extends Model {
-  User(super.state);
-
+class User extends Model<User> {
   static final definition = ModelDefinition<User>(
     table: 'ex_users',
-    create: User.new, // the constructor replaces reflection
+    create: User.new, // the constructor replaces PHP's `new static`
     timestamps: true, // created_at / updated_at
     softDeletes: true, // deleted_at
     casts: {'active': Casts.boolean},
+    fillable: ['name', 'email'], // what assign() may set
+    hidden: ['password'], // left out of toJson()
   );
+
+  @override
+  ModelDefinition<User> get modelDefinition => definition;
+
+  /// Laravel's `User::query()`: Dart statics are not inherited, so each
+  /// model declares it (or uses `User.definition.query(db)`).
+  static ModelQuery<User> query(Connection db) => definition.query(db);
 
   static final orders = HasMany<User, Order>('orders', () => Order.definition,
       foreignKey: 'user_id');
@@ -38,18 +48,44 @@ class User extends Model {
       relatedPivotKey: 'role_id',
       pivotColumns: ['level']);
 
-  /// A local scope.
-  static void active(ModelQuery<User> q) => q.where('active', true);
+  /// A local scope (a static: its name cannot be a field's name).
+  static void onlyActive(ModelQuery<User> q) => q.where('active', true);
 
-  int get id => readAttribute<int>('id');
-  String get name => readAttribute<String>('name');
-  set name(String value) => writeAttribute('name', value);
-  bool get isActive => readAttribute<bool>('active');
+  int? id;
+  String name = '';
+  String? email;
+  String? password;
+  bool? active; // null on insert: the column default (true) is used
+  DateTime? createdAt;
+  DateTime? updatedAt;
+  DateTime? deletedAt;
+
+  @override
+  Map<String, dynamic> toMap() => {
+        'id': id,
+        'name': name,
+        'email': email,
+        'password': password,
+        'active': active,
+        'created_at': createdAt,
+        'updated_at': updatedAt,
+        'deleted_at': deletedAt,
+      };
+
+  @override
+  void fill(Map<String, dynamic> row) {
+    id = row['id'] as int?;
+    name = row['name'] as String;
+    email = row['email'] as String?;
+    password = row['password'] as String?;
+    active = row['active'] as bool?;
+    createdAt = row['created_at'] as DateTime?;
+    updatedAt = row['updated_at'] as DateTime?;
+    deletedAt = row['deleted_at'] as DateTime?;
+  }
 }
 
-class Order extends Model {
-  Order(super.state);
-
+class Order extends Model<Order> {
   static final definition = ModelDefinition<Order>(
     table: 'ex_orders',
     create: Order.new,
@@ -59,29 +95,55 @@ class Order extends Model {
     },
   );
 
+  @override
+  ModelDefinition<Order> get modelDefinition => definition;
+
   static final user = BelongsTo<Order, User>('user', () => User.definition,
       foreignKey: 'user_id');
 
-  double? get price => readAttribute<double?>('price');
-  OrderStatus get status => readAttribute<OrderStatus>('status');
+  int? id;
+  int? userId;
+  double? price;
+  OrderStatus status = OrderStatus.pending;
+
+  @override
+  Map<String, dynamic> toMap() =>
+      {'id': id, 'user_id': userId, 'price': price, 'status': status};
+
+  @override
+  void fill(Map<String, dynamic> row) {
+    id = row['id'] as int?;
+    userId = row['user_id'] as int?;
+    price = row['price'] as double?;
+    status = row['status'] as OrderStatus;
+  }
 }
 
-class Role extends Model {
-  Role(super.state);
-
+class Role extends Model<Role> {
   static final definition =
       ModelDefinition<Role>(table: 'ex_roles', create: Role.new);
 
-  String get name => readAttribute<String>('name');
+  @override
+  ModelDefinition<Role> get modelDefinition => definition;
+
+  int? id;
+  String name = '';
+
+  @override
+  Map<String, dynamic> toMap() => {'id': id, 'name': name};
+
+  @override
+  void fill(Map<String, dynamic> row) {
+    id = row['id'] as int?;
+    name = row['name'] as String;
+  }
 }
 
 /// Receives the model's events; an exception in a `...ing` callback stops
-/// the operation.
+/// the operation, and a callback may change fields before they are written.
 class UserObserver extends ModelObserver<User> {
   @override
-  void creating(User model) {
-    model.name = model.name.trim();
-  }
+  void creating(User model) => model.name = model.name.trim();
 
   @override
   void created(User model) => print('observer: created ${model.name}');
@@ -94,36 +156,46 @@ Future<void> main() async {
 
   User.definition.observe(UserObserver());
 
-  // Create: insert, then id and defaults are read back
-  final ana = User.definition.make(db, {'name': '  Ana '});
-  await ana.save();
-  final bia = User.definition.make(db, {'name': 'Bia', 'active': false});
+  // Create with the constructor; id and column defaults are read back
+  final ana = User()
+    ..name = '  Ana '
+    ..email = 'ana@example.com'
+    ..password = 'secret';
+  await ana.save(using: db);
+  print('ana: id ${ana.id}, active ${ana.active}');
+
+  // Mass assignment from request input: only the fillable columns
+  final bia = User.definition.make(db)
+    ..assign({'name': 'Bia', 'email': 'bia@example.com', 'id': 999});
   await bia.save();
-  print('ana: ${ana.toMap()}');
+  print('bia: id ${bia.id} (the 999 was ignored)');
+
+  // toJson() leaves out the hidden columns; jsonEncode works on a model
+  print('json: ${jsonEncode(ana)}');
 
   for (final (userId, price, status) in [
-    (ana.id, 120.5, 'paid'),
-    (ana.id, 80.0, 'pending'),
-    (bia.id, 300.0, 'paid'),
+    (ana.id, 120.5, OrderStatus.paid),
+    (ana.id, 80.0, OrderStatus.pending),
+    (bia.id, 300.0, OrderStatus.paid),
   ]) {
-    await Order.definition.make(db, {
-      'user_id': userId,
-      'price': price,
-      'status': status,
-    }).save();
+    await (Order()
+          ..userId = userId
+          ..price = price
+          ..status = status)
+        .save(using: db);
   }
 
   // Update: only the changed columns are written
-  final found = await User.definition.query(db).findOrFail(ana.id);
+  final found = await User.query(db).findOrFail(ana.id!);
   found.name = 'Ana Paula';
+  print('dirty: ${found.getDirty().keys}');
   await found.save();
 
   // Relations, one at a time or eager loaded for many models
   final latest = await User.latestOrder.fetch(found);
   print('latest order of ${found.name}: ${latest?.price}');
 
-  final users = await User.definition
-      .query(db)
+  final users = await User.query(db)
       .withRelation(User.orders)
       .withRelation(User.largestOrder)
       .orderBy('id')
@@ -139,33 +211,35 @@ Future<void> main() async {
   print('order 300 belongs to ${(await Order.user.fetch(order!))?.name}');
 
   // Many-to-many with pivot columns
-  await Role.definition.make(db, {'id': 1, 'name': 'admin'}).save();
-  await Role.definition.make(db, {'id': 2, 'name': 'editor'}).save();
+  for (final (id, name) in [(1, 'admin'), (2, 'editor')]) {
+    await (Role()
+          ..id = id
+          ..name = name)
+        .save(using: db);
+  }
   await User.roles.attach(found, [1, 2], pivot: {'level': 5});
   final sync = await User.roles.sync(found, [2]);
   final roles = await User.roles.fetch(found);
   print('sync: $sync, roles: ${roles.map((r) => r.name)}, '
       'level: ${User.roles.pivot(roles.first)['level']}');
 
-  // Scopes, counts and pagination
-  final activeCount =
-      await User.definition.query(db).apply(User.active).count();
-  final page = await User.definition.query(db).orderBy('id').paginate(
-        page: 1,
-        perPage: 10,
-      );
+  // Scopes, counts and pagination (toMap() of a page uses toJson())
+  final activeCount = await User.query(db).apply(User.onlyActive).count();
+  final page = await User.query(db).orderBy('id').paginate(page: 1);
   print('active: $activeCount, page: ${page.toMap()['total']} users');
 
   // Soft delete: hidden from queries until restored
   await bia.delete();
-  print('after delete: ${await User.definition.query(db).count()} users, '
-      '${await User.definition.query(db).onlyTrashed().count()} trashed');
+  final remaining = await User.query(db).count();
+  final trashed = await User.query(db).onlyTrashed().count();
+  print('after delete: $remaining users, $trashed trashed '
+      '(deleted_at ${bia.deletedAt})');
   await bia.restore();
   await bia.forceDelete();
 
   // Inside a transaction, use ctx (or save(using: ctx))
   await db.transaction((ctx) async {
-    await User.definition.make(ctx, {'name': 'Caio'}).save();
+    await (User()..name = 'Caio').save(using: ctx);
   });
 
   await _dropTables(db);
@@ -176,6 +250,7 @@ Future<void> _createTables(Connection db) async {
   await _dropTables(db);
   await db.unprepared('''
     create table ex_users (id serial primary key, name varchar(40),
+      email varchar(80), password varchar(80),
       active boolean default true, created_at timestamp null,
       updated_at timestamp null, deleted_at timestamp null);
     create table ex_orders (id serial primary key, user_id int,

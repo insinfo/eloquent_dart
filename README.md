@@ -592,23 +592,32 @@ page into memory per round-trip.
 Two options, both without `build_runner` or `dart:mirrors`, so they work
 with AOT and Flutter:
 
-- **Active Record** (`User extends Model`): the model has its attributes,
-  `save()`/`delete()` and relations with eager loading.
+- **Active Record** (`User extends Model<User>`): the model has plain Dart
+  fields, `save()`/`delete()` and relations with eager loading.
 - **Data Mapper** (`Repository<T>` + `EntityMapper<T>`, below): plain
   classes and a repository that reads and writes them.
 
 ### Active Record
 
-```dart
-class User extends Model {
-  User(super.state);
+A model implements three members, and the compiler requires them:
+`modelDefinition`, `toMap()` and `fill()`.
 
+```dart
+class User extends Model<User> {
   static final definition = ModelDefinition<User>(
     table: 'users',
     create: User.new,                 // the constructor replaces reflection
     timestamps: true,                 // created_at / updated_at
     casts: {'ativo': Casts.boolean},
+    fillable: ['name', 'email'],      // what assign() may set
+    hidden: ['password'],             // left out of toJson()
   );
+
+  @override
+  ModelDefinition<User> get modelDefinition => definition;
+
+  // Optional: User.query(db), like Laravel's User::query().
+  static ModelQuery<User> query(Connection db) => definition.query(db);
 
   // Relations are declared once; the related definition is a function so
   // models can refer to each other.
@@ -620,38 +629,85 @@ class User extends Model {
   static final orders = HasMany<User, Order>('orders',
       () => Order.definition, foreignKey: 'user_id');
 
-  int get id => readAttribute<int>('id');
-  String get name => readAttribute<String>('name');
-  set name(String value) => writeAttribute('name', value);
+  int? id;
+  String name = '';
+  String? email;
+  String? password;
+  bool? ativo;
+
+  @override
+  Map<String, dynamic> toMap() => {
+        'id': id,
+        'name': name,
+        'email': email,
+        'password': password,
+        'ativo': ativo,
+      };
+
+  @override
+  void fill(Map<String, dynamic> row) {   // the values come through the casts
+    id = row['id'] as int?;
+    name = row['name'] as String;
+    email = row['email'] as String?;
+    password = row['password'] as String?;
+    ativo = row['ativo'] as bool?;
+  }
 }
 
-class Order extends Model {
-  Order(super.state);
+class Order extends Model<Order> {
   static final definition = ModelDefinition<Order>(
       table: 'orders', create: Order.new, casts: {'price': Casts.decimal});
+  @override
+  ModelDefinition<Order> get modelDefinition => definition;
+
   static final user = BelongsTo<Order, User>('user', () => User.definition,
       foreignKey: 'user_id');
-  double? get price => readAttribute<double?>('price');
+
+  int? id;
+  int? userId;
+  double? price;
+
+  @override
+  Map<String, dynamic> toMap() => {'id': id, 'user_id': userId, 'price': price};
+  @override
+  void fill(Map<String, dynamic> row) {
+    id = row['id'] as int?;
+    userId = row['user_id'] as int?;
+    price = row['price'] as double?;
+  }
 }
 
-final user = await User.definition.query(db).findOrFail(10);
+final user = await User.query(db).findOrFail(10);
 user.name = 'Isaque';
 await user.save();                       // update ... set name = ? (only what changed)
 
-final novo = User.definition.make(db, {'name': 'Ana'});
-await novo.save();                       // insert; id and defaults read back
+final ana = User()..name = 'Ana';
+await ana.save(using: db);               // insert; id and defaults read back
+
+final bia = User.definition.make(db)
+  ..assign(request.body);                // only the fillable columns
+await bia.save();
 
 final latest = await User.latestOrder.fetch(user);   // one user
 
-final users = await User.definition.query(db)        // many users:
+final users = await User.query(db)                   // many users:
     .where('ativo', true)                            // QueryBuilder2 where API
     .withRelation(User.latestOrder)                  // one query per relation
     .withRelation(User.largestOrder)
     .withRelation(User.orders)
     .get();
 final Order? o = User.largestOrder.getLoaded(users.first);
-return users.first.toMap();              // attributes + loaded relations
+return users.first.toJson();             // fields without hidden + loaded relations
 ```
+
+Why `create: User.new` and the static `definition`: Laravel's
+`User::query()` is `(new static)->newQuery()`, PHP's late static binding.
+Dart has no late static binding, statics are not inherited and a `T` cannot
+be created from a type parameter, so the definition holds the constructor
+the ORM calls for each row. Dart cannot require a static member, but it
+requires the abstract `modelDefinition` getter. A static and an instance
+member cannot share a name, so give the static field, the `query` shortcut
+and scopes names that are not fields.
 
 | Relation | Picks |
 |---|---|
@@ -669,17 +725,23 @@ PostgreSQL, MySQL 8 or MariaDB 10.2. The keys are sent in chunks of 5000.
 
 Rules:
 
-- A column that was not selected throws when read; it is not `null`.
-  `save()` writes only the changed columns, so a model read with
-  `select([...])` keeps the others.
+- `fill(toMap())` must leave the model unchanged. Fields need an initial
+  value or a nullable type: a column that was not selected keeps it, is not
+  written by `save()` (only changed columns are) and `hasColumn(column)` is
+  false.
+- On insert, null fields are left out, so the columns get their defaults.
+- `getOriginal(column)` reads the database value last read or saved, also
+  for columns the model does not map (`selectRaw('count(*) as total')`).
 - `getLoaded` on a relation that was not loaded throws;
   `isLoaded(model)` checks it.
 - A model keeps the connection it was read with. Inside `transaction` use
-  the `ctx` (`User.definition.query(ctx)`, `make(ctx, ...)`), or
-  `save(using: ctx)`.
+  the `ctx` (`User.query(ctx)`, `make(ctx, ...)`), or `save(using: ctx)`.
 - Casts: `Casts.boolean` (MySQL `tinyint`), `integer`, `decimal`
   (PostgreSQL `numeric` comes as text), `dateTime`, `json`,
-  `enumByName(values)`; implement `AttributeCast` for others.
+  `enumByName(values)`; implement `AttributeCast` for others. `fill()`
+  receives the converted values and `toMap()`'s are converted back.
+- `toJson()` writes `DateTime` as ISO-8601 and enums by name, so
+  `jsonEncode(model)` works.
 - `ModelQuery` also has `find`, `findMany`, `firstOrFail`, `paginate`
   (`ModelPage.toMap()`), `count`, `exists`, `lazyById`, bulk `update`/`delete`,
   and `configure((q) => q.join(...))` for the underlying `QueryBuilder2`.
@@ -687,19 +749,23 @@ Rules:
 Many-to-many, scopes, soft deletes and observers:
 
 ```dart
-class Member extends Model {
-  Member(super.state);
+class Member extends Model<Member> {
   static final definition = ModelDefinition<Member>(
     table: 'members',
     create: Member.new,
     softDeletes: true,                                   // deleted_at
     globalScopes: {'tenant': (w) => w.where('members.tenant', tenantAtual)},
   );
+  @override
+  ModelDefinition<Member> get modelDefinition => definition;
+
   static final roles = BelongsToMany<Member, Role>('roles', () => Role.definition,
       pivotTable: 'member_role', foreignPivotKey: 'member_id',
       relatedPivotKey: 'role_id', pivotColumns: ['level']);
 
-  static void ativos(ModelQuery<Member> q) => q.where('ativo', true); // local scope
+  static void onlyActive(ModelQuery<Member> q) => q.where('ativo', true); // local scope
+
+  // fields, toMap() and fill() as above
 }
 
 await Member.roles.attach(member, [10, 20], pivot: {'level': 5});
@@ -707,7 +773,7 @@ await Member.roles.sync(member, [20, 30]);   // (attached: [30], detached: [10])
 final roles = await Member.roles.fetch(member);
 Member.roles.pivot(roles.first)['level'];
 
-await Member.definition.query(db).apply(Member.ativos).get();
+await Member.definition.query(db).apply(Member.onlyActive).get();
 await Member.definition.query(db).withoutGlobalScope('tenant').count();
 
 await member.delete();        // sets deleted_at; trashed == true
@@ -725,7 +791,7 @@ Member.definition.observe(AuditObserver());  // extends ModelObserver<Member>
   `updating`/`updated` (only when something changed), `saved`,
   `deleting`/`deleted` and `restoring`/`restored`. An exception in a
   `...ing` callback stops the operation; a callback may also change
-  attributes before they are written. Bulk `update`/`delete` on a query do
+  fields before they are written. Bulk `update`/`delete` on a query do
   not notify observers.
 - **`sync`** is not atomic by itself; pass `using: ctx` inside a transaction.
 
