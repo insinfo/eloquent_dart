@@ -1,9 +1,16 @@
-/// Active Record models without code generation or reflection: a model has
-/// plain Dart fields, maps them to columns with [Model.toMap] and
-/// [Model.fill], and points at its [ModelDefinition] (table, constructor,
-/// casts, fillable, hidden); relations are declared once as static fields
-/// ([HasOne], [HasMany], [BelongsTo], [BelongsToMany]) and loaded per model
-/// or in batches.
+/// Active Record models without code generation or reflection, in two
+/// styles that share everything else (queries, relations, scopes, soft
+/// deletes, observers):
+///
+/// - [Model]: plain Dart fields, mapped to columns by [Model.toMap] and
+///   [Model.fill];
+/// - [AttributeModel]: the columns in a map, as Laravel's `$attributes`,
+///   with typed getters and setters over [AttributeModel.getAttribute].
+///
+/// Both point at a [ModelDefinition] (table, constructor, casts, fillable,
+/// hidden); relations are declared once as static fields ([HasOne],
+/// [HasMany], [BelongsTo], [BelongsToMany]) and loaded per model or in
+/// batches.
 ///
 /// The Data Mapper option ([Repository] and [EntityMapper]) stays available
 /// for classes that do not extend [Model].
@@ -61,6 +68,7 @@ final class ModelDefinition<T extends Model<T>> {
     required this.create,
     this.primaryKey = 'id',
     this.incrementing = true,
+    this.insertNulls = false,
     Map<String, AttributeCast<Object?>> casts = const {},
     List<String> fillable = const [],
     List<String> hidden = const [],
@@ -83,6 +91,15 @@ final class ModelDefinition<T extends Model<T>> {
 
   /// Whether the database generates the primary key on insert.
   final bool incrementing;
+
+  /// Whether an insert of a [Model] writes its null fields as NULL. By
+  /// default they are left out, so the columns get their defaults: a field
+  /// cannot tell a null that was set on purpose from its initial value.
+  /// With `true` every field is written and the initial values come from
+  /// the fields (`bool? active = true`). A null primary key is always left
+  /// out. An [AttributeModel] writes the attributes that were set, null
+  /// included, either way.
+  final bool insertNulls;
 
   /// Converters between database values and Dart values, by column: [Model.fill]
   /// receives the converted values and [Model.toMap]'s values are converted
@@ -272,7 +289,8 @@ abstract class Model<T extends Model<T>> {
   /// Inserts the model, or updates its changed columns. Only the changed
   /// columns are written, so a model read with `select([...])` keeps the
   /// columns it did not read. On insert, null fields are left out, so the
-  /// columns get their defaults.
+  /// columns get their defaults (see [ModelDefinition.insertNulls]); on
+  /// update a field set to null writes NULL.
   ///
   /// Observers: `saving`, then `creating`/`created` or `updating`/`updated`
   /// (only when something changed), then `saved`. An exception thrown by an
@@ -286,15 +304,13 @@ abstract class Model<T extends Model<T>> {
 
     if (!exists) {
       await _notify((o) => o.creating(_self));
-      final values = {
-        for (final MapEntry(:key, :value) in _current().entries)
-          if (value != null) key: value,
-      };
-      if (definition.timestamps) {
-        values.putIfAbsent(definition.createdAtColumn, () => now);
-        values.putIfAbsent(definition.updatedAtColumn, () => now);
-      }
+      final values = _insertValues();
       final pk = definition.primaryKey;
+      if (values[pk] == null) values.remove(pk);
+      if (definition.timestamps) {
+        values[definition.createdAtColumn] ??= now;
+        values[definition.updatedAtColumn] ??= now;
+      }
       final query = QueryBuilder2(connection, definition.table);
       Map<String, Object?> written;
       if (connection.getDriverName() == 'pgsql') {
@@ -401,6 +417,15 @@ abstract class Model<T extends Model<T>> {
 
   T get _self => this as T;
 
+  /// The columns an insert writes: the non-null ones, so a null field gets
+  /// the column default, or every one with [ModelDefinition.insertNulls].
+  Map<String, Object?> _insertValues() => modelDefinition.insertNulls
+      ? _current()
+      : {
+          for (final MapEntry(:key, :value) in _current().entries)
+            if (value != null) key: value,
+        };
+
   /// [toMap] as database values.
   Map<String, Object?> _current() => modelDefinition._toDatabase(toMap());
 
@@ -432,7 +457,7 @@ abstract class Model<T extends Model<T>> {
   void _apply(Map<String, Object?> written) {
     _fillMerged(written);
     _state.row.addAll(written);
-    _state.original = _current();
+    _state.original = _snapshot(_current());
   }
 
   /// Writes [values] (plus `updated_at`) right away. Only those columns
@@ -451,7 +476,7 @@ abstract class Model<T extends Model<T>> {
     final current = _current();
     for (final column in changes.keys) {
       if (current.containsKey(column)) {
-        _state.original[column] = current[column];
+        _state.original[column] = _copyValue(current[column]);
       }
     }
   }
@@ -479,6 +504,23 @@ abstract class Model<T extends Model<T>> {
   }
 }
 
+/// A copy of [values] that later changes inside them (`tags.add(...)`) do
+/// not reach, so [Model.getDirty] sees them.
+Map<String, Object?> _snapshot(Map<String, Object?> values) => {
+      for (final MapEntry(:key, :value) in values.entries)
+        key: _copyValue(value),
+    };
+
+Object? _copyValue(Object? value) => switch (value) {
+      Map map => {
+          for (final MapEntry(:key, :value) in map.entries)
+            key: _copyValue(value),
+        },
+      List list => [for (final item in list) _copyValue(item)],
+      Set set => {for (final item in set) _copyValue(item)},
+      _ => value,
+    };
+
 Object? _jsonValue(Object? value) => switch (value) {
       Model model => model.toJson(),
       DateTime date => date.toIso8601String(),
@@ -490,6 +532,79 @@ Object? _jsonValue(Object? value) => switch (value) {
       Iterable items => [for (final item in items) _jsonValue(item)],
       _ => value,
     };
+
+/// A model that keeps its columns in a map, as Laravel's `$attributes`: it
+/// declares typed getters and setters over [getAttribute]/[setAttribute]
+/// instead of fields, and does not implement [toMap]/[fill].
+///
+/// ```dart
+/// class Post extends AttributeModel<Post> {
+///   static final definition = ModelDefinition<Post>(
+///       table: 'posts', create: Post.new, fillable: ['title']);
+///
+///   @override
+///   ModelDefinition<Post> get modelDefinition => definition;
+///
+///   int? get id => getAttribute<int?>('id');
+///   String get title => getAttribute<String>('title');
+///   set title(String value) => setAttribute('title', value);
+/// }
+/// ```
+///
+/// Compared with fields, the map tells a column that was not selected (its
+/// getter throws) from one that is null, and an attribute that was never set
+/// from one set to null: an insert writes every attribute that was set, null
+/// included, and leaves the others to their column defaults.
+abstract class AttributeModel<T extends AttributeModel<T>> extends Model<T> {
+  final Map<String, Object?> _attributes = {};
+
+  /// The value of [column] (converted by its cast), as [V].
+  ///
+  /// A column that was not selected throws [StateError]: it is not the same
+  /// as `null`. On a new model an unset column reads as `null` when [V] is
+  /// nullable.
+  V getAttribute<V>(String column) {
+    if (!_attributes.containsKey(column)) {
+      if (!exists && null is V) return null as V;
+      throw StateError(exists
+          ? '${modelDefinition.table}.$column was not selected.'
+          : '${modelDefinition.table}.$column is not set.');
+    }
+    final value = _attributes[column];
+    if (value is! V) {
+      throw StateError('${modelDefinition.table}.$column is '
+          '${value.runtimeType} ($value), not $V. Add a cast to the '
+          'ModelDefinition (Casts.boolean, Casts.decimal, ...).');
+    }
+    return value;
+  }
+
+  /// Sets [column]; it is saved on the next [save]. Setting `null` writes
+  /// NULL, also on insert.
+  void setAttribute(String column, Object? value) {
+    _attributes[column] = value;
+  }
+
+  /// Whether [column] was read, set or saved.
+  bool hasAttribute(String column) => _attributes.containsKey(column);
+
+  /// The attributes, as Dart values (after the casts).
+  Map<String, Object?> get attributes => Map.unmodifiable(_attributes);
+
+  @override
+  Map<String, dynamic> toMap() => Map.of(_attributes);
+
+  @override
+  void fill(Map<String, dynamic> row) {
+    _attributes
+      ..clear()
+      ..addAll(row);
+  }
+
+  /// Every attribute that was set, null included.
+  @override
+  Map<String, Object?> _insertValues() => _current();
+}
 
 /// Callbacks around saves and deletes of models of [T]. Override the ones
 /// needed; an exception thrown in a `...ing` callback stops the operation,

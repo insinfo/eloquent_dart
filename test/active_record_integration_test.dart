@@ -71,6 +71,29 @@ class User extends Model<User> {
   }
 }
 
+/// `ar_users` with insertNulls: a null field is written as NULL.
+class UserNulls extends Model<UserNulls> {
+  static final definition = ModelDefinition<UserNulls>(
+      table: 'ar_users', create: UserNulls.new, insertNulls: true);
+
+  @override
+  ModelDefinition<UserNulls> get modelDefinition => definition;
+
+  int? id;
+  String name = '';
+  bool? ativo;
+
+  @override
+  Map<String, dynamic> toMap() => {'id': id, 'name': name, 'ativo': ativo};
+
+  @override
+  void fill(Map<String, dynamic> row) {
+    id = row['id'] as int?;
+    name = row['name'] as String;
+    ativo = Casts.boolean.fromDatabase(row['ativo']);
+  }
+}
+
 class Order extends Model<Order> {
   static final definition = ModelDefinition<Order>(
     table: 'ar_orders',
@@ -280,6 +303,28 @@ void main() {
         expect(page.total, 5);
         expect(page.items.map((o) => o.id), [13, 14]);
         expect((page.toMap()['data'] as List).first['user']['name'], 'Ana');
+      });
+
+      test('setting a field to null writes NULL on update', () async {
+        final user = (await User.query(db).find(ana.id!))!;
+        expect(user.ativo, isTrue);
+        user.ativo = null;
+        expect(user.getDirty(), {'ativo': null});
+        await user.save();
+        final again = (await User.query(db).find(ana.id!))!;
+        expect(again.ativo, isNull, reason: 'the column was cleared');
+      });
+
+      test('insertNulls writes a null field as NULL on insert', () async {
+        final zed = UserNulls()..name = 'Zed';
+        await zed.save(using: db);
+        expect(zed.id, 4, reason: 'the null key is left out');
+        final plain = User()..name = 'Yara';
+        await plain.save(using: db);
+        expect((await User.query(db).find(zed.id!))!.ativo, isNull,
+            reason: 'NULL instead of the column default');
+        expect((await User.query(db).find(plain.id!))!.ativo, isTrue,
+            reason: 'without insertNulls the default is used');
       });
 
       test('assign sets only the fillable columns', () async {

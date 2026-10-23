@@ -1,7 +1,8 @@
-// Active Record models: plain Dart fields, no code generation and no
-// reflection, so it works with AOT and Flutter. Each model implements
-// modelDefinition, toMap() and fill(). Relations, eager loading, casts,
-// mass assignment, hidden columns, scopes, soft deletes and observers.
+// Active Record models, no code generation and no reflection, so it works
+// with AOT and Flutter. User and Order have plain Dart fields and implement
+// modelDefinition, toMap() and fill(); Role is an AttributeModel (columns in
+// a map, typed getters/setters). Relations, eager loading, casts, mass
+// assignment, hidden columns, scopes, soft deletes and observers.
 //
 //   dart run bin/active_record.dart
 import 'dart:convert';
@@ -119,24 +120,25 @@ class Order extends Model<Order> {
   }
 }
 
-class Role extends Model<Role> {
+/// The other style: the columns live in a map (Laravel's `$attributes`) and
+/// the model declares typed getters and setters instead of fields and
+/// toMap()/fill().
+class Role extends AttributeModel<Role> {
   static final definition =
       ModelDefinition<Role>(table: 'ex_roles', create: Role.new);
 
   @override
   ModelDefinition<Role> get modelDefinition => definition;
 
-  int? id;
-  String name = '';
+  int? get id => getAttribute<int?>('id');
+  set id(int? value) => setAttribute('id', value);
+  String get name => getAttribute<String>('name');
+  set name(String value) => setAttribute('name', value);
+}
 
-  @override
-  Map<String, dynamic> toMap() => {'id': id, 'name': name};
-
-  @override
-  void fill(Map<String, dynamic> row) {
-    id = row['id'] as int?;
-    name = row['name'] as String;
-  }
+/// Scopes can also be extensions: `User.query(db).withEmail()`.
+extension UserScopes on ModelQuery<User> {
+  ModelQuery<User> withEmail() => whereNotNull('email');
 }
 
 /// Receives the model's events; an exception in a `...ing` callback stops
@@ -225,8 +227,10 @@ Future<void> main() async {
 
   // Scopes, counts and pagination (toMap() of a page uses toJson())
   final activeCount = await User.query(db).apply(User.onlyActive).count();
+  final withEmail = await User.query(db).withEmail().count();
   final page = await User.query(db).orderBy('id').paginate(page: 1);
-  print('active: $activeCount, page: ${page.toMap()['total']} users');
+  print('active: $activeCount, with e-mail: $withEmail, '
+      'page: ${page.toMap()['total']} users');
 
   // Soft delete: hidden from queries until restored
   await bia.delete();

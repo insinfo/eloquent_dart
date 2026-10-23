@@ -685,7 +685,10 @@ Why each piece exists:
   keeps the field's initial value and is not written (`hasColumn(column)`
   tells); fields therefore need an initial value or a nullable type.
   `save()` on a new model inserts the non-null fields, so a null field gets
-  the column default; on PostgreSQL it reads the row back with
+  the column default (a field cannot tell a null set on purpose from its
+  initial value); `ModelDefinition(insertNulls: true)` writes them as NULL
+  instead, and a null primary key is always left out. On update a field set
+  to `null` writes NULL; on PostgreSQL it reads the row back with
   `insert ... returning *`, which brings the key and the defaults.
   `timestamps: true` fills `created_at`/`updated_at`. A model built with its
   constructor (`Post()..title = 'x'`) is saved with `save(using: db)`;
@@ -696,6 +699,17 @@ Why each piece exists:
   pivot values and the loaded relations, with `DateTime` as ISO-8601 text
   and enums by name, so `jsonEncode(model)` works. `ModelPage.toMap()` uses
   it.
+- **`AttributeModel<T>`.** The other style keeps the columns in a map, as
+  Laravel's `$attributes`: the model declares typed getters and setters over
+  `getAttribute<V>(column)`/`setAttribute(column, value)` and does not
+  implement `toMap()`/`fill()` (the base class does). The map tells a column
+  that was not selected (its getter throws `StateError`) from one that is
+  null, and an attribute never set from one set to `null`: an insert writes
+  every attribute that was set, `null` included, and leaves the others to
+  their column defaults. Everything else is shared with `Model`.
+- **Mutable values.** The original values are a deep copy, so a change
+  inside a list or map (`tags.add('x')`) is dirty in both styles; with a
+  shared reference it was not seen.
 - **Queries.** `ModelQuery<T>` mixes in `WhereConditions`, so it has the
   whole `QueryBuilder2` where API, plus `find`, `findMany`, `firstOrFail`,
   `paginate` (`ModelPage`), `count`, `exists`, `lazyById` and bulk
@@ -756,7 +770,11 @@ user without orders, eager loading with one query per relation, `belongsTo`,
 filters, pagination, delete, refresh and rollback, `assign` and `fillable`,
 `toJson` and `hidden`, a model built with its constructor, the `query`
 shortcut and `newQuery`, and `getOriginal` for a column the model does not
-map. Also `test/active_record_casts_test.dart`.
+map. `test/active_record_attribute_model_integration_test.dart` covers
+`AttributeModel` on the five drivers: defaults and explicit `null` on
+insert, a column that was not selected, `assign`, `hidden`, an extension
+scope, an instance relation getter and changes inside mutable values (also
+for a field model). Also `test/active_record_casts_test.dart`.
 
 ## Lightweight ORM
 

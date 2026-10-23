@@ -729,7 +729,10 @@ Rules:
   value or a nullable type: a column that was not selected keeps it, is not
   written by `save()` (only changed columns are) and `hasColumn(column)` is
   false.
-- On insert, null fields are left out, so the columns get their defaults.
+- On insert, null fields are left out, so the columns get their defaults;
+  `ModelDefinition(insertNulls: true)` writes them as NULL (the initial
+  values then come from the fields). On update, a field set to `null`
+  writes NULL.
 - `getOriginal(column)` reads the database value last read or saved, also
   for columns the model does not map (`selectRaw('count(*) as total')`).
 - `getLoaded` on a relation that was not loaded throws;
@@ -745,6 +748,67 @@ Rules:
 - `ModelQuery` also has `find`, `findMany`, `firstOrFail`, `paginate`
   (`ModelPage.toMap()`), `count`, `exists`, `lazyById`, bulk `update`/`delete`,
   and `configure((q) => q.join(...))` for the underlying `QueryBuilder2`.
+
+#### Map-backed models (`AttributeModel`)
+
+The other style keeps the columns in a map, as Laravel's `$attributes`: the
+model declares typed getters and setters and does not implement
+`toMap()`/`fill()`. The rest (definition, queries, relations, scopes, soft
+deletes, observers, `assign`, `toJson`) is the same.
+
+```dart
+class Account extends AttributeModel<Account> {
+  static final definition = ModelDefinition<Account>(
+    table: 'accounts',
+    create: Account.new,
+    casts: {'active': Casts.boolean},
+    fillable: ['name', 'note'],
+    hidden: ['note'],
+  );
+
+  @override
+  ModelDefinition<Account> get modelDefinition => definition;
+
+  static ModelQuery<Account> query(Connection db) => definition.query(db);
+
+  static final entriesRelation = HasMany<Account, Entry>(
+      'entries', () => Entry.definition, foreignKey: 'account_id');
+
+  /// The loaded relation, read from the instance.
+  List<Entry> get entries => entriesRelation.getLoaded(this);
+
+  int? get id => getAttribute<int?>('id');
+  String get name => getAttribute<String>('name');
+  set name(String value) => setAttribute('name', value);
+  bool? get active => getAttribute<bool?>('active');
+  set active(bool? value) => setAttribute('active', value);
+  String? get note => getAttribute<String?>('note');
+  set note(String? value) => setAttribute('note', value);
+}
+
+/// A scope as an extension: Account.query(db).onlyActive().
+extension AccountScopes on ModelQuery<Account> {
+  ModelQuery<Account> onlyActive() => where('active', true);
+}
+
+final accounts = await Account.query(db)
+    .onlyActive()
+    .withRelation(Account.entriesRelation)
+    .get();
+print(accounts.first.entries.length);
+```
+
+| | `Model` (fields) | `AttributeModel` (map) |
+|---|---|---|
+| Per column | a field plus a line in `toMap()` and in `fill()` | a getter (and a setter) |
+| Column not selected | the field keeps its initial value | its getter throws `StateError` |
+| Insert | null fields are left out (column default), or written as NULL with `insertNulls: true` | every attribute set is written, `null` included; unset ones get the default |
+| Update to `null` | writes NULL | writes NULL |
+| Debugger | shows the fields | shows the `attributes` map |
+
+Both styles see changes inside mutable values (`tags.add('x')`): the
+original values are a deep copy. Extension scopes and instance relation
+getters work with either.
 
 Many-to-many, scopes, soft deletes and observers:
 
