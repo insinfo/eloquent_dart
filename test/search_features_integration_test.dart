@@ -479,9 +479,11 @@ void main() {
         expect(pages, [4, 4, 2]);
         final inserted = await db.table2(_other).insertUsing(
             ['ref', 'flag'],
-            db.table2(_table).selectRaw('id + 100').selectRaw('2').where(
-                'id', 1,
-                operator: ComparisonOperator.lessThanOrEqualTo));
+            db
+                .table2(_table)
+                .selectRaw('id + 100')
+                .selectRaw('2')
+                .where('id', 1, operator: CompOperator.lessThanOrEqualTo));
         expect(inserted, 1);
         expect(await db.table2(_other).where('flag', 2).count(), 1);
         if (isPg) {

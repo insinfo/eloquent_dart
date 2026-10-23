@@ -49,7 +49,7 @@ void main() {
     final q = pg('pagos')
         .withExpression('pagos', pg('pedidos').where('pago', true),
             materialized: true)
-        .where('total', 10, operator: ComparisonOperator.greaterThan);
+        .where('total', 10, operator: CompOperator.greaterThan);
     expect(
         q.toSql(),
         'with "pagos" as MATERIALIZED (select * from "pedidos" where "pago" = ?) '

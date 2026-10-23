@@ -30,41 +30,41 @@ mixin WhereConditions<Self> {
 
   /// `column = ?`, or the comparison given by [operator].
   Self where(String column, Object? value,
-          {ComparisonOperator operator = ComparisonOperator.equalTo}) =>
+          {CompOperator operator = CompOperator.equalTo}) =>
       _add(LogicalConnector.and, _comparison(column, value, operator));
 
   /// `or column = ?`, or the comparison given by [operator].
   Self orWhere(String column, Object? value,
-          {ComparisonOperator operator = ComparisonOperator.equalTo}) =>
+          {CompOperator operator = CompOperator.equalTo}) =>
       _add(LogicalConnector.or, _comparison(column, value, operator));
 
   Self whereEqualTo(String column, Object? value) => where(column, value);
   Self orWhereEqualTo(String column, Object? value) => orWhere(column, value);
 
   Self whereNotEqualTo(String column, Object? value) =>
-      where(column, value, operator: ComparisonOperator.notEqualTo);
+      where(column, value, operator: CompOperator.notEqualTo);
   Self orWhereNotEqualTo(String column, Object? value) =>
-      orWhere(column, value, operator: ComparisonOperator.notEqualTo);
+      orWhere(column, value, operator: CompOperator.notEqualTo);
 
   Self whereGreaterThan(String column, Object value) =>
-      where(column, value, operator: ComparisonOperator.greaterThan);
+      where(column, value, operator: CompOperator.greaterThan);
   Self orWhereGreaterThan(String column, Object value) =>
-      orWhere(column, value, operator: ComparisonOperator.greaterThan);
+      orWhere(column, value, operator: CompOperator.greaterThan);
 
   Self whereGreaterThanOrEqualTo(String column, Object value) =>
-      where(column, value, operator: ComparisonOperator.greaterThanOrEqualTo);
+      where(column, value, operator: CompOperator.greaterThanOrEqualTo);
   Self orWhereGreaterThanOrEqualTo(String column, Object value) =>
-      orWhere(column, value, operator: ComparisonOperator.greaterThanOrEqualTo);
+      orWhere(column, value, operator: CompOperator.greaterThanOrEqualTo);
 
   Self whereLessThan(String column, Object value) =>
-      where(column, value, operator: ComparisonOperator.lessThan);
+      where(column, value, operator: CompOperator.lessThan);
   Self orWhereLessThan(String column, Object value) =>
-      orWhere(column, value, operator: ComparisonOperator.lessThan);
+      orWhere(column, value, operator: CompOperator.lessThan);
 
   Self whereLessThanOrEqualTo(String column, Object value) =>
-      where(column, value, operator: ComparisonOperator.lessThanOrEqualTo);
+      where(column, value, operator: CompOperator.lessThanOrEqualTo);
   Self orWhereLessThanOrEqualTo(String column, Object value) =>
-      orWhere(column, value, operator: ComparisonOperator.lessThanOrEqualTo);
+      orWhere(column, value, operator: CompOperator.lessThanOrEqualTo);
 
   /// `column <operator> ?` with a dialect operator as text, e.g.
   /// `whereSqlOperator('nome', 'ilike', 'ana%')` or PostgreSQL `'@>'`. The
@@ -258,40 +258,40 @@ mixin WhereConditions<Self> {
   /// `(c1 = ? or c2 = ? ...)`: some column matches (or the comparison given
   /// by [operator]).
   Self whereAny(List<String> columns, Object? value,
-          {ComparisonOperator operator = ComparisonOperator.equalTo}) =>
+          {CompOperator operator = CompOperator.equalTo}) =>
       _add(LogicalConnector.and,
           _columnsGroup(columns, value, operator, LogicalConnector.or));
   Self orWhereAny(List<String> columns, Object? value,
-          {ComparisonOperator operator = ComparisonOperator.equalTo}) =>
+          {CompOperator operator = CompOperator.equalTo}) =>
       _add(LogicalConnector.or,
           _columnsGroup(columns, value, operator, LogicalConnector.or));
 
   /// `(c1 = ? and c2 = ? ...)`: every column matches.
   Self whereAll(List<String> columns, Object? value,
-          {ComparisonOperator operator = ComparisonOperator.equalTo}) =>
+          {CompOperator operator = CompOperator.equalTo}) =>
       _add(LogicalConnector.and,
           _columnsGroup(columns, value, operator, LogicalConnector.and));
   Self orWhereAll(List<String> columns, Object? value,
-          {ComparisonOperator operator = ComparisonOperator.equalTo}) =>
+          {CompOperator operator = CompOperator.equalTo}) =>
       _add(LogicalConnector.or,
           _columnsGroup(columns, value, operator, LogicalConnector.and));
 
   /// `not (c1 = ? or c2 = ? ...)`: no column matches.
   Self whereNone(List<String> columns, Object? value,
-          {ComparisonOperator operator = ComparisonOperator.equalTo}) =>
+          {CompOperator operator = CompOperator.equalTo}) =>
       _add(
           LogicalConnector.and,
           _columnsGroup(columns, value, operator, LogicalConnector.or,
               negated: true));
   Self orWhereNone(List<String> columns, Object? value,
-          {ComparisonOperator operator = ComparisonOperator.equalTo}) =>
+          {CompOperator operator = CompOperator.equalTo}) =>
       _add(
           LogicalConnector.or,
           _columnsGroup(columns, value, operator, LogicalConnector.or,
               negated: true));
 
   static Predicate _columnsGroup(List<String> columns, Object? value,
-      ComparisonOperator operator, LogicalConnector inner,
+      CompOperator operator, LogicalConnector inner,
       {bool negated = false}) {
     if (columns.isEmpty) {
       throw ArgumentError.value(columns, 'columns', 'Must not be empty.');
@@ -309,53 +309,53 @@ mixin WhereConditions<Self> {
   /// `column::date = ?` (PostgreSQL) / `date(column) = ?` (MySQL); [value] a
   /// DateTime or a `yyyy-MM-dd` string.
   Self whereDate(String column, Object value,
-          {ComparisonOperator operator = ComparisonOperator.equalTo}) =>
+          {CompOperator operator = CompOperator.equalTo}) =>
       _add(LogicalConnector.and,
           _datePart(column, DatePart.date, operator, value));
   Self orWhereDate(String column, Object value,
-          {ComparisonOperator operator = ComparisonOperator.equalTo}) =>
+          {CompOperator operator = CompOperator.equalTo}) =>
       _add(LogicalConnector.or,
           _datePart(column, DatePart.date, operator, value));
 
   /// The time of day of [column]; [value] like `'08:30:00'`.
   Self whereTime(String column, Object value,
-          {ComparisonOperator operator = ComparisonOperator.equalTo}) =>
+          {CompOperator operator = CompOperator.equalTo}) =>
       _add(LogicalConnector.and,
           _datePart(column, DatePart.time, operator, value));
   Self orWhereTime(String column, Object value,
-          {ComparisonOperator operator = ComparisonOperator.equalTo}) =>
+          {CompOperator operator = CompOperator.equalTo}) =>
       _add(LogicalConnector.or,
           _datePart(column, DatePart.time, operator, value));
 
   Self whereDay(String column, int value,
-          {ComparisonOperator operator = ComparisonOperator.equalTo}) =>
+          {CompOperator operator = CompOperator.equalTo}) =>
       _add(LogicalConnector.and,
           _datePart(column, DatePart.day, operator, value));
   Self orWhereDay(String column, int value,
-          {ComparisonOperator operator = ComparisonOperator.equalTo}) =>
+          {CompOperator operator = CompOperator.equalTo}) =>
       _add(LogicalConnector.or,
           _datePart(column, DatePart.day, operator, value));
 
   Self whereMonth(String column, int value,
-          {ComparisonOperator operator = ComparisonOperator.equalTo}) =>
+          {CompOperator operator = CompOperator.equalTo}) =>
       _add(LogicalConnector.and,
           _datePart(column, DatePart.month, operator, value));
   Self orWhereMonth(String column, int value,
-          {ComparisonOperator operator = ComparisonOperator.equalTo}) =>
+          {CompOperator operator = CompOperator.equalTo}) =>
       _add(LogicalConnector.or,
           _datePart(column, DatePart.month, operator, value));
 
   Self whereYear(String column, int value,
-          {ComparisonOperator operator = ComparisonOperator.equalTo}) =>
+          {CompOperator operator = CompOperator.equalTo}) =>
       _add(LogicalConnector.and,
           _datePart(column, DatePart.year, operator, value));
   Self orWhereYear(String column, int value,
-          {ComparisonOperator operator = ComparisonOperator.equalTo}) =>
+          {CompOperator operator = CompOperator.equalTo}) =>
       _add(LogicalConnector.or,
           _datePart(column, DatePart.year, operator, value));
 
-  static Predicate _datePart(String column, DatePart part,
-          ComparisonOperator operator, Object value) =>
+  static Predicate _datePart(
+          String column, DatePart part, CompOperator operator, Object value) =>
       DatePartPredicate(
           _column(column), part, operator, _value(value, 'value'));
 
@@ -376,10 +376,10 @@ mixin WhereConditions<Self> {
   /// `(c1, c2) <operator> (?, ?)`, e.g. keyset pagination on a composite
   /// key: `whereRowValues(['ano', 'numero'], [2024, 150], operator: .greaterThan)`.
   Self whereRowValues(List<String> columns, List<Object?> values,
-          {ComparisonOperator operator = ComparisonOperator.equalTo}) =>
+          {CompOperator operator = CompOperator.equalTo}) =>
       _add(LogicalConnector.and, _rowValues(columns, values, operator));
   Self orWhereRowValues(List<String> columns, List<Object?> values,
-          {ComparisonOperator operator = ComparisonOperator.equalTo}) =>
+          {CompOperator operator = CompOperator.equalTo}) =>
       _add(LogicalConnector.or, _rowValues(columns, values, operator));
 
   /// `column = any(?)`: [values] in one array parameter (PostgreSQL; `in
@@ -445,7 +445,7 @@ mixin WhereConditions<Self> {
   }
 
   static Predicate _rowValues(
-      List<String> columns, List<Object?> values, ComparisonOperator operator) {
+      List<String> columns, List<Object?> values, CompOperator operator) {
     if (columns.isEmpty || columns.length != values.length) {
       throw ArgumentError(
           'whereRowValues needs as many values as columns (${columns.length}).');
@@ -524,11 +524,11 @@ mixin WhereConditions<Self> {
 
   /// The length of the JSON array in [column] compared with [length].
   Self whereJsonLength(String column, int length,
-          {ComparisonOperator operator = ComparisonOperator.equalTo}) =>
+          {CompOperator operator = CompOperator.equalTo}) =>
       _add(LogicalConnector.and,
           JsonLengthPredicate(_column(column), operator, length));
   Self orWhereJsonLength(String column, int length,
-          {ComparisonOperator operator = ComparisonOperator.equalTo}) =>
+          {CompOperator operator = CompOperator.equalTo}) =>
       _add(LogicalConnector.or,
           JsonLengthPredicate(_column(column), operator, length));
 
@@ -558,11 +558,11 @@ mixin WhereConditions<Self> {
 
   /// `first = second` (two columns), or the comparison given by [operator].
   Self whereColumn(String first, String second,
-          {ComparisonOperator operator = ComparisonOperator.equalTo}) =>
+          {CompOperator operator = CompOperator.equalTo}) =>
       _add(LogicalConnector.and,
           ColumnComparisonPredicate(_column(first), operator, _column(second)));
   Self orWhereColumn(String first, String second,
-          {ComparisonOperator operator = ComparisonOperator.equalTo}) =>
+          {CompOperator operator = CompOperator.equalTo}) =>
       _add(LogicalConnector.or,
           ColumnComparisonPredicate(_column(first), operator, _column(second)));
 
@@ -636,13 +636,13 @@ mixin WhereConditions<Self> {
   }
 
   static Predicate _comparison(
-      String column, Object? value, ComparisonOperator operator) {
+      String column, Object? value, CompOperator operator) {
     _column(column);
     if (value == null) {
       switch (operator) {
-        case ComparisonOperator.equalTo:
+        case CompOperator.equalTo:
           return NullPredicate(column, isNull: true);
-        case ComparisonOperator.notEqualTo:
+        case CompOperator.notEqualTo:
           return NullPredicate(column, isNull: false);
         default:
           throw ArgumentError.value(
@@ -707,28 +707,28 @@ final class JoinBuilder {
 
   /// `on first = second` (two columns).
   JoinBuilder on(String first, String second,
-      {ComparisonOperator operator = ComparisonOperator.equalTo}) {
+      {CompOperator operator = CompOperator.equalTo}) {
     _conditions
         .add(_JoinColumns(LogicalConnector.and, first, operator, second));
     return this;
   }
 
   JoinBuilder orOn(String first, String second,
-      {ComparisonOperator operator = ComparisonOperator.equalTo}) {
+      {CompOperator operator = CompOperator.equalTo}) {
     _conditions.add(_JoinColumns(LogicalConnector.or, first, operator, second));
     return this;
   }
 
   /// `and column = ?` (a bound value).
   JoinBuilder where(String column, Object value,
-      {ComparisonOperator operator = ComparisonOperator.equalTo}) {
+      {CompOperator operator = CompOperator.equalTo}) {
     _conditions.add(_JoinValue(LogicalConnector.and, column, operator,
         WhereConditions._value(value, 'value')));
     return this;
   }
 
   JoinBuilder orWhere(String column, Object value,
-      {ComparisonOperator operator = ComparisonOperator.equalTo}) {
+      {CompOperator operator = CompOperator.equalTo}) {
     _conditions.add(_JoinValue(LogicalConnector.or, column, operator,
         WhereConditions._value(value, 'value')));
     return this;
@@ -792,7 +792,7 @@ final class _JoinColumns extends _JoinCondition {
   const _JoinColumns(this.connector, this.first, this.operator, this.second);
   final LogicalConnector connector;
   final String first;
-  final ComparisonOperator operator;
+  final CompOperator operator;
   final String second;
 }
 
@@ -800,7 +800,7 @@ final class _JoinValue extends _JoinCondition {
   const _JoinValue(this.connector, this.column, this.operator, this.value);
   final LogicalConnector connector;
   final String column;
-  final ComparisonOperator operator;
+  final CompOperator operator;
   final Object value;
 }
 
@@ -828,7 +828,7 @@ final class _SimpleJoin extends _Join {
       super.table, this.type, this.first, this.operator, this.second);
   final JoinType type;
   final String first;
-  final ComparisonOperator operator;
+  final CompOperator operator;
   final String second;
 }
 
@@ -849,7 +849,7 @@ final class _SubJoin extends _Join {
   final QueryBuilder2 query;
   final JoinType type;
   final String first;
-  final ComparisonOperator operator;
+  final CompOperator operator;
   final String second;
 }
 
@@ -1187,7 +1187,7 @@ final class QueryBuilder2 with WhereConditions<QueryBuilder2> {
 
   /// `inner join table on first = second`.
   QueryBuilder2 join(String table, String first, String second,
-      {ComparisonOperator operator = ComparisonOperator.equalTo,
+      {CompOperator operator = CompOperator.equalTo,
       JoinType type = JoinType.inner}) {
     _joins.add(_SimpleJoin(
         WhereConditions._column(table),
@@ -1199,11 +1199,11 @@ final class QueryBuilder2 with WhereConditions<QueryBuilder2> {
   }
 
   QueryBuilder2 leftJoin(String table, String first, String second,
-          {ComparisonOperator operator = ComparisonOperator.equalTo}) =>
+          {CompOperator operator = CompOperator.equalTo}) =>
       join(table, first, second, operator: operator, type: JoinType.left);
 
   QueryBuilder2 rightJoin(String table, String first, String second,
-          {ComparisonOperator operator = ComparisonOperator.equalTo}) =>
+          {CompOperator operator = CompOperator.equalTo}) =>
       join(table, first, second, operator: operator, type: JoinType.right);
 
   /// A join with several `on`/`where` conditions.
@@ -1230,7 +1230,7 @@ final class QueryBuilder2 with WhereConditions<QueryBuilder2> {
   /// `join (select ...) as alias on first = second`.
   QueryBuilder2 joinSub(
       QueryBuilder2 subquery, String alias, String first, String second,
-      {ComparisonOperator operator = ComparisonOperator.equalTo,
+      {CompOperator operator = CompOperator.equalTo,
       JoinType type = JoinType.inner}) {
     _joins.add(_SubJoin(
         subquery.clone(),
@@ -1244,7 +1244,7 @@ final class QueryBuilder2 with WhereConditions<QueryBuilder2> {
 
   QueryBuilder2 leftJoinSub(
           QueryBuilder2 subquery, String alias, String first, String second,
-          {ComparisonOperator operator = ComparisonOperator.equalTo}) =>
+          {CompOperator operator = CompOperator.equalTo}) =>
       joinSub(subquery, alias, first, second,
           operator: operator, type: JoinType.left);
 
@@ -1297,7 +1297,7 @@ final class QueryBuilder2 with WhereConditions<QueryBuilder2> {
   /// Aggregates go through [havingRaw]: `havingRaw('sum(total) > ?', [1000])`
   /// (PostgreSQL does not accept select aliases in HAVING).
   QueryBuilder2 having(String column, Object value,
-      {ComparisonOperator operator = ComparisonOperator.equalTo}) {
+      {CompOperator operator = CompOperator.equalTo}) {
     _havings.add(WhereClause(
         LogicalConnector.and,
         ComparisonPredicate(
@@ -1306,7 +1306,7 @@ final class QueryBuilder2 with WhereConditions<QueryBuilder2> {
   }
 
   QueryBuilder2 orHaving(String column, Object value,
-      {ComparisonOperator operator = ComparisonOperator.equalTo}) {
+      {CompOperator operator = CompOperator.equalTo}) {
     _havings.add(WhereClause(
         LogicalConnector.or,
         ComparisonPredicate(

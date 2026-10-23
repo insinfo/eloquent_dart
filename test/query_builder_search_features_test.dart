@@ -261,8 +261,7 @@ void main() {
         'b'
       ], [
         [1, 2]
-      ]).whereRowValues(['a', 'b'], [3, 4],
-          operator: ComparisonOperator.lessThan);
+      ]).whereRowValues(['a', 'b'], [3, 4], operator: CompOperator.lessThan);
       expect(
           q.toSql(),
           'select * from "t" where "x" = ? or ("a", "b") in ((?, ?)) and '
@@ -342,7 +341,7 @@ void main() {
           'select * from "t" where ("a" = ? or "b" = ?)');
       expect(
           pg2().whereAll(['a', 'b'], 1,
-              operator: ComparisonOperator.greaterThan).toSql(),
+              operator: CompOperator.greaterThan).toSql(),
           'select * from "t" where ("a" > ? and "b" > ?)');
       expect(pg2().whereNone(['a', 'b'], 1).toSql(),
           'select * from "t" where not ("a" = ? or "b" = ?)');
@@ -352,7 +351,7 @@ void main() {
       final q = pg2()
           .whereDate('criado', '2026-01-02')
           .whereYear('criado', 2026,
-              operator: ComparisonOperator.greaterThanOrEqualTo)
+              operator: CompOperator.greaterThanOrEqualTo)
           .whereMonth('criado', 1);
       expect(
           q.toSql(),
@@ -365,7 +364,7 @@ void main() {
       final q = pg2()
           .distinctOn(['grupo'])
           .whereJsonContains('dados', {'a': 1})
-          .whereJsonLength('lista', 2, operator: ComparisonOperator.greaterThan)
+          .whereJsonLength('lista', 2, operator: CompOperator.greaterThan)
           .whereArrayContains('tags', ['x'])
           .whereFullText(['titulo'], 'casa', language: 'portuguese')
           .orderBy('grupo');

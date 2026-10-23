@@ -17,7 +17,7 @@ void main() {
       final q = pg()
           .select(['id', 'nome', 'idade'])
           .where('ativo', true)
-          .where('idade', 18, operator: ComparisonOperator.greaterThanOrEqualTo)
+          .where('idade', 18, operator: CompOperator.greaterThanOrEqualTo)
           .whereIn('perfil', ['administrador', 'operador'])
           .whereNull('excluido_em')
           .whereGroup((w) =>
@@ -63,15 +63,11 @@ void main() {
 
     test('null', () {
       expect(pg().where('x', null).toSql(), endsWith('where "x" is null'));
-      expect(
-          pg()
-              .where('x', null, operator: ComparisonOperator.notEqualTo)
-              .toSql(),
+      expect(pg().where('x', null, operator: CompOperator.notEqualTo).toSql(),
           endsWith('where "x" is not null'));
       expect(pg().whereNotEqualTo('x', null).orWhereNull('y').toSql(),
           endsWith('where "x" is not null or "y" is null'));
-      expect(
-          () => pg().where('x', null, operator: ComparisonOperator.greaterThan),
+      expect(() => pg().where('x', null, operator: CompOperator.greaterThan),
           throwsArgumentError);
     });
 
@@ -193,7 +189,7 @@ void main() {
 
       final sub = pg()
           .fromSubquery(pg('vendas').where('ano', 2026), 'v')
-          .where('v.total', 10, operator: ComparisonOperator.greaterThan);
+          .where('v.total', 10, operator: CompOperator.greaterThan);
       expect(sub.toSql(),
           'select * from (select * from "vendas" where "ano" = ?) as "v" where "v"."total" > ?');
       expect(sub.getBindings(), [2026, 10]);
@@ -228,7 +224,7 @@ void main() {
           .groupBy(['vendedor'])
           .havingRaw('sum(total) > ?', [1000])
           .orHavingRaw('count(*) > ?', [10])
-          .having('vendedor', 'teste', operator: ComparisonOperator.notEqualTo)
+          .having('vendedor', 'teste', operator: CompOperator.notEqualTo)
           .orderByDescending('soma')
           .orderBy('vendedor')
           .forPage(3, 20)

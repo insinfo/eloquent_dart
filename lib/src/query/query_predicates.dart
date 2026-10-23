@@ -4,15 +4,26 @@ import 'query_builder2.dart';
 ///
 /// Since Dart 3.10 the enum name can be left out at the call site:
 /// `where('idade', 18, operator: .greaterThanOrEqualTo)`.
-enum ComparisonOperator {
+enum CompOperator {
+  /// =
   equalTo('='),
+
+  /// <>
   notEqualTo('<>'),
+
+  /// >
   greaterThan('>'),
+
+  /// >=
   greaterThanOrEqualTo('>='),
+
+  /// <
   lessThan('<'),
+
+  /// <=
   lessThanOrEqualTo('<=');
 
-  const ComparisonOperator(this.sql);
+  const CompOperator(this.sql);
 
   /// The SQL operator.
   final String sql;
@@ -69,7 +80,7 @@ final class ComparisonPredicate extends Predicate {
   const ComparisonPredicate(this.column, this.operator, this.value);
 
   final String column;
-  final ComparisonOperator operator;
+  final CompOperator operator;
   final Object value;
 }
 
@@ -88,7 +99,7 @@ final class ColumnComparisonPredicate extends Predicate {
   const ColumnComparisonPredicate(this.first, this.operator, this.second);
 
   final String first;
-  final ComparisonOperator operator;
+  final CompOperator operator;
   final String second;
 }
 
@@ -171,7 +182,7 @@ final class DatePartPredicate extends Predicate {
 
   final String column;
   final DatePart part;
-  final ComparisonOperator operator;
+  final CompOperator operator;
   final Object value;
 }
 
@@ -190,7 +201,7 @@ final class RowValuesPredicate extends Predicate {
   const RowValuesPredicate(this.columns, this.operator, this.values);
 
   final List<String> columns;
-  final ComparisonOperator operator;
+  final CompOperator operator;
   final List<Object?> values;
 }
 
@@ -242,7 +253,7 @@ final class JsonLengthPredicate extends Predicate {
   const JsonLengthPredicate(this.column, this.operator, this.length);
 
   final String column;
-  final ComparisonOperator operator;
+  final CompOperator operator;
   final int length;
 }
 

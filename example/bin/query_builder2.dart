@@ -22,7 +22,7 @@ Future<void> main() async {
   final users = await db
       .table2('ex_users')
       .select(['id', 'name', 'age'])
-      .where('age', 18, operator: ComparisonOperator.greaterThanOrEqualTo)
+      .where('age', 18, operator: CompOperator.greaterThanOrEqualTo)
       .whereIn('city', ['Macaé', 'Rio das Ostras'])
       .whereNull('deleted_at')
       .whereGroup((w) => w.where('city', 'Macaé').orWhere('age', 52))
