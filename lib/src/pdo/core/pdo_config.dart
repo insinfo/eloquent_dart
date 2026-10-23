@@ -310,6 +310,10 @@ class DriverOptions {
 
   String? text(String key) => _typed(key, (v) => '$v');
 
+  /// One of [values], given as the value itself or by its name.
+  T? enumeration<T extends Enum>(String key, List<T> values) =>
+      _typed(key, (v) => v is T ? v : values.asNameMap()['$v']);
+
   /// A Duration, or a number of seconds.
   Duration? duration(String key) => _typed(key, (v) {
         if (v is Duration) return v;

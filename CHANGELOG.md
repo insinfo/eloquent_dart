@@ -26,6 +26,11 @@ Details and migration notes: [doc/release_notes_4.0.0.md](doc/release_notes_4.0.
   `Container.object` removed.
 - The dargres adapter requires dargres 4.0.1.
 - The dpgsql adapter requires dpgsql 1.1.0 (`DpgsqlCommand.simpleQuery`).
+- The mysql adapter requires mysql_dart 3.0.3. A DATE/DATETIME that
+  `DateTime` cannot represent (the zero date `0000-00-00`, a zero month or
+  day, `2024-02-30` under ALLOW_INVALID_DATES) reads as `null`; it came back
+  as another day (`0000-00-00` as `-0001-11-30`). `driver_options`
+  `zeroDateBehavior: 'exception'` throws instead.
 - `where(col, op, null)` with an operator other than `=`, `<>` or `!=` throws
   (it silently became `is not null`); `where(col, value)` means `= value`.
 - `value(col)` returns the column value instead of the row; `update()` and
@@ -57,6 +62,9 @@ Details and migration notes: [doc/release_notes_4.0.0.md](doc/release_notes_4.0.
   (`application_name`/`applicationName`, `poolsize`/`poolSize`,
   `allowreconnect`/`allowReconnect`, `is_unix_socket`/`isUnixSocket`), so
   `PDOConfig.fromMap(config.toMap())` round-trips.
+- MySQL `driver_options` `zeroDateBehavior` (`'convertToNull'`, the default,
+  or `'exception'`; also the `ZeroDateBehavior` value) for dates `DateTime`
+  cannot represent.
 - `test/pg_type_parity_integration_test.dart`: ~55 PostgreSQL types read cold,
   warm, in one row and inside a transaction must give the same Dart type and
   value on the four adapters.

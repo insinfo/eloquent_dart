@@ -93,7 +93,7 @@ class MySqlClientPDO extends PDOInterface {
   Future<MySqlClientPDO> connect() async {
     final pool = config.pool == true;
     // driver_options: MySQLConnection.createConnection / MySQLConnectionPool
-    // parameters (durations as Duration or seconds).
+    // parameters (durations as Duration or seconds, enums by name).
     final options = config.driverOptionsFor(
         'mysql_dart',
         pool
@@ -106,13 +106,20 @@ class MySqlClientPDO extends PDOInterface {
                 'maxConnectionAge',
                 'maxSessionUse',
                 'maxErrorCount',
+                'zeroDateBehavior',
               }
             : const {
                 'autoPreparedStatementCacheCapacity',
                 'allowPublicKeyRetrieval',
                 'serverPublicKey',
                 'queueConcurrentCalls',
+                'zeroDateBehavior',
               });
+    // What a DATE/DATETIME that DateTime cannot represent (0000-00-00,
+    // 2024-02-30) reads as: null (default) or an exception.
+    final zeroDateBehavior =
+        options.enumeration('zeroDateBehavior', ZeroDateBehavior.values) ??
+            ZeroDateBehavior.convertToNull;
     if (pool) {
       connection = MySQLConnectionPool(
         host: config.host,
@@ -137,6 +144,7 @@ class MySqlClientPDO extends PDOInterface {
         maxSessionUse:
             options.duration('maxSessionUse') ?? const Duration(hours: 8),
         maxErrorCount: options.integer('maxErrorCount') ?? 64,
+        zeroDateBehavior: zeroDateBehavior,
       );
     } else {
       connection = await MySQLConnection.createConnection(
@@ -153,6 +161,7 @@ class MySqlClientPDO extends PDOInterface {
             options.flag('allowPublicKeyRetrieval') ?? false,
         serverPublicKey: options.text('serverPublicKey'),
         queueConcurrentCalls: options.flag('queueConcurrentCalls') ?? true,
+        zeroDateBehavior: zeroDateBehavior,
       );
     }
     if (connection is MySQLConnection) {

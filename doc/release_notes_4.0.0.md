@@ -107,13 +107,21 @@ manager.addConnection({
 | postgres_v3 | `connectTimeout`, `queryTimeout`, `queryMode` (`'extended'`/`'simple'`), `ignoreSuperfluousParameters`; with pool: `maxConnectionAge`, `maxSessionUse`, `maxQueryCount` |
 | dargres | `connectionTimeout`, `commandTimeout`, `cancelGracePeriod`, `tcpKeepalive`, `statementCacheCapacity`, `queueConcurrentCalls`, `numericAsString`, `sourceAddress` |
 | dpgsql | connection-string keywords (`'Max Auto Prepare'`, `'Statement Timeout'`, `'Decode Json As String'`...) |
-| mysql | `autoPreparedStatementCacheCapacity`, `allowPublicKeyRetrieval`, `serverPublicKey`, `queueConcurrentCalls`; with pool instead of `queueConcurrentCalls`: `timeoutMs`, `idleTestThreshold`, `maxConnectionAge`, `maxSessionUse`, `maxErrorCount` |
+| mysql | `autoPreparedStatementCacheCapacity`, `allowPublicKeyRetrieval`, `serverPublicKey`, `zeroDateBehavior`, `queueConcurrentCalls`; with pool instead of `queueConcurrentCalls`: `timeoutMs`, `idleTestThreshold`, `maxConnectionAge`, `maxSessionUse`, `maxErrorCount` |
 
 The per-query timeout options (`queryTimeoutInSeconds`/`queryTimeout`,
 dargres `commandTimeout`) are also the adapter's default timeout for a query
 called without one. Options the adapter sets to keep the types uniform
 (`numericAsString`, `Decode Numeric As String`, `Decode Extended Types As
 Text`) can be overridden; the types are then the driver's.
+
+MySQL `zeroDateBehavior` decides what a DATE/DATETIME that `DateTime`
+cannot represent reads as: the zero date `0000-00-00` (WordPress drafts,
+`sql_mode` without NO_ZERO_DATE), a zero month or day (`2024-05-00`) or
+`2024-02-30` stored under ALLOW_INVALID_DATES. `'convertToNull'` (the
+default) reads `null`; `'exception'` throws a `MySQLClientException` naming
+the value. Before mysql_dart 3.0.3 they came back as another day
+(`0000-00-00` as `-0001-11-30`).
 
 `PDOConfig.fromMap` reads the snake_case and camelCase spellings of
 `application_name`, `poolsize`, `allowreconnect` and `is_unix_socket`;
