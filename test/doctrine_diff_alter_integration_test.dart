@@ -103,7 +103,7 @@ void main() {
     age.attributes['nullable'] = true;
     bp.change();
 
-    final diff = await grammar.getChangedDiff(bp, sm);
+    final diff = await grammar.getChangedDiff(bp, sm) as TableDiff;
     final List<String> statements = grammar.compileTableDiff(diff, bp);
 
     expect(

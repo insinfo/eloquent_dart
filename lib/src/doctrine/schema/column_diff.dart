@@ -17,34 +17,43 @@ class ColumnDiff {
 
   /// Método auxiliar para popular changedProperties (simplificado).
   void _findChangedProperties() {
-    if (oldColumn.getName() != newColumn.getName())
+    if (oldColumn.getName() != newColumn.getName()) {
       changedProperties.add('name');
+    }
     if (oldColumn.type != newColumn.type) changedProperties.add('type');
     if (oldColumn.length != newColumn.length) changedProperties.add('length');
-    if (oldColumn.precision != newColumn.precision)
+    if (oldColumn.precision != newColumn.precision) {
       changedProperties.add('precision');
+    }
     if (oldColumn.scale != newColumn.scale) changedProperties.add('scale');
-    if (oldColumn.unsigned != newColumn.unsigned)
+    if (oldColumn.unsigned != newColumn.unsigned) {
       changedProperties.add('unsigned');
+    }
     if (oldColumn.fixed != newColumn.fixed) changedProperties.add('fixed');
-    if (oldColumn.notnull != newColumn.notnull)
+    if (oldColumn.notnull != newColumn.notnull) {
       changedProperties.add('notnull');
-    if (oldColumn.defaultValue != newColumn.defaultValue)
+    }
+    if (oldColumn.defaultValue != newColumn.defaultValue) {
       changedProperties.add('default');
-    if (oldColumn.autoIncrement != newColumn.autoIncrement)
+    }
+    if (oldColumn.autoIncrement != newColumn.autoIncrement) {
       changedProperties.add('autoincrement');
-    if (oldColumn.comment != newColumn.comment)
+    }
+    if (oldColumn.comment != newColumn.comment) {
       changedProperties.add('comment');
-    if (oldColumn.collation != newColumn.collation)
+    }
+    if (oldColumn.collation != newColumn.collation) {
       changedProperties.add('collation');
+    }
     // Deep, key-order-independent comparison of platformOptions (a Map),
     // instead of a fragile toString() compare.
     if (!const DeepCollectionEquality()
         .equals(oldColumn.platformOptions, newColumn.platformOptions)) {
       changedProperties.add('platformOptions');
     }
-    if (oldColumn.columnDefinition != newColumn.columnDefinition)
+    if (oldColumn.columnDefinition != newColumn.columnDefinition) {
       changedProperties.add('columnDefinition');
+    }
   }
 
   bool hasChanged(String propertyName) {

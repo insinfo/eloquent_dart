@@ -106,9 +106,37 @@ Details and migration notes: [doc/release_notes_4.0.0.md](doc/release_notes_4.0.
   returns `PDOResults`, uses the keys of every row and inlines
   `QueryExpression` values; `inRandomOrder` takes an integer seed only.
 - `Utils`/`Arr`/`Fluent` follow their PHP namesakes: `explode` with a limit,
-  `array_get` with dot notation, `array_pop`, `array_shift`, `array_rand`,
-  `map_except_sd`, `ltrim`, `substr`, `empty`, `strval`, `endsWith`,
+  `arrayGet` with dot notation, `arrayPop`, `arrayShift`, `arrayRand`,
+  `mapExceptSd`, `ltrim`, `substr`, `empty`, `strval`, `endsWith`,
   `Fluent.isset`, `Str.parseCallback`.
+- `Utils` members renamed to lowerCamelCase (no aliases): `array_map` →
+  `arrayMap`, `array_filter` → `arrayFilter`, `in_array` → `inArray`,
+  `str_replace` → `strReplace`, `array_pluck` → `arrayPluck`,
+  `map_change_key_case_sd` → `mapChangeKeyCaseSd`, `array_get` → `arrayGet`,
+  `data_get` → `dataGet`, `array_accessible` → `arrayAccessible`,
+  `is_object` → `isObject`, `array_collapse` → `arrayCollapse`,
+  `array_shift` → `arrayShift`, `array_exists` → `arrayExists`,
+  `string_contains` → `stringContains`, `array_merge` → `arrayMerge`,
+  `array_merge_ss` → `arrayMergeSs`, `array_merge_ms` → `arrayMergeMs`,
+  `array_merge_sa` → `arrayMergeSa`, `array_flatten` → `arrayFlatten`,
+  `map_merge_sd` → `mapMergeSd`, `map_add_sd` → `mapAddSd`,
+  `map_except_sd` → `mapExceptSd`, `map_unset_deep_sd` → `mapUnsetDeepSd`,
+  `array_unshift` → `arrayUnshift`, `array_rand` → `arrayRand`,
+  `is_array` → `isArray`, `is_map` → `isMap`, `is_bool` → `isBool`,
+  `is_string` → `isString`, `array_is_empty` → `arrayIsEmpty`,
+  `is_null` → `isNull`, `is_null_or_empty` → `isNullOrEmpty`,
+  `map_key_exists` → `mapKeyExists`, `map_first_key` → `mapFirstKey`,
+  `array_end` → `arrayEnd`, `var_dump` → `varDump`,
+  `str_length` → `strLength`, `array_pop` → `arrayPop`,
+  `map_values` → `mapValues`, `int_max` → `intMax`,
+  `array_fill` → `arrayFill`. `Utils.explode` returns `List<String>`.
+- Stricter types: `QueryBuilder.bindings` is `Map<String, List<dynamic>>`;
+  `prepareBindings` returns a `List` and `pretend` a
+  `Future<List<Map<String, dynamic>>>`; `Connection.setPdo`/`setReadPdo`
+  return `Connection`, `getPostProcessor` a `Processor?` and
+  `getDefaultSchemaGrammar` a `SchemaGrammar?`; `DatabaseManager.connectionsProp`
+  holds `Connection`s; some untyped `QueryBuilder` parameters (`boolean`,
+  `not`, `type`, `operator`, `column`) are typed.
 
 ### Added
 
@@ -250,6 +278,21 @@ Details and migration notes: [doc/release_notes_4.0.0.md](doc/release_notes_4.0.
 
 ### Fixed
 
+- A PostgreSQL transaction whose callback caught an SQL error (without a
+  savepoint) reported success on dargres and dpgsql, although the server
+  answered its COMMIT with a ROLLBACK and nothing was saved. It now fails
+  with an error on every PostgreSQL adapter. Requires dargres 4.0.3 and
+  dpgsql 1.1.3.
+- `postgres_v3`: an SQL error inside a nested transaction (savepoint) rolled
+  back the whole transaction, because postgres 3.x `runTx` fails the
+  transaction after any error. The adapter sends BEGIN/COMMIT itself on a
+  reserved connection (from the pool, or the single connection under its
+  lock) and tracks whether the server aborted the transaction, so
+  `ROLLBACK TO SAVEPOINT` recovers as on the other adapters. A COMMIT or
+  ROLLBACK that fails without an answer from the server closes that
+  connection, so it is never reused with the transaction in an unknown
+  state.
+
 - A connection the server closed for being idle was not always seen as lost:
   PostgreSQL 14+ `idle_session_timeout` (SQLSTATE 57P05, "terminating
   connection due to idle-session timeout") made every later query fail on
@@ -365,6 +408,19 @@ Details and migration notes: [doc/release_notes_4.0.0.md](doc/release_notes_4.0.
   PostgreSQL update with joins, leading `AND`/`OR` of raw wheres,
   `whereFlex` with a list, `get()` restores the columns after a failure.
 - Migrator: pretend mode without the `pretend` key threw.
+- `db.raw(value)` with a value that is not a String (`db.raw(1)`) threw a
+  `TypeError` when the query was compiled; it is written with `toString()`.
+- `DSNParser.getDSN()` always threw (the user, password, port and params
+  were used as bool conditions); it builds the URL again.
+- `DSNParser.port` threw for a heroku-style URL, whose port is parsed as an
+  int.
+- `DSNParser`: `user`, `password`, `host`, `driver` and `database` threw
+  when the DSN has no such part (always for `user` and `password` of a PDO
+  DSN); they are nullable now.
+- `DSNParser.params` threw for a PDO DSN (its default `{}` was not a
+  `Map<String, dynamic>`).
+- `DSNParser.options` threw when the DSN has `options=`: it is the String
+  written there, not a Map.
 
 ### Performance
 

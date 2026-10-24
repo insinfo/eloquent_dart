@@ -1,5 +1,6 @@
 /// Provides missing common windows character encoders / decoders / codecs /
 /// encodings / charset converters for Dart.
+library;
 
 export 'character_encodings/windows/windows1250.dart';
 export 'character_encodings/windows/windows1251.dart';

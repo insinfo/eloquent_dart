@@ -14,14 +14,13 @@ class PostgresV2PDO extends PDOInterface {
 
   PDOConfig config;
 
-  /// Creates a PDO instance representing a connection to a database
-  /// Example
+  /// Creates a PDO instance representing a connection to a database.
   ///
-  ///
-  /// Example:  Map<String, dynamic> config = {'host': 'localhost','port':5432,'database':'teste'};
-  /// var pdo = new PDO(PDOConfig.fromMap(config));
+  /// ```dart
+  /// Map<String, dynamic> config = {'host': 'localhost','port':5432,'database':'teste'};
+  /// var pdo = PostgresV2PDO(PDOConfig.fromMap(config));
   /// await pdo.connect();
-  ///
+  /// ```
   PostgresV2PDO(this.config) {
     super.pdoInstance = this;
   }
@@ -113,8 +112,9 @@ class PostgresV2PDO extends PDOInterface {
         settings.idleTestThreshold = idleTestThreshold;
       }
       final maxConnectionAge = options.duration('maxConnectionAge');
-      if (maxConnectionAge != null)
+      if (maxConnectionAge != null) {
         settings.maxConnectionAge = maxConnectionAge;
+      }
       final maxSessionUse = options.duration('maxSessionUse');
       if (maxSessionUse != null) settings.maxSessionUse = maxSessionUse;
       final maxErrorCount = options.integer('maxErrorCount');

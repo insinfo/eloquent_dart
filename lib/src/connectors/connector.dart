@@ -8,7 +8,7 @@ abstract class Connector with DetectsLostConnections {
   Map<dynamic, dynamic> getOptions(Map<dynamic, dynamic> config) {
     var optionsP = config['options'];
     if (optionsP != null) {
-      return {...options, ...optionsP};
+      return {...options, ...optionsP as Map};
     }
     return options;
   }

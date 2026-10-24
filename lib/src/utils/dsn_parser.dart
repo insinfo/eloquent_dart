@@ -36,27 +36,36 @@ class DSNParser {
     'port': null,
     'database': null,
     'charset': null,
-    'params': {}
+    'params': <String, dynamic>{}
   };
 
-  String get password => dsnParts['password'];
-  String get user => dsnParts['user'];
-  String get host => dsnParts['host'];
-  String get driver => dsnParts['driver'];
-  int get port => dsnParts['port'] != null ? int.parse(dsnParts['port']) : 0;
-  String get database => dsnParts['database'];
-  String? get charset => dsnParts['charset'];
+  String? get password => dsnParts['password'] as String?;
+  String? get user => dsnParts['user'] as String?;
+  String? get host => dsnParts['host'] as String?;
+  String? get driver => dsnParts['driver'] as String?;
+
+  /// The port, 0 when there is none: a PDO DSN keeps it as written, a
+  /// heroku URL as an int.
+  int get port {
+    final port = dsnParts['port'];
+    if (port == null) return 0;
+    return port is int ? port : int.parse(port as String);
+  }
+
+  String? get database => dsnParts['database'] as String?;
+  String? get charset => dsnParts['charset'] as String?;
 
   bool get pool => dsnParts['pool'].toString() == 'true';
-  int get poolSize => int.tryParse(dsnParts['poolsize'] ?? '') ?? 1;
+  int get poolSize => int.tryParse(dsnParts['poolsize'] as String? ?? '') ?? 1;
   bool get allowReconnect => dsnParts['allowreconnect'].toString() == 'true';
-  String? get applicationName => dsnParts['application_name'];
-  String? get sslmode => dsnParts['sslmode'];
-  String? get timezone => dsnParts['timezone'];
-  String? get schema => dsnParts['schema'];
+  String? get applicationName => dsnParts['application_name'] as String?;
+  String? get sslmode => dsnParts['sslmode'] as String?;
+  String? get timezone => dsnParts['timezone'] as String?;
+  String? get schema => dsnParts['schema'] as String?;
 
-  Map<String, dynamic>? get options => dsnParts['options'];
-  Map<String, dynamic> get params => dsnParts['params'];
+  /// The `options` value as written in the DSN.
+  String? get options => dsnParts['options'] as String?;
+  Map<String, dynamic> get params => dsnParts['params'] as Map<String, dynamic>;
 
   DSNParser(this.dsn, [this.dsnType = DsnType.pdoPostgreSql]) {
     parse();
@@ -182,24 +191,31 @@ class DSNParser {
     return this;
   }
 
+  /// Returns the parts as a URL: `driver://user:password@host:port/database`
+  /// followed by the query parameters; a part that is null or empty is left
+  /// out with its separator.
   String getDSN() {
-    var dsn = (dsnParts['driver'] ?? '') +
-        '://' +
-        (dsnParts['user']
-            ? ((dsnParts['user'] ?? '') +
-                (dsnParts['password'] ? ':' + dsnParts['password'] : '') +
-                '@')
+    final user = dsnParts['user'];
+    final password = dsnParts['password'];
+    final port = dsnParts['port'];
+    final params = dsnParts['params'];
+    var dsn = '${dsnParts['driver'] ?? ''}://' +
+        (_isGiven(user)
+            ? '$user' + (_isGiven(password) ? ':$password' : '') + '@'
             : '') +
-        (dsnParts['host'] ?? '') +
-        (dsnParts['port'] ? ':' + dsnParts['port'] : '') +
+        '${dsnParts['host'] ?? ''}' +
+        (_isGiven(port) ? ':$port' : '') +
         '/' +
-        (dsnParts['database'] ?? '');
+        '${dsnParts['database'] ?? ''}';
 
-    if (dsnParts['params'] && (dsnParts['params'] as Map).keys.length > 0) {
-      dsn += '?' + toQueryParams(dsnParts['params']);
+    if (params is Map && params.isNotEmpty) {
+      dsn += '?' + toQueryParams(Map<String, dynamic>.from(params));
     }
     return dsn;
   }
+
+  /// Whether the DSN part [value] is given: not null and not empty.
+  static bool _isGiven(dynamic value) => value != null && '$value' != '';
 
   Map<String, dynamic> getDnsParts() {
     return dsnParts;
@@ -215,7 +231,7 @@ class DSNParser {
             .replaceAll('"', '\\"')
             .replaceAll('&', '","')
             .replaceAll('=', '":"') +
-        '"}');
+        '"}') as Map<String, dynamic>;
   }
 
   String toQueryParams(Map<String, dynamic> obj) {
@@ -223,7 +239,7 @@ class DSNParser {
     for (var entry in obj.entries) {
       str.add(Uri.encodeComponent(entry.key) +
           '=' +
-          Uri.encodeComponent(entry.value));
+          Uri.encodeComponent(entry.value as String));
     }
     return str.join('&');
   }

@@ -11,7 +11,7 @@ class DatabaseManager implements ConnectionResolverInterface {
 
   /// The connections made so far, by name (with the `::read` or `::write`
   /// suffix they were asked for).
-  Map<String, dynamic> connectionsProp = {};
+  Map<String, Connection> connectionsProp = {};
 
   /// The connections being made, by name: concurrent first calls share one.
   final Map<String, Future<Connection>> _making = {};
@@ -52,9 +52,9 @@ class DatabaseManager implements ConnectionResolverInterface {
 
   Future<Connection> _makeAndKeep(String name) async {
     final re = this.parseConnectionName(name);
-    final connection = await this.makeConnection(re[0]);
+    final connection = await this.makeConnection(re[0] as String);
 
-    this.setPdoForType(connection, re[1]);
+    this.setPdoForType(connection, re[1] as String?);
 
     this.connectionsProp[name] = this.prepare(connection, name);
     return connection;
@@ -93,7 +93,7 @@ class DatabaseManager implements ConnectionResolverInterface {
     name = name ?? this.getDefaultConnection();
 
     if (Utils.isset(this.connectionsProp[name])) {
-      await this.connectionsProp[name].disconnect();
+      await this.connectionsProp[name]!.disconnect();
     }
   }
 
@@ -134,11 +134,11 @@ class DatabaseManager implements ConnectionResolverInterface {
   /// it.
   Future<Connection> refreshPdoConnections(String name) async {
     final re = this.parseConnectionName(name);
-    final fresh = await this.makeConnection(re[0]);
-    this.setPdoForType(fresh, re[1]);
+    final fresh = await this.makeConnection(re[0] as String);
+    this.setPdoForType(fresh, re[1] as String?);
 
     return this
-        .connectionsProp[name]
+        .connectionsProp[name]!
         .setPdo(fresh.getPdo())
         .setReadPdo(fresh.getReadPdo());
   }
@@ -154,7 +154,7 @@ class DatabaseManager implements ConnectionResolverInterface {
     // been registered specifically for that connection. If it has we will
     // call it and pass it the config allowing it to resolve the connection.
     if (Utils.isset(this.extensions[name])) {
-      return this.extensions[name](config, name);
+      return this.extensions[name](config, name) as Future<Connection>;
     }
 
     var driver = config['driver'];
@@ -163,7 +163,7 @@ class DatabaseManager implements ConnectionResolverInterface {
     // driver and will call it if so, which allows us to have a more generic
     // resolver for the drivers themselves which applies to all connections.
     if (Utils.isset(this.extensions[driver])) {
-      return this.extensions[driver](config, name);
+      return this.extensions[driver](config, name) as Future<Connection>;
     }
 
     return this.factory.make(config, name);
@@ -182,7 +182,7 @@ class DatabaseManager implements ConnectionResolverInterface {
     // name of the connection, which will allow us to reconnect from the
     // connections.
     connection.setReconnector((con) async {
-      await this.reconnect(name ?? con.getName());
+      await this.reconnect(name ?? con.getName() as String?);
     });
 
     return connection;
@@ -214,18 +214,18 @@ class DatabaseManager implements ConnectionResolverInterface {
     // If the configuration doesn't exist, we'll throw an exception and bail.
     var connections = this.app['config']['database.connections'];
 
-    var config = Utils.array_get(connections, name);
+    var config = Utils.arrayGet(connections, name);
 
-    if (Utils.is_null(config)) {
+    if (Utils.isNull(config)) {
       throw ArgumentError.value(name, 'name', 'Database not configured.');
     }
 
-    return config;
+    return config as Map<String, dynamic>;
   }
 
   /// Returns the name of the default connection (`database.default`).
   String getDefaultConnection() {
-    return this.app['config']['database.default'];
+    return this.app['config']['database.default'] as String;
   }
 
   /// Sets the name of the default connection.

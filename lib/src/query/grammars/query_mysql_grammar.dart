@@ -123,8 +123,8 @@ class QueryMySqlGrammar extends QueryGrammar {
   /// Compiles one union with its query parenthesized:
   /// ` union (select ...)` or ` union all (select ...)`.
   String compileUnion(Map union) {
-    var conjunction = union['all'] ? ' union all ' : ' union ';
-    return conjunction + '(' + union['query'].toSql() + ')';
+    var conjunction = union['all'] as bool ? ' union all ' : ' union ';
+    return conjunction + '(' + (union['query'].toSql() as String) + ')';
   }
 
   /// Compiles the expression of a random order: `RAND(seed)`, or `RAND()`
@@ -165,7 +165,7 @@ class QueryMySqlGrammar extends QueryGrammar {
       return sql.toString();
     }
     if (value is! String) {
-      return value ? 'for update' : 'lock in share mode';
+      return value as bool ? 'for update' : 'lock in share mode';
     }
     return value;
   }
@@ -333,7 +333,7 @@ class QueryMySqlGrammar extends QueryGrammar {
   /// Compiles the assignment of a JSON selector [key] (`column->a->b`):
   /// `` `column` = json_set(`column`, "$.a.b", value) ``.
   String compileJsonUpdateColumn(key, JsonExpression value) {
-    List<String> path = key.split('->');
+    List<String> path = (key as String).split('->');
 
     var field = this.wrapValue(path.removeAt(0));
 
@@ -352,14 +352,14 @@ class QueryMySqlGrammar extends QueryGrammar {
   List<dynamic> prepareBindingsForUpdate(
       QueryBuilder query, Map<String, dynamic> values) {
     return [
-      ...query.bindings['expressions'],
-      ...query.bindings['join'],
+      ...query.bindings['expressions']!,
+      ...query.bindings['join']!,
       for (final entry in values.entries)
         if (!(isJsonSelector(entry.key) &&
             JsonExpression.isInlined(entry.value)))
           entry.value,
-      ...query.bindings['where'],
-      ...query.bindings['order'],
+      ...query.bindings['where']!,
+      ...query.bindings['order']!,
     ];
   }
 
@@ -371,10 +371,10 @@ class QueryMySqlGrammar extends QueryGrammar {
   @override
   List<dynamic> prepareBindingsForDelete(QueryBuilder query) {
     return [
-      ...query.bindings['expressions'],
-      ...query.bindings['join'],
-      ...query.bindings['where'],
-      if (query.joinsProp.isEmpty) ...query.bindings['order'],
+      ...query.bindings['expressions']!,
+      ...query.bindings['join']!,
+      ...query.bindings['where']!,
+      if (query.joinsProp.isEmpty) ...query.bindings['order']!,
     ];
   }
 
@@ -382,7 +382,7 @@ class QueryMySqlGrammar extends QueryGrammar {
   /// `insert into table (columns) [with ...] select ...`.
   String compileInsertUsing(QueryBuilder query, columns, String sql) {
     final insert =
-        "insert into ${this.wrapTable(query.fromProp)} (${this.columnize(columns)}) ";
+        "insert into ${this.wrapTable(query.fromProp)} (${this.columnize(columns as List)}) ";
     return insert + this.compileExpressions(query) + ' ' + sql;
   }
 

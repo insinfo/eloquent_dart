@@ -11,14 +11,13 @@ class DargresPDO extends PDOInterface {
 
   PDOConfig config;
 
-  /// Creates a PDO instance representing a connection to a database
-  /// Example
+  /// Creates a PDO instance representing a connection to a database.
   ///
-  ///
-  /// Example:  Map<String, dynamic> config = {'host': 'localhost','port':5432,'database':'teste'};
-  /// var pdo = new PDO(PDOConfig.fromMap(config));
+  /// ```dart
+  /// Map<String, dynamic> config = {'host': 'localhost','port':5432,'database':'teste'};
+  /// var pdo = DargresPDO(PDOConfig.fromMap(config));
   /// await pdo.connect();
-  ///
+  /// ```
   DargresPDO(this.config) {
     super.pdoInstance = this;
   }

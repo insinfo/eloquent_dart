@@ -1,5 +1,11 @@
 # Analysis options for the eloquent package.
-#
+
+include: package:lints/core.yaml
+
+analyzer:
+  language:
+    strict-casts: true
+
 # The public API is exposed through the `lib/eloquent.dart` barrel, which
 # re-exports many internal `src/...` libraries. Internal files that import both
 # the barrel and a sibling `src/...` file therefore trip `unnecessary_import`.

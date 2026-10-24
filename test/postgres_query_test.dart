@@ -33,7 +33,9 @@ void main() {
     //IF EXISTS
     try {
       await db.execute('DROP SCHEMA  myschema CASCADE;');
-    } catch (e) {}
+    } catch (e) {
+      // Ignored: the schema does not exist yet on the first run.
+    }
     // IF NOT EXISTS
     await db.execute('CREATE SCHEMA myschema;');
     await db.execute('SET search_path TO myschema;');
@@ -1308,7 +1310,7 @@ void main() {
             .orderBy('id', 'asc')
             .chunk(3, (chunk, page) async {
           for (var row in chunk) {
-            collectedIds.add(row['id']);
+            collectedIds.add(row['id'] as int);
           }
           return true;
         });
@@ -1354,7 +1356,7 @@ void main() {
             .orderBy('id', 'asc')
             .chunkById(3, (chunk) async {
           for (var row in chunk) {
-            collectedIds.add(row['id']);
+            collectedIds.add(row['id'] as int);
           }
           return true;
         });
@@ -1373,7 +1375,7 @@ void main() {
         List<int> collectedIds = [];
         bool completed = await db.table('temp_each').orderBy('id', 'asc').each(
             (row, index) async {
-          collectedIds.add(row['id']);
+          collectedIds.add(row['id'] as int);
           return true;
         }, 2);
         expect(completed, isTrue);
@@ -1443,9 +1445,10 @@ void main() {
         var query = db.table('people');
         query = query.callMethod("select", [
           ['*']
-        ]);
-        query = query.callMethod("from", ['people']);
-        query = query.callMethod("where", ['name', '=', 'Charlie']);
+        ]) as QueryBuilder;
+        query = query.callMethod("from", ['people']) as QueryBuilder;
+        query =
+            query.callMethod("where", ['name', '=', 'Charlie']) as QueryBuilder;
         var sql = query.toSql().toLowerCase();
         expect(sql, contains("select"));
         expect(sql, contains("from"));

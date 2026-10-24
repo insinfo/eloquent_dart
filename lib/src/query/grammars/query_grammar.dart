@@ -21,43 +21,66 @@ class QueryGrammar extends BaseGrammar {
 
   QueryGrammar() {
     _methodMap = {
-      'compilecolumns': (args) => compileColumns(args[0], args[1]),
-      'compilefrom': (args) => compileFrom(args[0], args[1]),
-      'compilewheres': (args) => compileWheres(args[0]),
-      'compilelimit': (args) => compileLimit(args[0], args[1]),
-      'compileoffset': (args) => compileOffset(args[0], args[1]),
-      'compilegroups': (args) => compileGroups(args[0], args[1]),
-      'compilehaving': (args) => compileHaving(args[0]),
-      'compileorders': (args) => compileOrders(args[0], args[1]),
-      'compileaggregate': (args) => compileAggregate(args[0], args[1]),
-      'compilejoins': (args) => compileJoins(args[0], args[1]),
-      'wherenested': (args) => whereNested(args[0], args[1]),
-      'wheresub': (args) => whereSub(args[0], args[1]),
-      'wherebasic': (args) => whereBasic(args[0], args[1]),
-      'wherebetween': (args) => whereBetween(args[0], args[1]),
-      'whereexists': (args) => whereExists(args[0], args[1]),
-      'wherenotexists': (args) => whereNotExists(args[0], args[1]),
-      'wherein': (args) => whereIn(args[0], args[1]),
-      'wherenotin': (args) => whereNotIn(args[0], args[1]),
-      'whereinsub': (args) => whereInSub(args[0], args[1]),
-      'wherenotinsub': (args) => whereNotInSub(args[0], args[1]),
-      'wherenull': (args) => whereNull(args[0], args[1]),
-      'wherenotnull': (args) => whereNotNull(args[0], args[1]),
-      'wheredate': (args) => whereDate(args[0], args[1]),
-      'wheretime': (args) => whereTime(args[0], args[1]),
-      'whereday': (args) => whereDay(args[0], args[1]),
-      'wheremonth': (args) => whereMonth(args[0], args[1]),
-      'whereyear': (args) => whereYear(args[0], args[1]),
-      'whereraw': (args) => whereRaw(args[0], args[1]),
-      'wherecolumn': (args) => whereColumn(args[0], args[1]),
-      'compilehavings': (args) => compileHavings(args[0], args[1]),
-      'compileunion': (args) => compileUnion(args[0]),
-      'compileunions': (args) => compileUnions(args[0]),
-      'compilelock': (args) => compileLock(args[0], args[1]),
-      'compileexpressions': (args) => compileExpressions(args[0]),
-      'compilerecursionlimit': (args) => compileRecursionLimit(args[0]),
-      'compileinsertUsing': (args) =>
-          compileInsertUsing(args[0], args[1], args[2]),
+      'compilecolumns': (args) =>
+          compileColumns(args[0] as QueryBuilder, args[1]),
+      'compilefrom': (args) => compileFrom(args[0] as QueryBuilder, args[1]),
+      'compilewheres': (args) => compileWheres(args[0] as QueryBuilder),
+      'compilelimit': (args) =>
+          compileLimit(args[0] as QueryBuilder, args[1] as int),
+      'compileoffset': (args) =>
+          compileOffset(args[0] as QueryBuilder, args[1] as int),
+      'compilegroups': (args) =>
+          compileGroups(args[0] as QueryBuilder, args[1]),
+      'compilehaving': (args) => compileHaving(args[0] as Map<String, dynamic>),
+      'compileorders': (args) => compileOrders(
+          args[0] as QueryBuilder, args[1] as List<Map<String, dynamic>>),
+      'compileaggregate': (args) => compileAggregate(
+          args[0] as QueryBuilder, args[1] as Map<String, dynamic>),
+      'compilejoins': (args) =>
+          compileJoins(args[0] as QueryBuilder, args[1] as List<JoinClause>),
+      'wherenested': (args) =>
+          whereNested(args[0] as QueryBuilder, args[1] as Map<String, dynamic>),
+      'wheresub': (args) =>
+          whereSub(args[0] as QueryBuilder, args[1] as Map<String, dynamic>),
+      'wherebasic': (args) =>
+          whereBasic(args[0] as QueryBuilder, args[1] as Map<String, dynamic>),
+      'wherebetween': (args) => whereBetween(
+          args[0] as QueryBuilder, args[1] as Map<String, dynamic>),
+      'whereexists': (args) =>
+          whereExists(args[0] as QueryBuilder, args[1] as Map<String, dynamic>),
+      'wherenotexists': (args) => whereNotExists(
+          args[0] as QueryBuilder, args[1] as Map<String, dynamic>),
+      'wherein': (args) =>
+          whereIn(args[0] as QueryBuilder, args[1] as Map<String, dynamic>),
+      'wherenotin': (args) =>
+          whereNotIn(args[0] as QueryBuilder, args[1] as Map<String, dynamic>),
+      'whereinsub': (args) =>
+          whereInSub(args[0] as QueryBuilder, args[1] as Map<String, dynamic>),
+      'wherenotinsub': (args) => whereNotInSub(
+          args[0] as QueryBuilder, args[1] as Map<String, dynamic>),
+      'wherenull': (args) =>
+          whereNull(args[0] as QueryBuilder, args[1] as Map<String, dynamic>),
+      'wherenotnull': (args) => whereNotNull(
+          args[0] as QueryBuilder, args[1] as Map<String, dynamic>),
+      'wheredate': (args) => whereDate(args[0] as QueryBuilder, args[1]),
+      'wheretime': (args) => whereTime(args[0] as QueryBuilder, args[1]),
+      'whereday': (args) => whereDay(args[0] as QueryBuilder, args[1]),
+      'wheremonth': (args) => whereMonth(args[0] as QueryBuilder, args[1]),
+      'whereyear': (args) => whereYear(args[0] as QueryBuilder, args[1]),
+      'whereraw': (args) => whereRaw(args[0] as QueryBuilder, args[1]),
+      'wherecolumn': (args) =>
+          whereColumn(args[0] as QueryBuilder, args[1] as Map<String, dynamic>),
+      'compilehavings': (args) => compileHavings(
+          args[0] as QueryBuilder, args[1] as List<Map<String, dynamic>>),
+      'compileunion': (args) => compileUnion(args[0] as Map<String, dynamic>),
+      'compileunions': (args) => compileUnions(args[0] as QueryBuilder),
+      'compilelock': (args) => compileLock(args[0] as QueryBuilder, args[1]),
+      'compileexpressions': (args) =>
+          compileExpressions(args[0] as QueryBuilder),
+      'compilerecursionlimit': (args) =>
+          compileRecursionLimit(args[0] as QueryBuilder),
+      'compileinsertUsing': (args) => compileInsertUsing(
+          args[0] as QueryBuilder, args[1], args[2] as String),
     };
   }
 
@@ -145,7 +168,7 @@ class QueryGrammar extends BaseGrammar {
   /// do in `QueryBuilder.insertUsing`.
   String compileInsertUsing(QueryBuilder query, dynamic columns, String sql) {
     final table = this.wrapTable(query.fromProp);
-    final columnsSql = this.columnize(columns);
+    final columnsSql = this.columnize(columns as List);
     return '${this.compileExpressions(query)} '
             'insert into $table ($columnsSql) $sql'
         .trim();
@@ -156,7 +179,7 @@ class QueryGrammar extends BaseGrammar {
     final queryColumns = query.getColumns();
     final original = queryColumns != null ? [...queryColumns] : null;
 
-    if (Utils.is_null(query.columnsProp)) {
+    if (Utils.isNull(query.columnsProp)) {
       query.columnsProp = ['*'];
     }
     final compiledComps = compileComponents(query);
@@ -206,25 +229,25 @@ class QueryGrammar extends BaseGrammar {
       case 'expressions':
         return compileExpressions(query);
       case 'aggregate':
-        return compileAggregate(query, prop);
+        return compileAggregate(query, prop as Map<String, dynamic>);
       case 'columns':
         return compileColumns(query, prop);
       case 'from':
         return compileFrom(query, prop);
       case 'joins':
-        return compileJoins(query, prop);
+        return compileJoins(query, prop as List<JoinClause>);
       case 'wheres':
         return compileWheres(query);
       case 'groups':
         return compileGroups(query, prop);
       case 'havings':
-        return compileHavings(query, prop);
+        return compileHavings(query, prop as List<Map<String, dynamic>>);
       case 'orders':
-        return compileOrders(query, prop);
+        return compileOrders(query, prop as List<Map<String, dynamic>>);
       case 'limit':
-        return compileLimit(query, prop);
+        return compileLimit(query, prop as int);
       case 'offset':
-        return compileOffset(query, prop);
+        return compileOffset(query, prop as int);
       case 'unions':
         return compileUnions(query);
       case 'lock':
@@ -238,7 +261,7 @@ class QueryGrammar extends BaseGrammar {
   ///
   /// A distinct query puts `distinct` before the columns unless they are `*`.
   String compileAggregate(QueryBuilder query, Map<String, dynamic> aggregate) {
-    var column = columnize(aggregate['columns']);
+    var column = columnize(aggregate['columns'] as List);
 
     // `count(distinct col)` aggregates distinct values; `distinct *` is not
     // valid SQL.
@@ -246,7 +269,11 @@ class QueryGrammar extends BaseGrammar {
       column = 'distinct ' + column;
     }
 
-    return 'select ' + aggregate['function'] + '(' + column + ') as aggregate';
+    return 'select ' +
+        (aggregate['function'] as String) +
+        '(' +
+        column +
+        ') as aggregate';
   }
 
   /// Compiles `select [distinct] columns`.
@@ -261,7 +288,7 @@ class QueryGrammar extends BaseGrammar {
 
     var select = query.distinctProp ? 'select distinct ' : 'select ';
 
-    final result = select + this.columnize(columns);
+    final result = select + this.columnize(columns as List);
 
     return result;
   }
@@ -324,7 +351,7 @@ class QueryGrammar extends BaseGrammar {
       return '${clause['boolean']} ${clause['sql']}';
     }
 
-    bool isNested = clause['nested'] ?? false;
+    final isNested = clause['nested'] as bool? ?? false;
     if (isNested) {
       return this.compileNestedJoinConstraint(clause);
     }
@@ -336,8 +363,8 @@ class QueryGrammar extends BaseGrammar {
     }
 
     var first = this.wrap(clause['first']);
-    var second;
-    bool isWhereClause = clause['where'] ?? false;
+    String second;
+    final isWhereClause = clause['where'] as bool? ?? false;
     if (isWhereClause) {
       final operator = clause['operator'];
       final values = clause['second'];
@@ -362,8 +389,8 @@ class QueryGrammar extends BaseGrammar {
 
   /// Compiles a nested group of join conditions: `and (... or ...)`.
   String compileNestedJoinConstraint(Map clause) {
-    final clauses = [];
-    for (var nestedClause in clause['join'].clauses) {
+    final clauses = <String>[];
+    for (var nestedClause in (clause['join'] as JoinClause).clauses) {
       clauses.add(this.compileJoinConstraint(nestedClause));
     }
     clauses[0] = this.removeLeadingBoolean(clauses[0]);
@@ -376,12 +403,12 @@ class QueryGrammar extends BaseGrammar {
   String compileWheres(QueryBuilder query) {
     var sql = <String>[];
 
-    if (Utils.array_is_empty(query.wheresProp)) {
+    if (Utils.arrayIsEmpty(query.wheresProp)) {
       return '';
     }
 
     for (var where in query.wheresProp) {
-      sql.add(where['boolean'] + ' ' + _compileWhere(query, where));
+      sql.add((where['boolean'] as String) + ' ' + _compileWhere(query, where));
     }
 
     // Every clause starts with its boolean; the first one is removed.
@@ -472,27 +499,34 @@ class QueryGrammar extends BaseGrammar {
 
   /// Compiles a nested where group: `(... or ...)`.
   String whereNested(QueryBuilder query, Map<String, dynamic> where) {
-    var nested = where['query'];
+    var nested = where['query'] as QueryBuilder;
     return '(' + Utils.substr(this.compileWheres(nested), 6) + ')';
   }
 
   /// Compiles a comparison with a subquery:
   /// `column <operator> (select ...)`.
   String whereSub(QueryBuilder query, Map<String, dynamic> where) {
-    var select = this.compileSelect(where['query']);
-    return this.wrap(where['column']) + ' ' + where['operator'] + " ($select)";
+    var select = this.compileSelect(where['query'] as QueryBuilder);
+    return this.wrap(where['column']) +
+        ' ' +
+        (where['operator'] as String) +
+        " ($select)";
   }
 
   /// Compiles a basic comparison: `column <operator> ?`.
   String whereBasic(QueryBuilder query, Map<String, dynamic> where) {
     var value = this.parameter(where['value']);
-    return this.wrap(where['column']) + ' ' + where['operator'] + ' ' + value;
+    return this.wrap(where['column']) +
+        ' ' +
+        (where['operator'] as String) +
+        ' ' +
+        value;
   }
 
   /// Compiles `column [not] between ? and ?`; a [QueryExpression] bound is
   /// inlined.
   String whereBetween(QueryBuilder query, Map<String, dynamic> where) {
-    var between = where['not'] ? 'not between' : 'between';
+    var between = where['not'] as bool ? 'not between' : 'between';
     final values = where['values'];
     final low = values is List ? this.parameter(values[0]) : '?';
     final high = values is List ? this.parameter(values[1]) : '?';
@@ -501,12 +535,12 @@ class QueryGrammar extends BaseGrammar {
 
   /// Compiles `exists (select ...)`.
   String whereExists(QueryBuilder query, Map<String, dynamic> where) {
-    return 'exists (' + compileSelect(where['query']) + ')';
+    return 'exists (' + compileSelect(where['query'] as QueryBuilder) + ')';
   }
 
   /// Compiles `not exists (select ...)`.
   String whereNotExists(QueryBuilder query, Map<String, dynamic> where) {
-    return 'not exists (' + compileSelect(where['query']) + ')';
+    return 'not exists (' + compileSelect(where['query'] as QueryBuilder) + ')';
   }
 
   static bool _isEmptyInList(dynamic values) =>
@@ -519,7 +553,7 @@ class QueryGrammar extends BaseGrammar {
       return '0 = 1';
     }
 
-    List<dynamic> values = where['values'];
+    final values = where['values'] as List;
 
     var valuesString = this.parameterize(values);
 
@@ -533,21 +567,21 @@ class QueryGrammar extends BaseGrammar {
       return '1 = 1';
     }
 
-    var values = this.parameterize(where['values']);
+    var values = this.parameterize(where['values'] as List);
 
     return this.wrap(where['column']) + ' not in (' + values + ')';
   }
 
   /// Compiles `column in (select ...)`.
   String whereInSub(QueryBuilder query, Map<String, dynamic> where) {
-    var select = this.compileSelect(where['query']);
+    var select = this.compileSelect(where['query'] as QueryBuilder);
 
     return this.wrap(where['column']) + ' in (' + select + ')';
   }
 
   /// Compiles `column not in (select ...)`.
   String whereNotInSub(QueryBuilder query, Map<String, dynamic> where) {
-    var select = this.compileSelect(where['query']);
+    var select = this.compileSelect(where['query'] as QueryBuilder);
 
     return this.wrap(where['column']) + ' not in (' + select + ')';
   }
@@ -596,14 +630,14 @@ class QueryGrammar extends BaseGrammar {
         '(' +
         this.wrap(where['column']) +
         ') ' +
-        where['operator'] +
+        (where['operator'] as String) +
         ' ' +
         value;
   }
 
   /// Returns the SQL of a raw where clause as given.
   String whereRaw(QueryBuilder query, where) {
-    return where['sql'];
+    return where['sql'] as String;
   }
 
   /// Compiles a comparison of two columns: `first <operator> second`, e.g.
@@ -733,7 +767,7 @@ class QueryGrammar extends BaseGrammar {
 
   /// Compiles `group by columns`.
   String compileGroups(QueryBuilder query, groups) {
-    return 'group by ' + this.columnize(groups);
+    return 'group by ' + this.columnize(groups as List);
   }
 
   /// Compiles the having clauses: `having ...`.
@@ -751,7 +785,7 @@ class QueryGrammar extends BaseGrammar {
   String compileHaving(Map<String, dynamic> having) {
     switch (having['type']) {
       case 'raw':
-        return having['boolean'] + ' ' + having['sql'];
+        return (having['boolean'] + ' ' + having['sql']) as String;
       case 'between':
         final not = having['not'] == true ? 'not ' : '';
         return '${having['boolean']} ${this.wrap(having['column'])} '
@@ -775,13 +809,13 @@ class QueryGrammar extends BaseGrammar {
 
     var parameter = this.parameter(having['value']);
 
-    return having['boolean'] +
+    return (having['boolean'] +
         ' ' +
         column +
         ' ' +
         having['operator'] +
         ' ' +
-        parameter;
+        parameter) as String;
   }
 
   /// Compiles `order by column direction, ...`; raw orders are written as
@@ -794,7 +828,9 @@ class QueryGrammar extends BaseGrammar {
               if (order['sql'] != null) {
                 return order['sql'];
               }
-              return this.wrap(order['column']) + ' ' + order['direction'];
+              return this.wrap(order['column']) +
+                  ' ' +
+                  (order['direction'] as String);
             }).toList());
   }
 
@@ -841,7 +877,7 @@ class QueryGrammar extends BaseGrammar {
   /// Compiles one union: ` union select ...` or ` union all select ...`.
   String compileUnion(Map<String, dynamic> union) {
     var joiner = union['all'] == true ? ' union all ' : ' union ';
-    return joiner + union['query'].toSql();
+    return joiner + (union['query'].toSql() as String);
   }
 
   /// Compiles a query for whether [query] returns any row:
@@ -856,7 +892,7 @@ class QueryGrammar extends BaseGrammar {
   String compileInsert(QueryBuilder query, Map<String, dynamic> values) {
     var table = this.wrapTable(query.fromProp);
 
-    // if (!Utils.is_array(values)) {
+    // if (!Utils.isArray(values)) {
     //   values = [values];
     // }
     var columns = this.columnize(values.keys.toList());
@@ -995,11 +1031,12 @@ class QueryGrammar extends BaseGrammar {
   String compileUpdate(QueryBuilder query, Map<String, dynamic> values) {
     var table = this.wrapTable(query.fromProp);
 
-    dynamic columns = [];
+    final assignments = <String>[];
     for (var entry in values.entries) {
-      columns.add(this.wrap(entry.key) + ' = ' + this.parameter(entry.value));
+      assignments
+          .add(this.wrap(entry.key) + ' = ' + this.parameter(entry.value));
     }
-    columns = Utils.implode(', ', columns);
+    final columns = Utils.implode(', ', assignments);
     // Joins go between the table and `set` (`update t inner join ... set`).
     var joins = '';
     if (query.joinsProp.isNotEmpty) {
@@ -1019,10 +1056,10 @@ class QueryGrammar extends BaseGrammar {
   List<dynamic> prepareBindingsForUpdate(
       QueryBuilder query, Map<String, dynamic> values) {
     return [
-      ...query.bindings['expressions'],
-      ...query.bindings['join'],
+      ...query.bindings['expressions']!,
+      ...query.bindings['join']!,
       ...values.values,
-      ...query.bindings['where'],
+      ...query.bindings['where']!,
     ];
   }
 
@@ -1030,9 +1067,9 @@ class QueryGrammar extends BaseGrammar {
   /// `[with ...] delete from t [where]`.
   List<dynamic> prepareBindingsForDelete(QueryBuilder query) {
     return [
-      ...query.bindings['expressions'],
-      ...query.bindings['join'],
-      ...query.bindings['where'],
+      ...query.bindings['expressions']!,
+      ...query.bindings['join']!,
+      ...query.bindings['where']!,
     ];
   }
 
@@ -1040,21 +1077,21 @@ class QueryGrammar extends BaseGrammar {
   String compileDelete(QueryBuilder query) {
     var table = this.wrapTable(query.fromProp);
     var where =
-        Utils.is_array(query.wheresProp) ? this.compileWheres(query) : '';
+        Utils.isArray(query.wheresProp) ? this.compileWheres(query) : '';
     final res = Utils.trim("delete from $table " + where);
 
     return (this.compileExpressions(query) + ' ' + res).trim();
   }
 
   /// Compiles `truncate table`, as a map from each statement to its bindings.
-  Map<String, dynamic> compileTruncate(QueryBuilder query) {
+  Map<String, List> compileTruncate(QueryBuilder query) {
     return {'truncate ' + this.wrapTable(query.fromProp): []};
   }
 
   /// Compiles the row lock: [value] when it is SQL text, otherwise an empty
   /// string (the generic grammar has no lock syntax).
   String compileLock(QueryBuilder query, dynamic value) {
-    return Utils.is_string(value) ? value : '';
+    return value is String ? value : '';
   }
 
   /// `LOCK TABLE` of the query's table (`QueryBuilder.lockTable`). Only
@@ -1084,7 +1121,7 @@ class QueryGrammar extends BaseGrammar {
 
   /// Joins the compiled [segments] with spaces, skipping empty and null ones.
   String concatenate(Map<String, dynamic> segments) {
-    // return Utils.implode(' ', Utils.array_filter(segments,  (value) {
+    // return Utils.implode(' ', Utils.arrayFilter(segments,  (value) {
     //     return value != '';
     // }));
 

@@ -42,10 +42,10 @@ class Container {
   Map<String, dynamic> aliases = {};
 
   /// The extender callbacks of each abstract.
-  Map<String, dynamic> extenders = {};
+  Map<String, List<Function>> extenders = {};
 
   /// The abstracts of each tag.
-  Map<String, dynamic> tags = {};
+  Map<String, List> tags = {};
 
   /// The abstracts being built, innermost last.
   List buildStack = [];
@@ -55,7 +55,7 @@ class Container {
   Map contextual = {};
 
   /// The rebound callbacks of each abstract.
-  Map reboundCallbacks = {};
+  Map<String, List<Function>> reboundCallbacks = {};
 
   /// The resolving callbacks for every abstract.
   List globalResolvingCallbacks = [];
@@ -87,14 +87,14 @@ class Container {
     // containsKey: an instance may be null or an empty collection.
     return this.bindings.containsKey(abstract) ||
         this.instances.containsKey(abstract) ||
-        this.isAlias(abstract);
+        this.isAlias(abstract as String);
   }
 
   /// Whether [abstract] has been resolved or has an instance.
   bool resolved(dynamic abstract) {
     abstract = this.normalize(abstract);
 
-    if (this.isAlias(abstract)) {
+    if (this.isAlias(abstract as String)) {
       abstract = this.getAlias(abstract);
     }
 
@@ -111,28 +111,31 @@ class Container {
   /// another abstract to resolve. A map `{abstract: alias}` also registers
   /// the alias. With [shared] the first value made is kept (see [singleton]).
   void bind(abstract, [dynamic concrete, bool shared = false]) {
-    if (Utils.is_map(abstract)) {
-      var res = this.extractAlias(abstract);
+    if (Utils.isMap(abstract)) {
+      var res = this.extractAlias(abstract as Map<String, dynamic>);
       abstract = res.first;
       var alias = res.last;
-      this.alias(abstract, alias);
+      this.alias(abstract as String, alias as String);
     }
     abstract = this.normalize(abstract);
     concrete = this.normalize(concrete);
 
     this.dropStaleInstances(abstract);
 
-    if (Utils.is_null(concrete)) {
+    if (Utils.isNull(concrete)) {
       concrete = abstract;
     }
 
     // A name is wrapped in a factory that resolves it, so extenders work the
     // same for every binding.
     if (concrete is! Function) {
-      concrete = this.getClosure(abstract, concrete);
+      concrete = this.getClosure(abstract as String, concrete as String);
     }
 
-    this.bindings[abstract] = {'concrete': concrete, 'shared': shared};
+    this.bindings[abstract as String] = {
+      'concrete': concrete,
+      'shared': shared
+    };
 
     // Objects that already resolved [abstract] are told about the new one.
     if (this.resolved(abstract)) {
@@ -192,7 +195,7 @@ class Container {
   /// `(value, container)` and returns the new value: right away for an
   /// instance, otherwise each time it is made.
   void extend(dynamic abstractP, Function closure) {
-    var abstract = this.normalize(abstractP);
+    var abstract = this.normalize(abstractP) as String;
 
     if (this.instances.containsKey(abstract)) {
       this.instances[abstract] =
@@ -226,7 +229,7 @@ class Container {
       }
 
       for (var abstract in abstracts) {
-        this.tags[tag].add(this.normalize(abstract));
+        this.tags[tag]!.add(this.normalize(abstract));
       }
     }
   }
@@ -236,7 +239,7 @@ class Container {
     var results = [];
 
     if (Utils.isset(this.tags[tag])) {
-      for (var abstract in this.tags[tag]) {
+      for (var abstract in this.tags[tag]!) {
         results.add(this.make(abstract));
       }
     }
@@ -304,7 +307,7 @@ class Container {
   }
 
   /// The rebound callbacks of [abstract].
-  List getReboundCallbacks(abstract) {
+  List<Function> getReboundCallbacks(abstract) {
     return this.reboundCallbacks[abstract] ?? [];
   }
 
@@ -330,7 +333,7 @@ class Container {
 
   /// Whether [callback] is a `Class@method` string.
   bool isCallableWithAtSign(dynamic callback) {
-    return Utils.is_string(callback) && Utils.strpos(callback, '@') != false;
+    return callback is String && callback.contains('@');
   }
 
   /// Not supported: calling a method by name (`Class@method`) needs
@@ -351,9 +354,9 @@ class Container {
       return this.instances[abstract];
     }
 
-    var concrete = this.getConcrete(abstract);
+    var concrete = this.getConcrete(abstract as String);
 
-    var objectL;
+    dynamic objectL;
     // The abstract being built is on the build stack, so the types its
     // factory makes use its contextual bindings (when(abstract).needs(...)).
     this.buildStack.add(abstract);
@@ -386,7 +389,7 @@ class Container {
   /// [abstract] itself when nothing is bound.
   dynamic getConcrete(String abstract) {
     var concrete = this.getContextualConcrete(abstract);
-    if (!Utils.is_null(concrete)) {
+    if (!Utils.isNull(concrete)) {
       return concrete;
     }
 
@@ -405,12 +408,12 @@ class Container {
   }
 
   /// [service] without leading backslashes (PHP class names).
-  dynamic normalize(service) {
-    return Utils.is_string(service) ? Utils.ltrim(service, '\\\\') : service;
+  T normalize<T>(T service) {
+    return service is String ? Utils.ltrim(service, '\\\\') as T : service;
   }
 
   /// The extender callbacks of [abstract].
-  List getExtenders(dynamic abstract) {
+  List<Function> getExtenders(dynamic abstract) {
     return this.extenders[abstract] ?? [];
   }
 
@@ -435,7 +438,8 @@ class Container {
     if (callback == null && abstract is Function) {
       this.resolvingCallback(abstract);
     } else {
-      (this.resolvingCallbacks[this.normalize(abstract)] ??= []).add(callback!);
+      (this.resolvingCallbacks[this.normalize(abstract) as String] ??= [])
+          .add(callback!);
     }
   }
 
@@ -444,7 +448,7 @@ class Container {
     if (callback == null && abstract is Function) {
       this.afterResolvingCallback(abstract);
     } else {
-      (this.afterResolvingCallbacks[this.normalize(abstract)] ??= [])
+      (this.afterResolvingCallbacks[this.normalize(abstract) as String] ??= [])
           .add(callback!);
     }
   }

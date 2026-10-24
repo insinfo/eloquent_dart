@@ -6,7 +6,7 @@ abstract class Paginator {
   String url(int page);
 
   /// Adiciona um conjunto de valores de query string ao paginador.
-  /// O parâmetro [key] pode ser uma String ou um Map<String, String>.
+  /// O parâmetro [key] pode ser uma String ou um `Map<String, String>`.
   Paginator appends(dynamic key, [String? value]);
 
   /// Obtém ou define o fragmento da URL a ser anexado.

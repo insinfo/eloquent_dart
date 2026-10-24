@@ -8,7 +8,7 @@ abstract class BaseGrammar {
 
   /// Wraps each of [values] with [wrap].
   List wrapArray(List values) {
-    return Utils.array_map(wrap, values);
+    return Utils.arrayMap(wrap, values);
   }
 
   /// Quotes a table name with the [tablePrefix] added (to an alias too); a
@@ -18,7 +18,7 @@ abstract class BaseGrammar {
       return getValue(table);
     }
 
-    return wrap(tablePrefix + table, true);
+    return wrap(tablePrefix + (table as String), true);
   }
 
   /// Quotes a column or table reference: `table.column` becomes
@@ -32,7 +32,7 @@ abstract class BaseGrammar {
     }
 
     // Any value other than a String or a QueryExpression throws here.
-    final String value = valueP; // valueP is String ? : valueP.toString();
+    final String value = valueP as String;
 
     // An aliased value (`x as y`) wraps each side and joins them with `as`.
     //
@@ -96,7 +96,7 @@ abstract class BaseGrammar {
     // Only run the quote-doubling replace when a double-quote is actually
     // present (rare); otherwise wrap directly.
     if (value.contains('"')) {
-      return '"' + Utils.str_replace('"', '""', value) + '"';
+      return '"' + Utils.strReplace('"', '""', value) + '"';
     }
     return '"$value"';
   }
@@ -104,22 +104,23 @@ abstract class BaseGrammar {
   /// Wraps [columns] (names or [QueryExpression]s) and joins them with
   /// commas.
   String columnize(List<dynamic> columns) {
-    return Utils.implode(', ', Utils.array_map(wrap, columns));
+    return Utils.implode(', ', Utils.arrayMap(wrap, columns));
   }
 
   /// The placeholders of [values], comma-separated: `?, ?, ...`.
   String parameterize(List values) {
-    return Utils.implode(', ', Utils.array_map(parameter, values));
+    return Utils.implode(', ', Utils.arrayMap(parameter, values));
   }
 
   /// The placeholder of [value]: `?`, or the SQL of a [QueryExpression].
   String parameter(dynamic value) {
-    return isExpression(value) ? getValue(value) : '?';
+    return value is QueryExpression ? getValue(value) : '?';
   }
 
-  /// The SQL of a raw [expression].
+  /// The SQL of a raw [expression]; a value that is not a String (`db.raw(1)`)
+  /// is written with its `toString()`.
   String getValue(QueryExpression expression) {
-    return expression.getValue();
+    return expression.getValue().toString();
   }
 
   /// Whether [value] is a raw [QueryExpression].

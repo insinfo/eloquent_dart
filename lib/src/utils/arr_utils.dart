@@ -46,7 +46,7 @@ class ArrUtils {
       for (dynamic item in array) {
         if (item is List || item is Iterable) {
           if (depth == 1) {
-            result.addAll(item);
+            result.addAll(item as Iterable);
           } else {
             result.addAll(flattenList(item, depth - 1));
           }
@@ -108,7 +108,7 @@ class ArrUtils {
         String part = parts.removeAt(0);
 
         if (map.containsKey(part) && map[part] is Map<String, dynamic>) {
-          map = map[part];
+          map = map[part] as Map<String, dynamic>;
         } else {
           continue;
         }
@@ -124,7 +124,7 @@ class ArrUtils {
 
     for (String part in parts) {
       if (map.containsKey(part) && map[part] is Map<String, dynamic>) {
-        map = map[part];
+        map = map[part] as Map<String, dynamic>;
       } else {
         return false;
       }

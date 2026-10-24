@@ -536,11 +536,6 @@ abstract class SchemaGrammar extends BaseGrammar {
     return super.wrap(value, prefixAlias);
   }
 
-  @override
-  String wrapValue(String value) {
-    return super.wrapValue(value);
-  }
-
   @protected
   String getDefaultValue(dynamic value) {
     if (value is QueryExpression) {
@@ -798,7 +793,7 @@ abstract class SchemaGrammar extends BaseGrammar {
     }
   }
 
-  dynamic getTableWithColumnChanges(Blueprint blueprint, dynamic table) {
+  Table getTableWithColumnChanges(Blueprint blueprint, dynamic table) {
     if (table is! Table) {
       throw ArgumentError.value(table, 'table', 'Expected Doctrine Table.');
     }
@@ -835,7 +830,7 @@ abstract class SchemaGrammar extends BaseGrammar {
         .getColumn(name);
   }
 
-  dynamic getDoctrineColumnChangeOptions(Fluent fluent) {
+  Map<String, dynamic> getDoctrineColumnChangeOptions(Fluent fluent) {
     final type = fluent['type'] as String;
     final options = <String, dynamic>{
       'type': getDoctrineColumnType(type),

@@ -111,14 +111,14 @@ class SchemaMySqlGrammar extends SchemaGrammar {
 
     // O operador '??' é usado para fornecer um valor padrão se o da esquerda for null.
     String? charset = blueprint.tableCharset ??
-        connection.getConfig('charset'); // Usa tableCharset
+        connection.getConfig('charset') as String?; // Usa tableCharset
     if (charset != null && charset.isNotEmpty) {
       // Verifica se não é nulo ou vazio
       sql += ' default character set $charset';
     }
 
     String? collation = blueprint.tableCollation ??
-        connection.getConfig('collation'); // Usa tableCollation
+        connection.getConfig('collation') as String?; // Usa tableCollation
     if (collation != null && collation.isNotEmpty) {
       // Verifica se não é nulo ou vazio
       sql += ' collate $collation';

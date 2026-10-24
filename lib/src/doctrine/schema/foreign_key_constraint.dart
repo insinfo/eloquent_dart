@@ -132,11 +132,16 @@ class ForeignKeyConstraint extends AbstractAsset {
 
   bool isEquivalentTo(ForeignKeyConstraint other) {
     if (!const SetEquality().equals(Set.from(getUnquotedLocalColumns()),
-        Set.from(other.getUnquotedLocalColumns()))) return false;
-    if (!const SetEquality().equals(Set.from(getUnquotedForeignColumns()),
-        Set.from(other.getUnquotedForeignColumns()))) return false;
-    if (getUnquotedForeignTableName() != other.getUnquotedForeignTableName())
+        Set.from(other.getUnquotedLocalColumns()))) {
       return false;
+    }
+    if (!const SetEquality().equals(Set.from(getUnquotedForeignColumns()),
+        Set.from(other.getUnquotedForeignColumns()))) {
+      return false;
+    }
+    if (getUnquotedForeignTableName() != other.getUnquotedForeignTableName()) {
+      return false;
+    }
     if (getOnDelete() != other.getOnDelete()) return false;
     if (getOnUpdate() != other.getOnUpdate()) return false;
 
@@ -146,8 +151,9 @@ class ForeignKeyConstraint extends AbstractAsset {
     final options2Filtered = Map.from(other._options)
       ..remove('ondelete')
       ..remove('onupdate');
-    if (!const MapEquality().equals(options1Filtered, options2Filtered))
+    if (!const MapEquality().equals(options1Filtered, options2Filtered)) {
       return false;
+    }
 
     return true;
   }

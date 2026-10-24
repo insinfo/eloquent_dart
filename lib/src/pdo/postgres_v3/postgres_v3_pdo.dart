@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:eloquent/src/pdo/core/operation_lock.dart';
 import 'package:eloquent/src/pdo/core/pdo_config.dart';
@@ -16,14 +17,13 @@ class PostgresV3PDO extends PDOInterface {
 
   PDOConfig config;
 
-  /// Creates a PDO instance representing a connection to a database
-  /// Example
+  /// Creates a PDO instance representing a connection to a database.
   ///
-  ///
-  /// Example:  Map<String, dynamic> config = {'host': 'localhost','port':5432,'database':'teste'};
-  /// var pdo = new PDO(PDOConfig.fromMap(config));
+  /// ```dart
+  /// Map<String, dynamic> config = {'host': 'localhost','port':5432,'database':'teste'};
+  /// var pdo = PostgresV3PDO(PDOConfig.fromMap(config));
   /// await pdo.connect();
-  ///
+  /// ```
   PostgresV3PDO(this.config) {
     super.pdoInstance = this;
   }
@@ -223,10 +223,9 @@ class PostgresV3PDO extends PDOInterface {
     }
   }
 
-  /// Serializes callers of the single (non-pool) connection: postgres 3.x
-  /// rejects a query on a connection that is inside `runTx` ("Attempting to
-  /// execute query on connection while inside a `runTx` call"), so a request
-  /// that arrived during another one's transaction failed.
+  /// Serializes callers of the single (non-pool) connection: while one of
+  /// them has a transaction open on it, a statement of another request would
+  /// run inside that transaction.
   final OperationLock _singleConnectionLock = OperationLock();
 
   Future<R> _single<R>(Future<R> Function() operation) =>
@@ -239,19 +238,74 @@ class PostgresV3PDO extends PDOInterface {
 
   Future<T> _runInTransaction<T>(
       Future<T> operation(PostgresV3PDOTransaction ctx),
-      [int? timeoutInSeconds]) async {
-    if (timeoutInSeconds == null) {
-      timeoutInSeconds = queryTimeoutInSeconds;
+      [int? timeoutInSeconds]) {
+    final timeout =
+        Duration(seconds: timeoutInSeconds ?? queryTimeoutInSeconds);
+    final c = connection;
+    if (c is Pool) {
+      return c.withConnection<T>(
+          (session) => _transaction(session, operation, timeout));
+    }
+    return _transaction(c as Connection, operation, timeout);
+  }
+
+  /// Runs [operation] between a BEGIN and a COMMIT sent on [session], a
+  /// connection reserved for it.
+  ///
+  /// Not `runTx`: postgres 3.x rolls back the whole transaction after any
+  /// SQL error, even one a ROLLBACK TO SAVEPOINT recovered from, so a nested
+  /// transaction could not survive an SQL error. The context tracks whether
+  /// the server aborted the transaction instead (see
+  /// [PostgresV3PDOTransaction.abortedBy]): a COMMIT then would be answered
+  /// with a ROLLBACK, not with an error, so it rolls back and throws.
+  ///
+  /// When a COMMIT or ROLLBACK fails without an answer from the server (lost
+  /// connection, timeout), the state of the transaction is unknown and
+  /// [session] is closed, so it is never used again: the pool discards it,
+  /// and the single connection is reconnected by `Connection`.
+  Future<T> _transaction<T>(
+      Connection session,
+      Future<T> operation(PostgresV3PDOTransaction ctx),
+      Duration timeout) async {
+    Future<void> end(String statement) async {
+      try {
+        await session.execute(statement,
+            queryMode: QueryMode.simple, timeout: timeout);
+      } catch (e) {
+        // A COMMIT or ROLLBACK the server answered, even with an error,
+        // ended the transaction.
+        if (e is! ServerException || e is TimeoutException || !session.isOpen) {
+          try {
+            await session.close(force: true);
+          } catch (_) {}
+        }
+        rethrow;
+      }
     }
 
-    final res = await connection.runTx((transaCtx) async {
-      final pdoCtx = PostgresV3PDOTransaction(transaCtx, this);
-      return operation(pdoCtx);
-    },
-        settings: TransactionSettings(
-            queryTimeout: Duration(seconds: timeoutInSeconds)));
+    await session.execute('BEGIN',
+        queryMode: QueryMode.simple, timeout: timeout);
+    final ctx = PostgresV3PDOTransaction(session, this);
+    final T result;
+    try {
+      result = await operation(ctx);
+    } catch (_) {
+      try {
+        await end('ROLLBACK');
+      } catch (_) {
+        // The operation's error takes precedence.
+      }
+      rethrow;
+    }
 
-    return res;
+    final aborted = ctx.abortedBy;
+    if (aborted != null) {
+      await end('ROLLBACK');
+      throw PgException('The transaction was rolled back: a statement failed '
+          'and no ROLLBACK TO SAVEPOINT recovered from it ($aborted).');
+    }
+    await end('COMMIT');
+    return result;
   }
 
   /// Executa uma instrução SQL e retornar o número de linhas afetadas
@@ -270,7 +324,7 @@ class PostgresV3PDO extends PDOInterface {
       queryMode: QueryMode.simple,
       timeout: Duration(seconds: timeoutInSeconds),
     );
-    return res.affectedRows;
+    return res.affectedRows as int;
   }
 
   /// Prepares and executes an SQL statement with placeholders
@@ -292,7 +346,8 @@ class PostgresV3PDO extends PDOInterface {
       timeout: Duration(seconds: timeoutInSeconds),
     );
 
-    final pdoResult = PDOResults(postgresV3Rows(config, rs), rs.affectedRows);
+    final pdoResult =
+        PDOResults(postgresV3Rows(config, rs as Result), rs.affectedRows);
     return pdoResult;
   }
 

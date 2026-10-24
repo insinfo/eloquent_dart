@@ -105,7 +105,7 @@ class MySqlConnector extends Connector implements ConnectorInterface {
   /// has no NO_AUTO_CREATE_USER: MySQL 8 removed it and rejects the SET.
   String? sqlModeStatement(Map<String, dynamic> config) {
     if (config.containsKey('modes')) {
-      var modes = Utils.implode(',', config['modes']);
+      var modes = Utils.implode(',', config['modes'] as List);
       return "set session sql_mode='" + modes + "'";
     } else if (config.containsKey('strict') && config['strict'] != null) {
       if (config['strict'] == true || config['strict'] == 'true') {
@@ -123,10 +123,10 @@ class MySqlConnector extends Connector implements ConnectorInterface {
   /// Wraps [schema], a name or a list of names, in double quotes for the
   /// DSN; list items are joined with `, `.
   String formatSchema(dynamic schema) {
-    if (Utils.is_array(schema)) {
+    if (schema is List) {
       return '"' + Utils.implode('", "', schema) + '"';
     } else {
-      return '"' + schema + '"';
+      return '"' + (schema as String) + '"';
     }
   }
 

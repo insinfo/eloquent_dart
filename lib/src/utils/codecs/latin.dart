@@ -1,5 +1,6 @@
 /// Provides missing common ISO-8859 character encoders / decoders / codecs /
 /// encodings / charset converters for Dart.
+library;
 
 export 'character_encodings/latin/latin10.dart';
 export 'character_encodings/latin/latin11.dart';

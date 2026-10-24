@@ -187,36 +187,37 @@ class PDOConfig {
     final sslmode = map['sslmode']?.toString();
     parseSslMode(sslmode);
     final co = PDOConfig(
-      driver: map['driver'],
-      host: map['host'],
+      driver: map['driver'] as String,
+      host: map['host'] as String,
       port: _port(map['port'], map['driver']),
-      database: map['database'],
-      username: map['username'],
-      password: map['password'],
+      database: map['database'] as String,
+      username: map['username'] as String?,
+      password: map['password'] as String?,
       isUnixSocket:
           _bool(key(['is_unix_socket', 'isUnixSocket']), 'is_unix_socket') ??
               false,
-      charset: map['charset'],
+      charset: map['charset'] as String?,
       pool: _bool(map['pool'], 'pool') ?? false,
       poolSize:
           _int(key(['poolsize', 'pool_size', 'poolSize']), 'poolsize') ?? 1,
-      applicationName: key(['application_name', 'applicationName']),
+      applicationName: key(['application_name', 'applicationName']) as String?,
       allowReconnect: _bool(
           key(['allowreconnect', 'allow_reconnect', 'allowReconnect']),
           'allowreconnect'),
       sslmode: sslmode,
-      timezone: map['timezone'],
-      schema: map['schema'],
+      timezone: map['timezone'] as String?,
+      schema: map['schema'] as String?,
     );
-    co.collation = map['collation'];
+    co.collation = map['collation'] as String?;
     if (map['forceDecodeTimestamptzAsUTC'] is bool) {
-      co.forceDecodeTimestamptzAsUTC = map['forceDecodeTimestamptzAsUTC'];
+      co.forceDecodeTimestamptzAsUTC =
+          map['forceDecodeTimestamptzAsUTC'] as bool;
     }
     if (map['forceDecodeTimestampAsUTC'] is bool) {
-      co.forceDecodeTimestampAsUTC = map['forceDecodeTimestampAsUTC'];
+      co.forceDecodeTimestampAsUTC = map['forceDecodeTimestampAsUTC'] as bool;
     }
     if (map['forceDecodeDateAsUTC'] is bool) {
-      co.forceDecodeDateAsUTC = map['forceDecodeDateAsUTC'];
+      co.forceDecodeDateAsUTC = map['forceDecodeDateAsUTC'] as bool;
     }
     co.dateTimeBindings = parseDateTimeBindings(map['datetime_bindings']);
     co.pgTypes = parsePgTypes(map['pg_types']);
@@ -254,7 +255,7 @@ class PDOConfig {
   /// An int config value, also given as a numeric string (an environment
   /// variable).
   static int? _int(dynamic value, String name) {
-    if (value == null || value is int) return value;
+    if (value == null || value is int) return value as int?;
     final parsed = int.tryParse(value.toString().trim());
     if (parsed == null) {
       throw ArgumentError.value(value, name, 'Expected an integer.');
@@ -264,7 +265,7 @@ class PDOConfig {
 
   /// A bool config value, also given as `'true'`/`'false'` or `1`/`0`.
   static bool? _bool(dynamic value, String name) {
-    if (value == null || value is bool) return value;
+    if (value == null || value is bool) return value as bool?;
     switch (value.toString().trim().toLowerCase()) {
       case 'true':
       case '1':
@@ -441,7 +442,7 @@ class DriverOptions {
   T? _typed<T>(String key, T? Function(Object value) convert) {
     final value = values[key];
     if (value == null) return null;
-    final converted = convert(value);
+    final converted = convert(value as Object);
     if (converted == null) {
       throw ArgumentError.value(value, 'driver_options.$key',
           'Invalid value for $driver (expected $T)');

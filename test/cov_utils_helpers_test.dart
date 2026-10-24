@@ -34,7 +34,7 @@ void main() {
     });
   });
 
-  group('Utils.array_get (dot notation, as Arr::get)', () {
+  group('Utils.arrayGet (dot notation, as Arr::get)', () {
     final config = {
       'pgsql': {'host': 'localhost', 'port': 5432},
       'with.dot': 'literal',
@@ -46,57 +46,57 @@ void main() {
     };
 
     test('reads nested keys', () {
-      expect(Utils.array_get(config, 'pgsql.host'), equals('localhost'));
-      expect(Utils.array_get(config, 'list.1.id'), equals(2));
+      expect(Utils.arrayGet(config, 'pgsql.host'), equals('localhost'));
+      expect(Utils.arrayGet(config, 'list.1.id'), equals(2));
     });
 
     test('a top-level key with a dot wins over the path', () {
-      expect(Utils.array_get(config, 'with.dot'), equals('literal'));
+      expect(Utils.arrayGet(config, 'with.dot'), equals('literal'));
     });
 
     test('a missing path gives the default', () {
-      expect(Utils.array_get(config, 'pgsql.user'), isNull);
-      expect(Utils.array_get(config, 'pgsql.port.x', 'd'), equals('d'));
-      expect(Utils.array_get(config, 'nope.x', () => 'lazy'), equals('lazy'));
+      expect(Utils.arrayGet(config, 'pgsql.user'), isNull);
+      expect(Utils.arrayGet(config, 'pgsql.port.x', 'd'), equals('d'));
+      expect(Utils.arrayGet(config, 'nope.x', () => 'lazy'), equals('lazy'));
     });
   });
 
-  group('Utils.array_exists / data_get with a List and a String key', () {
-    test('array_exists accepts numeric strings for a List', () {
-      expect(Utils.array_exists([10, 20], '1'), isTrue);
-      expect(Utils.array_exists([10, 20], '2'), isFalse);
-      expect(Utils.array_exists([10, 20], 'x'), isFalse);
-      expect(Utils.array_exists([10, 20], -1), isFalse);
+  group('Utils.arrayExists / dataGet with a List and a String key', () {
+    test('arrayExists accepts numeric strings for a List', () {
+      expect(Utils.arrayExists([10, 20], '1'), isTrue);
+      expect(Utils.arrayExists([10, 20], '2'), isFalse);
+      expect(Utils.arrayExists([10, 20], 'x'), isFalse);
+      expect(Utils.arrayExists([10, 20], -1), isFalse);
     });
 
-    test('data_get descends into lists', () {
+    test('dataGet descends into lists', () {
       final target = {
         'items': [
           {'name': 'a'},
           {'name': 'b'},
         ],
       };
-      expect(Utils.data_get(target, 'items.0.name'), equals('a'));
-      expect(Utils.data_get(target, 'items.1'), equals({'name': 'b'}));
-      expect(Utils.data_get(target, 'items.5.name', 'none'), equals('none'));
-      expect(Utils.data_get(target, 'items.x', 'none'), equals('none'));
+      expect(Utils.dataGet(target, 'items.0.name'), equals('a'));
+      expect(Utils.dataGet(target, 'items.1'), equals({'name': 'b'}));
+      expect(Utils.dataGet(target, 'items.5.name', 'none'), equals('none'));
+      expect(Utils.dataGet(target, 'items.x', 'none'), equals('none'));
     });
 
-    test('data_get with * plucks from a List or a Map', () {
+    test('dataGet with * plucks from a List or a Map', () {
       final list = [
         {'n': 'a'},
         {'n': 'b'},
       ];
-      expect(Utils.data_get(list, '*.n'), equals(['a', 'b']));
+      expect(Utils.dataGet(list, '*.n'), equals(['a', 'b']));
       final map = {
         'u1': {'n': 'a'},
         'u2': {'n': 'b'},
       };
-      expect(Utils.data_get(map, '*.n'), equals(['a', 'b']));
-      expect(Utils.data_get('scalar', '*.n', 'd'), equals('d'));
+      expect(Utils.dataGet(map, '*.n'), equals(['a', 'b']));
+      expect(Utils.dataGet('scalar', '*.n', 'd'), equals('d'));
     });
 
-    test('data_get with two * collapses the result', () {
+    test('dataGet with two * collapses the result', () {
       final target = [
         {
           'tags': [
@@ -110,14 +110,14 @@ void main() {
           ]
         },
       ];
-      expect(Utils.data_get(target, '*.tags.*.t'), equals(['x', 'y', 'z']));
+      expect(Utils.dataGet(target, '*.tags.*.t'), equals(['x', 'y', 'z']));
     });
   });
 
-  group('Utils.array_collapse', () {
+  group('Utils.arrayCollapse', () {
     test('a List of lists', () {
       expect(
-          Utils.array_collapse([
+          Utils.arrayCollapse([
             [1, 2],
             'skipped',
             [3],
@@ -127,7 +127,7 @@ void main() {
 
     test('a Map of lists', () {
       expect(
-          Utils.array_collapse({
+          Utils.arrayCollapse({
             'x': [1, 2],
             'y': [3],
           }),
@@ -136,7 +136,7 @@ void main() {
 
     test('a List of maps merges them', () {
       expect(
-          Utils.array_collapse([
+          Utils.arrayCollapse([
             {'a': 1, 'b': 1},
             {'b': 2},
           ]),
@@ -144,25 +144,25 @@ void main() {
     });
   });
 
-  group('Utils.array_shift / array_pop', () {
-    test('array_shift on a Map returns the value', () {
+  group('Utils.arrayShift / arrayPop', () {
+    test('arrayShift on a Map returns the value', () {
       final map = {'a': 1, 'b': 2};
-      expect(Utils.array_shift(map), equals(1));
+      expect(Utils.arrayShift(map), equals(1));
       expect(map, equals({'b': 2}));
-      expect(Utils.array_shift(<String, int>{}), isNull);
+      expect(Utils.arrayShift(<String, int>{}), isNull);
     });
 
-    test('array_shift on a List', () {
+    test('arrayShift on a List', () {
       final list = [1, 2];
-      expect(Utils.array_shift(list), equals(1));
+      expect(Utils.arrayShift(list), equals(1));
       expect(list, equals([2]));
-      expect(Utils.array_shift([]), isNull);
+      expect(Utils.arrayShift([]), isNull);
     });
 
-    test('array_pop returns the removed value, null when empty', () {
+    test('arrayPop returns the removed value, null when empty', () {
       // Called through a Function so the test compiles whatever the return
       // type is.
-      final Function pop = Utils.array_pop;
+      final Function pop = Utils.arrayPop;
       final list = [1, 2];
       expect(pop(list), equals(2));
       expect(list, equals([1]));
@@ -174,14 +174,14 @@ void main() {
     });
   });
 
-  group('Utils.map_except_sd', () {
+  group('Utils.mapExceptSd', () {
     test('removes a key whose value is a map', () {
       final config = <String, dynamic>{
         'driver': 'pgsql',
         'read': {'host': 'r'},
         'write': {'host': 'w'},
       };
-      final result = Utils.map_except_sd(config, ['read', 'write']);
+      final result = Utils.mapExceptSd(config, ['read', 'write']);
       expect(result, equals({'driver': 'pgsql'}));
       // It works in place, as documented.
       expect(identical(result, config), isTrue);
@@ -198,7 +198,7 @@ void main() {
         },
       };
       expect(
-          Utils.map_except_sd(map, ['read', 'write']),
+          Utils.mapExceptSd(map, ['read', 'write']),
           equals({
             'driver': 'mysql',
             'host': '127.0.0.1',
@@ -206,8 +206,8 @@ void main() {
               'level2': {'banana': 'good'}
             },
           }));
-      expect(Utils.map_except_sd(map, 'host'), isNot(contains('host')));
-      expect(() => Utils.map_except_sd(map, 1), throwsException);
+      expect(Utils.mapExceptSd(map, 'host'), isNot(contains('host')));
+      expect(() => Utils.mapExceptSd(map, 1), throwsException);
     });
 
     test('ConnectionFactory read/write configs drop read and write', () {
@@ -274,16 +274,15 @@ void main() {
     });
   });
 
-  group('array_pluck without a key value', () {
+  group('arrayPluck without a key value', () {
     final rows = [
       {'id': 1, 'name': 'a'},
       {'name': 'b'},
       {'id': null, 'name': 'c'},
     ];
 
-    test('Utils.array_pluck keys the item by null', () {
-      expect(
-          Utils.array_pluck(rows, 'name', 'id'), equals({1: 'a', null: 'c'}));
+    test('Utils.arrayPluck keys the item by null', () {
+      expect(Utils.arrayPluck(rows, 'name', 'id'), equals({1: 'a', null: 'c'}));
     });
 
     test('Arr.pluck keys the item by null', () {
@@ -357,26 +356,26 @@ void main() {
   });
 
   group('other Utils helpers versus PHP', () {
-    test('array_rand with one key returns the key, not a list', () {
+    test('arrayRand with one key returns the key, not a list', () {
       final list = ['a', 'b', 'c'];
       for (var i = 0; i < 20; i++) {
-        final key = Utils.array_rand(list);
+        final key = Utils.arrayRand(list);
         expect(key, isA<int>());
         expect(key, inInclusiveRange(0, 2));
       }
     });
 
-    test('array_rand with several keys returns distinct keys in order', () {
+    test('arrayRand with several keys returns distinct keys in order', () {
       final list = ['a', 'b', 'c', 'd'];
       for (var i = 0; i < 20; i++) {
-        final keys = Utils.array_rand(list, 3) as List;
+        final keys = Utils.arrayRand(list, 3) as List;
         expect(keys.length, equals(3));
         expect(keys.toSet().length, equals(3));
         expect(keys, equals([...keys]..sort()));
       }
-      expect(Utils.array_rand(list, 4), equals([0, 1, 2, 3]));
-      expect(() => Utils.array_rand(list, 5), throwsArgumentError);
-      expect(() => Utils.array_rand([], 1), throwsArgumentError);
+      expect(Utils.arrayRand(list, 4), equals([0, 1, 2, 3]));
+      expect(() => Utils.arrayRand(list, 5), throwsArgumentError);
+      expect(() => Utils.arrayRand([], 1), throwsArgumentError);
     });
 
     test('empty is true for PHP\'s empty values', () {
@@ -411,16 +410,16 @@ void main() {
       expect(Utils.strval(12), equals('12'));
     });
 
-    test('map_first_key of an empty map is null', () {
-      expect(Utils.map_first_key({}), isNull);
-      expect(Utils.map_first_key({'a': 1}), equals('a'));
+    test('mapFirstKey of an empty map is null', () {
+      expect(Utils.mapFirstKey({}), isNull);
+      expect(Utils.mapFirstKey({'a': 1}), equals('a'));
     });
 
-    test('map_add_sd also sets a key whose value is null (Arr::add)', () {
+    test('mapAddSd also sets a key whose value is null (Arr::add)', () {
       final map = <String, dynamic>{'prefix': null, 'name': 'x'};
-      Utils.map_add_sd(map, 'prefix', '');
-      Utils.map_add_sd(map, 'name', 'y');
-      Utils.map_add_sd(map, 'other', 1);
+      Utils.mapAddSd(map, 'prefix', '');
+      Utils.mapAddSd(map, 'name', 'y');
+      Utils.mapAddSd(map, 'other', 1);
       expect(map, equals({'prefix': '', 'name': 'x', 'other': 1}));
     });
   });

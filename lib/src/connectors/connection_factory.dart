@@ -37,8 +37,8 @@ class ConnectionFactory {
     var pdo = await conC.connect(config);
 
     try {
-      return createConnection(
-          config['driver'], pdo, config['database'], config['prefix'], config);
+      return createConnection(config['driver'] as String, pdo,
+          config['database'] as String, config['prefix'] as String, config);
     } catch (_) {
       try {
         await pdo.close();

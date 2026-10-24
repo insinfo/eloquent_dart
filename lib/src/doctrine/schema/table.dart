@@ -126,8 +126,9 @@ class Table extends AbstractAsset {
   void _addColumnInternal(Column column) {
     // Usa Column sem prefixo
     final name = column.getCanonicalName();
-    if (_columns.containsKey(name))
+    if (_columns.containsKey(name)) {
       throw Exception('Column "$name" already exists.');
+    }
     _columns[name] = column;
   }
 
@@ -137,8 +138,9 @@ class Table extends AbstractAsset {
 
     final indexesToRemove = <String>[];
     _indexes.forEach((indexName, index) {
-      if (index.getUnquotedColumns().contains(nameCanonical))
+      if (index.getUnquotedColumns().contains(nameCanonical)) {
         indexesToRemove.add(indexName);
+      }
     });
     indexesToRemove.forEach((indexName) {
       print("Warning: Dropping index '$indexName'.");
@@ -147,8 +149,9 @@ class Table extends AbstractAsset {
 
     final fksToRemove = <String>[];
     _foreignKeys.forEach((fkName, fk) {
-      if (fk.getUnquotedLocalColumns().contains(nameCanonical))
+      if (fk.getUnquotedLocalColumns().contains(nameCanonical)) {
         fksToRemove.add(fkName);
+      }
     });
     fksToRemove.forEach((fkName) {
       print("Warning: Dropping foreign key '$fkName'.");
@@ -157,8 +160,9 @@ class Table extends AbstractAsset {
 
     final uqsToRemove = <String>[];
     _uniqueConstraints.forEach((uqName, uq) {
-      if (uq.getUnquotedColumns().contains(nameCanonical))
+      if (uq.getUnquotedColumns().contains(nameCanonical)) {
         uqsToRemove.add(uqName);
+      }
     });
     uqsToRemove.forEach((uqName) {
       print("Warning: Dropping unique constraint '$uqName'.");
@@ -188,8 +192,9 @@ class Table extends AbstractAsset {
     final column = getColumn(oldNameCanonical);
 
     if (oldNameCanonical == newNameCanonical) return column;
-    if (hasColumn(newNameCanonical))
+    if (hasColumn(newNameCanonical)) {
       throw Exception('Column "$newColumnName" already exists.');
+    }
 
     _validateIdentifierName(newColumnName);
 
@@ -309,8 +314,9 @@ class Table extends AbstractAsset {
     final index = getIndex(oldNameCanonical);
     final newNameCanonical = normalizeIdentifier(newIndexName);
     if (oldNameCanonical == newNameCanonical) return index;
-    if (hasIndex(newNameCanonical))
+    if (hasIndex(newNameCanonical)) {
       throw Exception('Index "$newIndexName" already exists.');
+    }
     _validateIdentifierName(newIndexName);
     dropIndex(oldNameCanonical);
     final newIndex = Index(
@@ -358,16 +364,18 @@ class Table extends AbstractAsset {
   void _addUniqueConstraintInternal(UniqueConstraint constraint) {
     final name = constraint.getCanonicalName();
     _validateIdentifierName(constraint.getName());
-    if (_uniqueConstraints.containsKey(name))
+    if (_uniqueConstraints.containsKey(name)) {
       throw Exception('Unique constraint "$name" already exists.');
+    }
     _uniqueConstraints[name] = constraint;
     _ensureConstraintIndex(constraint, isUnique: true);
   }
 
   void removeUniqueConstraint(String constraintName) {
     final name = normalizeIdentifier(constraintName);
-    if (!hasUniqueConstraint(name))
+    if (!hasUniqueConstraint(name)) {
       throw Exception('Unique constraint "$name" does not exist.');
+    }
     _uniqueConstraints.remove(name);
   }
 
@@ -376,8 +384,9 @@ class Table extends AbstractAsset {
       _uniqueConstraints.containsKey(normalizeIdentifier(name));
   UniqueConstraint getUniqueConstraint(String name) {
     final canonicalName = normalizeIdentifier(name);
-    if (!hasUniqueConstraint(canonicalName))
+    if (!hasUniqueConstraint(canonicalName)) {
       throw Exception('Unique constraint "$name" does not exist.');
+    }
     return _uniqueConstraints[canonicalName]!;
   }
 
@@ -402,8 +411,9 @@ class Table extends AbstractAsset {
   void _addForeignKeyInternal(ForeignKeyConstraint fk) {
     final name = fk.getCanonicalName();
     _validateIdentifierName(fk.getName());
-    if (_foreignKeys.containsKey(name))
+    if (_foreignKeys.containsKey(name)) {
       throw Exception('Foreign key "$name" already exists.');
+    }
     _validateColumnsExist(
         fk.getLocalColumns(), 'foreign key "$name"'); // Valida colunas locais
     _foreignKeys[name] = fk;
@@ -416,7 +426,7 @@ class Table extends AbstractAsset {
     // getColumns() made every addForeignKey() throw NoSuchMethodError).
     final List<String> columns = constraint is ForeignKeyConstraint
         ? constraint.getLocalColumns()
-        : constraint.getColumns();
+        : constraint.getColumns() as List<String>;
     bool indexExists = _indexes.values.any((index) =>
         (isUnique ? index.isUnique : true) && index.spansColumns(columns));
 
@@ -434,8 +444,9 @@ class Table extends AbstractAsset {
 
   void removeForeignKey(String fkName) {
     final name = normalizeIdentifier(fkName);
-    if (!hasForeignKey(name))
+    if (!hasForeignKey(name)) {
       throw Exception('Foreign key "$name" does not exist.');
+    }
     _foreignKeys.remove(name);
   }
 
@@ -444,8 +455,9 @@ class Table extends AbstractAsset {
       _foreignKeys.containsKey(normalizeIdentifier(fkName));
   ForeignKeyConstraint getForeignKey(String fkName) {
     final name = normalizeIdentifier(fkName);
-    if (!hasForeignKey(name))
+    if (!hasForeignKey(name)) {
       throw Exception('Foreign key "$name" does not exist.');
+    }
     return _foreignKeys[name]!;
   }
 

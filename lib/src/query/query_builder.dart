@@ -125,7 +125,7 @@ class QueryBuilder {
   late Processor processor;
 
   /// The current query value bindings.
-  Map<String, dynamic> bindings = {
+  Map<String, List<dynamic>> bindings = {
     'select': [],
     'from': [],
     'join': [],
@@ -205,7 +205,7 @@ class QueryBuilder {
 
   /// The `order` and `select` bindings saved while the count of
   /// [getCountForPagination] runs.
-  Map<String, dynamic> bindingBackups = {};
+  Map<String, List<dynamic>> bindingBackups = {};
 
   /// All of the available clause operators.
   final List<String> _operators = List<String>.from(SqlOperator.defaults);
@@ -234,8 +234,8 @@ class QueryBuilder {
   QueryBuilder withExpression(String name, dynamic query,
       [dynamic columns, bool recursive = false, bool materialized = false]) {
     final sub = this.createSub(query);
-    final sql = sub[0];
-    final bindings = sub[1];
+    final sql = sub[0] as String;
+    final bindings = sub[1] as List;
     this.expressionsProp.add({
       'name': name,
       'query': sql,
@@ -262,8 +262,8 @@ class QueryBuilder {
   QueryBuilder withMaterializedExpression(String name, dynamic query,
       [dynamic columns]) {
     final sub = this.createSub(query);
-    final sql = sub[0];
-    final bindings = sub[1];
+    final sql = sub[0] as String;
+    final bindings = sub[1] as List;
     this.expressionsProp.add({
       'name': name,
       'query': sql,
@@ -293,12 +293,12 @@ class QueryBuilder {
   /// compiled into the insert. Returns the driver's insert result.
   Future<dynamic> insertUsing(columns, query) async {
     final sub = this.createSub(query);
-    final sql = sub[0];
-    final subBindings = sub[1];
+    final sql = sub[0] as String;
+    final subBindings = sub[1] as List;
 
     // The CTEs come before the select in the SQL of every grammar, so their
     // bindings come first, then the subquery's.
-    final List<dynamic> exprBindings = bindings['expressions'] ?? <dynamic>[];
+    final exprBindings = bindings['expressions'] ?? <dynamic>[];
 
     final List<dynamic> mergedBindings = [
       ...exprBindings,
@@ -354,8 +354,8 @@ class QueryBuilder {
   /// bindings go to the select bindings.
   QueryBuilder selectSub(dynamic query, String alias) {
     final res = this.createSub(query);
-    final newQuery = res[0];
-    final bindings = res[1];
+    final newQuery = res[0] as String;
+    final bindings = res[1] as List;
 
     return this.selectRaw(
         '(' + newQuery + ') as ' + this.grammar.wrap(alias), bindings);
@@ -528,8 +528,8 @@ class QueryBuilder {
 
   /// Adds a join whose condition compares column [one] with the bound value
   /// [two]: `join table on one operator ?`.
-  QueryBuilder joinWhere(String table, one, operator, two,
-      [type = SqlJoin.inner]) {
+  QueryBuilder joinWhere(String table, one, String? operator, two,
+      [String type = SqlJoin.inner]) {
     return this.join(table, one, operator, two, type, true);
   }
 
@@ -561,11 +561,14 @@ class QueryBuilder {
   ///     .first();
   /// ```
   QueryBuilder joinSub(dynamic query, alias, dynamic first,
-      [String? operator, dynamic second, type = SqlJoin.inner, where = false]) {
+      [String? operator,
+      dynamic second,
+      String type = SqlJoin.inner,
+      bool where = false]) {
     final res = this.createSub(query);
 
-    final newQuery = res[0];
-    final bindings = res[1];
+    final newQuery = res[0] as String;
+    final bindings = res[1] as List;
 
     final expression = '(' + newQuery + ') as ' + this.grammar.wrap(alias);
 
@@ -751,7 +754,8 @@ class QueryBuilder {
     }
 
     if (value is Function) {
-      return this.whereSub(column, operator, value, boolean);
+      return this
+          .whereSub(column as String, operator as String?, value, boolean);
     }
 
     // `= null` means "is null" and `<> null` / `!= null` means "is not null".
@@ -759,10 +763,10 @@ class QueryBuilder {
     if (value == null) {
       final op = (operator as String?)?.trim().toLowerCase();
       if (op == null || op == SqlOperator.equals || op == '==') {
-        return this.whereNull(column, boolean, false);
+        return this.whereNull(column as String, boolean, false);
       }
       if (op == '<>' || op == '!=') {
-        return this.whereNull(column, boolean, true);
+        return this.whereNull(column as String, boolean, true);
       }
       throw ArgumentError.value(
           value,
@@ -868,7 +872,8 @@ class QueryBuilder {
     }
 
     if (finalValue is Function(QueryBuilder)) {
-      return this.whereSub(column, finalOperator, finalValue, boolean);
+      return this
+          .whereSub(column as String, finalOperator, finalValue, boolean);
     }
 
     if (finalValue == null) {
@@ -877,7 +882,7 @@ class QueryBuilder {
       if (finalOperator == SqlOperator.equals ||
           finalOperator == SqlOperator.doubleEquals ||
           not) {
-        return this.whereNull(column, boolean, not);
+        return this.whereNull(column as String, boolean, not);
       }
       // Any other operator with null fails the check below.
     }
@@ -1570,7 +1575,8 @@ class QueryBuilder {
   }
 
   /// Adds `column not between ? and ?`; see [whereBetween].
-  QueryBuilder whereNotBetween(column, List values, [boolean = SqlBool.and]) {
+  QueryBuilder whereNotBetween(String column, List values,
+      [String boolean = SqlBool.and]) {
     return this.whereBetween(column, values, boolean, true);
   }
 
@@ -1674,7 +1680,7 @@ class QueryBuilder {
   ///   });
   /// ```
   QueryBuilder whereExists(Function callback,
-      [String boolean = SqlBool.and, not = false]) {
+      [String boolean = SqlBool.and, bool not = false]) {
     var type = not ? SqlWhereType.notExists : SqlWhereType.exists;
 
     var query = this.newQuery();
@@ -1743,12 +1749,13 @@ class QueryBuilder {
   }
 
   /// Adds `column not in (...)`; see [whereIn].
-  QueryBuilder whereNotIn(String column, values, [boolean = SqlBool.and]) {
+  QueryBuilder whereNotIn(String column, values,
+      [String boolean = SqlBool.and]) {
     return this.whereIn(column, values, boolean, true);
   }
 
   /// Adds `or column not in (...)`; see [whereIn].
-  QueryBuilder orWhereNotIn(column, values) {
+  QueryBuilder orWhereNotIn(String column, values) {
     return this.whereNotIn(column, values, SqlBool.or);
   }
 
@@ -1917,7 +1924,7 @@ class QueryBuilder {
       'boolean': boolean,
     });
     // One binding for the whole list (addBinding would spread it).
-    this.bindings['where'].add(value);
+    this.bindings['where']!.add(value);
     return this;
   }
 
@@ -3055,8 +3062,8 @@ class QueryBuilder {
     offsetProp = null;
     columnsProp = null;
 
-    bindingBackups['order'] = bindings['order'];
-    bindingBackups['select'] = bindings['select'];
+    bindingBackups['order'] = bindings['order']!;
+    bindingBackups['select'] = bindings['select']!;
 
     bindings['order'] = [];
     bindings['select'] = [];
@@ -3073,13 +3080,13 @@ class QueryBuilder {
 
   /// Restores the fields saved by [backupFieldsForCount].
   void restoreFieldsForCount() {
-    ordersProp = backups['orders'];
-    limitProp = backups['limit'];
-    offsetProp = backups['offset'];
-    columnsProp = backups['columns'];
+    ordersProp = backups['orders'] as List<Map<String, dynamic>>;
+    limitProp = backups['limit'] as int?;
+    offsetProp = backups['offset'] as int?;
+    columnsProp = backups['columns'] as List?;
 
-    bindings['order'] = bindingBackups['order'];
-    bindings['select'] = bindingBackups['select'];
+    bindings['order'] = bindingBackups['order']!;
+    bindings['select'] = bindingBackups['select']!;
 
     backups.clear();
     bindingBackups.clear();
@@ -3492,13 +3499,13 @@ class QueryBuilder {
   /// `sum` of no rows is null).
   Future<num?> sum(String column) async {
     final result = await this.aggregate('sum', [column]);
-    return result is String ? num.tryParse(result) : result;
+    return result is String ? num.tryParse(result) : result as num?;
   }
 
   /// Returns the average of [column], or null when there are no rows.
   Future<num?> avg(String column) async {
     final result = await this.aggregate('avg', [column]);
-    return result is String ? num.tryParse(result) : result;
+    return result is String ? num.tryParse(result) : result as num?;
   }
 
   /// Same as [avg].
@@ -3522,7 +3529,7 @@ class QueryBuilder {
     // An aggregate query has no select list: its bindings are set aside and
     // restored afterwards.
     // ignore: unused_local_variable
-    var previousSelectBindings = [...(this.bindings['select'] as List)];
+    var previousSelectBindings = [...this.bindings['select']!];
 
     this.bindings['select'] = [];
 
@@ -3537,7 +3544,7 @@ class QueryBuilder {
     }
 
     if (results.isNotEmpty) {
-      var result = Utils.map_change_key_case_sd(results[0]);
+      var result = Utils.mapChangeKeyCaseSd(results[0]);
       return result['aggregate'];
     }
     return null;
@@ -3555,7 +3562,7 @@ class QueryBuilder {
       return 0;
     }
     if (result is int || result is double) {
-      return result;
+      return result as num;
     }
     final String resultStr = result.toString();
     if (!resultStr.contains('.')) {
@@ -4147,9 +4154,9 @@ class QueryBuilder {
   }
 
   /// Appends where clauses and their bindings, e.g. those of another query.
-  void mergeWheres(List<Map<String, dynamic>> wheresP, bindingsP) {
+  void mergeWheres(List<Map<String, dynamic>> wheresP, List bindingsP) {
     this.wheresProp.addAll(wheresP);
-    this.bindings['where'].addAll(bindingsP);
+    this.bindings['where']!.addAll(bindingsP);
   }
 
   /// Returns [bindings] without the [QueryExpression]s, which are inlined
@@ -4157,7 +4164,7 @@ class QueryBuilder {
   List cleanBindings(List bindings) {
     for (final binding in bindings) {
       if (binding is QueryExpression) {
-        return Utils.array_filter(bindings, (binding) {
+        return Utils.arrayFilter(bindings, (binding) {
           return !(binding is QueryExpression);
         });
       }
@@ -4183,31 +4190,31 @@ class QueryBuilder {
     }
 
     if (this.bindings['select'] != null) {
-      result.addAll(this.bindings['select']);
+      result.addAll(this.bindings['select']!);
     }
     if (bindings['from'] is List && bindings['from']!.isNotEmpty) {
       result.addAll(bindings['from']!);
     }
     if (this.bindings['join'] != null) {
-      result.addAll(this.bindings['join']);
+      result.addAll(this.bindings['join']!);
     }
     if (this.bindings['where'] != null) {
-      result.addAll(this.bindings['where']);
+      result.addAll(this.bindings['where']!);
     }
     if (this.bindings['groupBy'] != null) {
-      result.addAll(this.bindings['groupBy']);
+      result.addAll(this.bindings['groupBy']!);
     }
     if (this.bindings['having'] != null) {
-      result.addAll(this.bindings['having']);
+      result.addAll(this.bindings['having']!);
     }
     if (this.bindings['order'] != null) {
-      result.addAll(this.bindings['order']);
+      result.addAll(this.bindings['order']!);
     }
     if (this.bindings['union'] != null) {
-      result.addAll(this.bindings['union']);
+      result.addAll(this.bindings['union']!);
     }
     if (this.bindings['unionOrder'] != null) {
-      result.addAll(this.bindings['unionOrder']);
+      result.addAll(this.bindings['unionOrder']!);
     }
 
     return result;
@@ -4235,7 +4242,7 @@ class QueryBuilder {
       throw ArgumentError.value(type, 'type', 'Invalid binding type.');
     }
 
-    final target = this.bindings[type];
+    final target = this.bindings[type]!;
     if (value is List) {
       target.addAll(value);
     } else {
@@ -4296,8 +4303,8 @@ class QueryBuilder {
       Function(JoinClause) onCallback) {
     final res = createSub(subquery);
 
-    final sql = res[0];
-    final bindings = res[1];
+    final sql = res[0] as String;
+    final bindings = res[1] as List;
 
     final expression = QueryExpression('($sql) as ${grammar.wrapTable(alias)}');
 
@@ -4419,8 +4426,9 @@ class QueryBuilder {
   String toRawSql() {
     final bindings = this.connection.prepareBindings(
         List<dynamic>.of(this.cleanBindings(this.getBindings())));
-    return this.grammar.substituteBindingsIntoRawSql(
-        this.toSql(), List<dynamic>.of(bindings as List));
+    return this
+        .grammar
+        .substituteBindingsIntoRawSql(this.toSql(), List<dynamic>.of(bindings));
   }
 
   /// Prints [toRawSql] and returns the builder.
@@ -4504,7 +4512,7 @@ class QueryBuilder {
         return from(positionalArguments[0]);
       case 'where':
         if (positionalArguments.length == 1) {
-          return Function.apply(where, positionalArguments[0]);
+          return Function.apply(where, positionalArguments[0] as List?);
         } else if (positionalArguments.length == 2) {
           return where(positionalArguments[0], positionalArguments[1]);
         } else if (positionalArguments.length == 3) {
@@ -4512,7 +4520,7 @@ class QueryBuilder {
               positionalArguments[2]);
         } else if (positionalArguments.length == 4) {
           return where(positionalArguments[0], positionalArguments[1],
-              positionalArguments[2], positionalArguments[3]);
+              positionalArguments[2], positionalArguments[3] as String);
         }
         break;
       default:

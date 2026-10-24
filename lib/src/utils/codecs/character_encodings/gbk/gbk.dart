@@ -1,4 +1,5 @@
 /// Forked from https://github.com/lixiangthinker/fast_gbk
+library;
 
 import 'dart:convert';
 import 'dart:typed_data';
@@ -103,10 +104,6 @@ class GbkEncoder extends Converter<String, List<int>> {
       _GbkEncoderSink(
           (sink is ByteConversionSink) ? sink : ByteConversionSink.from(sink),
           _GbkStreamEncoder());
-
-  // Override the base-classes bind, to provide a better type.
-  @override
-  Stream<List<int>> bind(Stream<String> stream) => super.bind(stream);
 }
 
 /// This class encodes Strings to UTF-8 code units (unsigned 8 bit integers).
@@ -247,10 +244,6 @@ class GbkDecoder extends Converter<List<int>, String> {
 
     return _GbkConversionSink(stringSink, allowInvalid: _allowInvalid);
   }
-
-  // Override the base-classes bind, to provide a better type.
-  @override
-  Stream<String> bind(Stream<List<int>> stream) => super.bind(stream);
 }
 
 /// Decodes GBK code units.

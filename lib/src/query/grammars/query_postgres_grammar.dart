@@ -76,7 +76,7 @@ class QueryPostgresGrammar extends QueryGrammar {
     var value = this.parameter(where['value']);
     return this.wrap(where['column']) +
         '::date ' +
-        where['operator'] +
+        (where['operator'] as String) +
         ' ' +
         value;
   }
@@ -98,7 +98,7 @@ class QueryPostgresGrammar extends QueryGrammar {
         ' from ' +
         this.wrap(where['column']) +
         ') ' +
-        where['operator'] +
+        (where['operator'] as String) +
         ' ' +
         value;
   }
@@ -108,7 +108,7 @@ class QueryPostgresGrammar extends QueryGrammar {
   /// yields JSON instead of text.
   String compileJsonContains(dynamic column, dynamic value) {
     final newCol = this.wrap(column).replaceAll('->>', '->');
-    return '(' + newCol + ')::jsonb @> ' + value;
+    return '(' + newCol + ')::jsonb @> ' + (value as String);
   }
 
   /// `[not] ("column")::jsonb @> ?`, used by `whereJsonContains`.
@@ -177,7 +177,7 @@ class QueryPostgresGrammar extends QueryGrammar {
       return sql.toString();
     }
     if (value is! String) {
-      return value ? 'for update' : 'for share';
+      return value as bool ? 'for update' : 'for share';
     }
     return value;
   }
@@ -230,7 +230,7 @@ class QueryPostgresGrammar extends QueryGrammar {
     var table = this.wrapTable(query.fromProp);
     final ctes = this.compileExpressions(query);
 
-    var columns = this.compileUpdateColumns(values);
+    var columns = this.compileUpdateColumns(values as Map<String, dynamic>);
 
     // PostgreSQL has no UPDATE ... LIMIT: restrict the target rows by ctid.
     if (query.limitProp != null) {
@@ -395,11 +395,11 @@ class QueryPostgresGrammar extends QueryGrammar {
   List<dynamic> prepareBindingsForUpdate(
       QueryBuilder query, Map<String, dynamic> values) {
     return [
-      ...query.bindings['expressions'],
+      ...query.bindings['expressions']!,
       ...values.values,
-      ...query.bindings['where'],
-      if (query.limitProp != null) ...query.bindings['order'],
-      ...query.bindings['join'],
+      ...query.bindings['where']!,
+      if (query.limitProp != null) ...query.bindings['order']!,
+      ...query.bindings['join']!,
     ];
   }
 
@@ -408,10 +408,10 @@ class QueryPostgresGrammar extends QueryGrammar {
   @override
   List<dynamic> prepareBindingsForDelete(QueryBuilder query) {
     return [
-      ...query.bindings['expressions'],
-      ...query.bindings['where'],
-      if (query.limitProp != null) ...query.bindings['order'],
-      ...query.bindings['join'],
+      ...query.bindings['expressions']!,
+      ...query.bindings['where']!,
+      if (query.limitProp != null) ...query.bindings['order']!,
+      ...query.bindings['join']!,
     ];
   }
 
@@ -442,7 +442,7 @@ class QueryPostgresGrammar extends QueryGrammar {
       froms.add(wrapTable(join.table));
     }
 
-    if (froms.length > 0) {
+    if (froms.isNotEmpty) {
       return ' from ' + froms.join(', ');
     }
 
@@ -485,7 +485,7 @@ class QueryPostgresGrammar extends QueryGrammar {
 
   /// Compiles `truncate table restart identity`, as a map from each statement
   /// to its bindings.
-  Map<String, dynamic> compileTruncate(QueryBuilder query) {
+  Map<String, List> compileTruncate(QueryBuilder query) {
     return {
       'truncate ' + this.wrapTable(query.fromProp) + ' restart identity': []
     };
@@ -518,7 +518,7 @@ class QueryPostgresGrammar extends QueryGrammar {
       select = 'select ';
     }
 
-    return select + this.columnize(columns);
+    return select + this.columnize(columns as List);
   }
 
   /// Compiles a JSON selector `column->a->b` as `"column"->'a'->>'b'`: the

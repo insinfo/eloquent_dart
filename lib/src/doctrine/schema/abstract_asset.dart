@@ -46,8 +46,9 @@ abstract class AbstractAsset {
 
   /// Verifica se um identificador está entre aspas (", `, []).
   bool isIdentifierQuoted(String identifier) {
-    if (identifier.length < 2)
+    if (identifier.length < 2) {
       return false; // Precisa de pelo menos 2 caracteres para as aspas
+    }
     final firstChar = identifier[0];
     final lastChar = identifier[identifier.length - 1];
     return (firstChar == '"' && lastChar == '"') ||

@@ -1,5 +1,6 @@
 /// Support for encoding and decoding Unicode characters in UTF-8, UTF-16, and
 /// UTF-32.
+library;
 
 export 'utf/constants.dart';
 export 'utf/shared.dart';

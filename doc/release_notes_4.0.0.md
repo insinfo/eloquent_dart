@@ -224,9 +224,16 @@ as on postgres and dargres.
     inside a savepoint it knows about, so its adapter opens nested
     transactions with the driver's `savepoint()`
     (`PDOExecutionContext.runInSavepoint`), also through the pool.
-  - `postgres_v3`: the driver itself rolls back the whole transaction after
-    any SQL error (postgres 3.x `runTx` `_transactionException`), so a
-    savepoint only isolates Dart exceptions there.
+  - `postgres_v3`: recovers too. Its adapter sends BEGIN/COMMIT itself on a
+    reserved connection instead of using postgres 3.x `runTx`, which rolled
+    back the whole transaction after any SQL error
+    (`_transactionException`), even one a savepoint recovered from.
+- An SQL error caught **without** a savepoint aborts a PostgreSQL
+  transaction, and the server answers its COMMIT with a ROLLBACK, not with an
+  error. Every PostgreSQL adapter now fails such a transaction with an error
+  instead of reporting success: postgres_fork already did, `postgres_v3`
+  tracks the state in its adapter, and dargres 4.0.3 / dpgsql 1.1.3 check
+  the transaction status of the server before the COMMIT.
 
 See the README section "Transactions, nested transactions (SAVEPOINT) and
 transactionIfNeeded" for examples.

@@ -283,9 +283,10 @@ class Blueprint {
     String safeIndex = index
         .replaceAll(RegExp(r'[^a-z0-9_]+'), '_')
         .replaceAll(RegExp(r'^_+|_+$'), ''); // Remove underscores no início/fim
-    if (safeIndex.isEmpty)
+    if (safeIndex.isEmpty) {
       safeIndex =
           '${type}_${columns.hashCode.abs().toRadixString(16)}'; // Fallback se tudo for removido
+    }
     if (safeIndex.length > maxTotalLength) {
       final hash = safeIndex.hashCode
           .abs()
@@ -605,9 +606,10 @@ class Blueprint {
   // --- Foreign key modifiers (they apply to the last command, which must
   // be a 'foreign' command) ---
   Fluent _getLastCommandFluent(String expectedName) {
-    if (_commands.isEmpty || _commands.last['name'] != expectedName)
+    if (_commands.isEmpty || _commands.last['name'] != expectedName) {
       throw StateError(
           "Cannot apply foreign key modifier. Last command was not '$expectedName'.");
+    }
     return _commands.last;
   }
 

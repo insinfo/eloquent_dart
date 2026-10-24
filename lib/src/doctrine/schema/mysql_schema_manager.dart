@@ -83,7 +83,7 @@ class MySqlSchemaManager extends AbstractSchemaManager {
     for (final row in results) {
       // Convert keys to lowercase for consistency like the PHP version
       final lowerCaseRow =
-          Utils.map_change_key_case_sd(Map<String, dynamic>.from(row));
+          Utils.mapChangeKeyCaseSd(Map<String, dynamic>.from(row));
       if (lowerCaseRow['collation'] == tableCollation) {
         lowerCaseRow['collation'] = null;
       }
@@ -114,7 +114,7 @@ class MySqlSchemaManager extends AbstractSchemaManager {
     final Map<String, List<Map<String, dynamic>>> indexesData = {};
     for (final row in results) {
       final lowerCaseRow =
-          Utils.map_change_key_case_sd(Map<String, dynamic>.from(row));
+          Utils.mapChangeKeyCaseSd(Map<String, dynamic>.from(row));
       final indexName = lowerCaseRow['key_name'] as String;
       indexesData.putIfAbsent(indexName, () => []).add(lowerCaseRow);
     }
@@ -165,7 +165,7 @@ class MySqlSchemaManager extends AbstractSchemaManager {
     final Map<String, List<Map<String, dynamic>>> fkData = {};
     for (final row in results) {
       final lowerCaseRow =
-          Utils.map_change_key_case_sd(Map<String, dynamic>.from(row));
+          Utils.mapChangeKeyCaseSd(Map<String, dynamic>.from(row));
       final constraintName = lowerCaseRow['constraint_name'] as String;
       fkData.putIfAbsent(constraintName, () => []).add(lowerCaseRow);
     }
@@ -204,16 +204,19 @@ class MySqlSchemaManager extends AbstractSchemaManager {
     }
 
     final data =
-        Utils.map_change_key_case_sd(Map<String, dynamic>.from(results.first));
+        Utils.mapChangeKeyCaseSd(Map<String, dynamic>.from(results.first));
     final options = <String, dynamic>{};
 
     if (data['engine'] != null) options['engine'] = data['engine'];
-    if (data['table_collation'] != null)
+    if (data['table_collation'] != null) {
       options['collation'] = data['table_collation'];
-    if (data['table_comment'] != null)
+    }
+    if (data['table_comment'] != null) {
       options['comment'] = data['table_comment'];
-    if (data['auto_increment'] != null)
+    }
+    if (data['auto_increment'] != null) {
       options['autoincrement'] = data['auto_increment'];
+    }
 
     // Parse CREATE_OPTIONS (e.g., "ROW_FORMAT=COMPRESSED KEY_BLOCK_SIZE=8")
     if (data['create_options'] != null &&
@@ -625,10 +628,12 @@ class MySqlSchemaManager extends AbstractSchemaManager {
     }
 
     final options = <String, dynamic>{};
-    if (onDelete.isNotEmpty && onDelete != 'RESTRICT')
+    if (onDelete.isNotEmpty && onDelete != 'RESTRICT') {
       options['onDelete'] = onDelete;
-    if (onUpdate.isNotEmpty && onUpdate != 'RESTRICT')
+    }
+    if (onUpdate.isNotEmpty && onUpdate != 'RESTRICT') {
       options['onUpdate'] = onUpdate;
+    }
 
     return ForeignKeyConstraint(
       name: constraintName,

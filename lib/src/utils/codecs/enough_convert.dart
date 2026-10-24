@@ -1,5 +1,6 @@
 /// Provides missing common character encoders / decoders / codecs /
 /// encodings / charset converters for Dart.
+library;
 
 export 'big5.dart';
 export 'dos.dart';

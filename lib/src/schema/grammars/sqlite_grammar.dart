@@ -509,8 +509,9 @@ class SchemaSqliteGrammar extends SchemaGrammar {
     if (value is QueryExpression) return value.getValue().toString();
     if (value is bool) return value ? '1' : '0'; // SQLite uses 1/0 for booleans
     if (value == null) return 'NULL';
-    if (value is String)
+    if (value is String) {
       return "'${value.replaceAll("'", "''")}'"; // Single quotes for strings
+    }
     return value.toString(); // Numbers
   }
 

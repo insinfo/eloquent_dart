@@ -262,7 +262,9 @@ void main() {
               as int;
 
       final before = <int>{};
-      for (var i = 0; i < _POOL_SIZE; i++) before.add(await pid());
+      for (var i = 0; i < _POOL_SIZE; i++) {
+        before.add(await pid());
+      }
 
       await manager.getDatabaseManager().purge('default');
       // reabre e REBIND para que os próximos testes usem o pool válido

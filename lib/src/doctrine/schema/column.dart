@@ -98,14 +98,16 @@ class Column extends AbstractAsset {
     srid = options['srid'] as int? ?? srid;
     if (options.containsKey('allowed')) {
       final allowed = options['allowed'];
-      if (allowed is List)
+      if (allowed is List) {
         allowedValues = List<String>.from(allowed.map((e) => e.toString()));
+      }
     } else if (options.containsKey('allowedValues')) {
       final allowed = options['allowedValues'];
-      if (allowed is List<String>)
+      if (allowed is List<String>) {
         allowedValues = allowed;
-      else if (allowed is List)
+      } else if (allowed is List) {
         allowedValues = List<String>.from(allowed.map((e) => e.toString()));
+      }
     }
     columnDefinition =
         options['columnDefinition'] as String? ?? columnDefinition;

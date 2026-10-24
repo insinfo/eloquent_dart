@@ -118,7 +118,7 @@ class SchemaSqlServerGrammar extends SchemaGrammar {
     // Compila comentários das colunas que possuem o atributo 'comment'
     for (final column in columnsToComment) {
       final String? columnComment =
-          column['comment']; // Acessa o atributo do Fluent da coluna
+          column['comment'] as String?; // Acessa o atributo do Fluent da coluna
       if (columnComment != null && columnComment.isNotEmpty) {
         statements
             .add(_compileAddColumnComment(blueprint, column, columnComment));
@@ -636,15 +636,17 @@ class SchemaSqlServerGrammar extends SchemaGrammar {
     if (value is QueryExpression) {
       // Handle common SQL Server functions
       final exprValue = value.getValue().toString().toUpperCase();
-      if (exprValue == 'CURRENT_TIMESTAMP' || exprValue == 'GETDATE()')
+      if (exprValue == 'CURRENT_TIMESTAMP' || exprValue == 'GETDATE()') {
         return 'GETDATE()';
+      }
       if (exprValue == 'NEWID()') return 'NEWID()';
       return exprValue; // Return other expressions as-is
     }
     if (value is bool) return value ? '1' : '0'; // SQL Server uses 1/0 for bit
     if (value == null) return 'NULL';
-    if (value is String)
+    if (value is String) {
       return "'${value.replaceAll("'", "''")}'"; // Single quotes, escape internal single quotes
+    }
     return value.toString(); // Numbers
   }
 

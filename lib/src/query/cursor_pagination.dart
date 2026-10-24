@@ -89,8 +89,10 @@ final class PageCursor {
 
   static Object? _decodeValue(Object? value) {
     if (value is Map) {
-      if (value[r'$dt'] is String) return DateTime.parse(value[r'$dt']);
-      if (value[r'$bi'] is String) return BigInt.parse(value[r'$bi']);
+      if (value[r'$dt'] is String) {
+        return DateTime.parse(value[r'$dt'] as String);
+      }
+      if (value[r'$bi'] is String) return BigInt.parse(value[r'$bi'] as String);
       throw const FormatException('Invalid pagination cursor value.');
     }
     return value;

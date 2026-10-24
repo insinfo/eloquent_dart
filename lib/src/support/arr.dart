@@ -288,14 +288,14 @@ class Arr {
   static dynamic dataGet(dynamic target, dynamic path) {
     if (path == null) return target;
     if (path is String) path = path.split('.');
-    for (var segment in path) {
+    for (var segment in path as Iterable) {
       if (!accessible(target) || !exists(target, segment)) {
         return null;
       }
       if (target is Map) {
         target = target[segment];
       } else if (target is List) {
-        var idx = segment is int ? segment : int.tryParse(segment);
+        var idx = segment is int ? segment : int.tryParse(segment as String);
         if (idx == null || idx < 0 || idx >= target.length) {
           return null;
         }
@@ -321,7 +321,7 @@ class Arr {
   /// Remove do array as chaves [keys].
   static Map except(Map array, dynamic keys) {
     if (keys is String) keys = [keys];
-    for (var k in keys) {
+    for (var k in keys as Iterable) {
       forget(array, k);
     }
     return array;
@@ -339,7 +339,7 @@ class Arr {
         if (!current.containsKey(segment) || current[segment] is! Map) {
           current[segment] = <String, dynamic>{};
         }
-        current = current[segment];
+        current = current[segment] as Map;
       }
     }
     return array;
@@ -384,7 +384,7 @@ class Arr {
     return array;
   }
 
-  /// Converte List em Map<int, dynamic>, indexando cada elemento.
+  /// Converte List em `Map<int, dynamic>`, indexando cada elemento.
   static Map<int, dynamic> _listToMap(List arr) {
     var m = <int, dynamic>{};
     for (var i = 0; i < arr.length; i++) {

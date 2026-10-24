@@ -95,8 +95,7 @@ void main() {
       blueprint.nullable();
       blueprint.change();
 
-      final changedTable =
-          grammar.getTableWithColumnChanges(blueprint, table) as Table;
+      final changedTable = grammar.getTableWithColumnChanges(blueprint, table);
       final changedColumn = changedTable.getColumn('name');
 
       expect(changedTable, isNot(same(table)));

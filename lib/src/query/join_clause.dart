@@ -166,7 +166,7 @@ class JoinClause {
         'boolean': boolean,
       });
       this.bindingsLocal =
-          Utils.array_merge(this.bindingsLocal, join.bindingsLocal);
+          Utils.arrayMerge(this.bindingsLocal, join.bindingsLocal);
     }
 
     return this;
@@ -184,7 +184,7 @@ class JoinClause {
       'boolean': boolean,
     });
 
-    this.bindingsLocal = Utils.array_merge(this.bindingsLocal, bindings);
+    this.bindingsLocal = Utils.arrayMerge(this.bindingsLocal, bindings);
     return this;
   }
 

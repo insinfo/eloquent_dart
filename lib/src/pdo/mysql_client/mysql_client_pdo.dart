@@ -14,14 +14,13 @@ class MySqlClientPDO extends PDOInterface {
 
   PDOConfig config;
 
-  /// Creates a PDO instance representing a connection to a database
-  /// Example
+  /// Creates a PDO instance representing a connection to a database.
   ///
-  ///
-  /// Example:  Map<String, dynamic> config = {'host': 'localhost','port':5432,'database':'teste'};
-  /// var pdo = new PDO(PDOConfig.fromMap(config));
+  /// ```dart
+  /// Map<String, dynamic> config = {'host': 'localhost','port':5432,'database':'teste'};
+  /// var pdo = MySqlClientPDO(PDOConfig.fromMap(config));
   /// await pdo.connect();
-  ///
+  /// ```
   MySqlClientPDO(this.config, {this.sessionStatements = const <String>[]}) {
     super.pdoInstance = this;
   }
@@ -288,7 +287,7 @@ class MySqlClientPDO extends PDOInterface {
   }
 
   /// Prepares and executes an SQL statement
-  /// [params] List<dynamic>
+  /// [params] `List<dynamic>`
   Future<PDOResults> _queryUnlocked(String query,
       [dynamic params, int? timeoutInSeconds]) async {
     // Do not reformat DateTime here; this adapter receives prepared bindings.

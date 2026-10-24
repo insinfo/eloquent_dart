@@ -168,7 +168,7 @@ class FakeConnection implements ConnectionInterface {
   }
 
   @override
-  dynamic prepareBindings(List bindings) {
+  List prepareBindings(List bindings) {
     return bindings; // Implementação simples para testes
   }
 
@@ -196,7 +196,7 @@ class FakeConnection implements ConnectionInterface {
   bool get supportsSavepoints => false;
 
   @override
-  Future<dynamic> pretend(Function callback) async {
+  Future<List<Map<String, dynamic>>> pretend(Function callback) async {
     // Simula o modo pretend retornando queries vazias (ou mocks se necessário)
     //print("FakeConnection: Pretend mode called (returning empty list)");
     try {

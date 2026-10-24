@@ -128,4 +128,15 @@ void main() {
       expect(grammar.wrap('*'), equals('*'));
     });
   });
+
+  group('a raw expression whose value is not a String', () {
+    // BaseGrammar.getValue returned the value itself as a String, so
+    // db.raw(1) threw a TypeError when it was compiled.
+    test('compiles in the select list and as a value', () {
+      final qb = QueryBuilder(
+          FakeConnection(), QueryPostgresGrammar(), PostgresProcessor());
+      qb.from('users').select([qb.raw(1)]).where('n', '=', qb.raw(0));
+      expect(qb.toSql(), equals('select 1 from "users" where "n" = 0'));
+    });
+  });
 }

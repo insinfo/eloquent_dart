@@ -79,6 +79,48 @@ void main() {
         await manager.getDatabaseManager().purge('killer');
       });
 
+      // The session ends inside a transaction, after its last statement: the
+      // COMMIT finds the connection lost, the transaction fails, and the
+      // next statement runs on a new session.
+      test(
+          '$driver${pool ? ' (pool)' : ''} fails a transaction whose session '
+          'was terminated before the COMMIT', () async {
+        final mysql = driver == 'mysql';
+        final manager = Manager()
+          ..addConnection(_config(driver, pool), 'victim')
+          ..addConnection(_config(driver, false), 'killer');
+        final victim = await manager.getConnection('victim');
+        final killer = await manager.getConnection('killer');
+        final pidSql = mysql
+            ? 'select connection_id() as pid'
+            : 'select pg_backend_pid() as pid';
+
+        dynamic before;
+        await expectLater(
+            victim.transaction((ctx) async {
+              before = (await ctx.select(pidSql)).first['pid'];
+              if (mysql) {
+                await killer.execute('KILL $before');
+              } else {
+                await killer
+                    .select('select pg_terminate_backend(?::int)', [before]);
+              }
+              await Future<void>.delayed(const Duration(milliseconds: 300));
+            }).timeout(const Duration(seconds: 20)),
+            throwsA(anything));
+
+        final after =
+            (await victim.select(pidSql).timeout(const Duration(seconds: 20)))
+                .first['pid'];
+        expect(after, isNot(before), reason: 'a new session runs the query');
+
+        await manager
+            .getDatabaseManager()
+            .purge('victim')
+            .timeout(const Duration(seconds: 10));
+        await manager.getDatabaseManager().purge('killer');
+      });
+
       // Issue #2: the server closes a connection left idle (MySQL/MariaDB
       // wait_timeout, PostgreSQL 14+ idle_session_timeout); the next query
       // must reconnect instead of failing until the application restarts.

@@ -61,7 +61,7 @@ abstract class ConnectionInterface {
 
   /// Returns [bindings] converted for the driver; see
   /// [Connection.prepareBindings].
-  dynamic prepareBindings(List bindings);
+  List prepareBindings(List bindings);
 
   /// Runs [callback] in a transaction and returns its result.
   ///
@@ -87,7 +87,7 @@ abstract class ConnectionInterface {
 
   /// Runs [callback] in "dry run" mode and returns the queries it would have
   /// run.
-  Future<dynamic> pretend(Function callback);
+  Future<List<Map<String, dynamic>>> pretend(Function callback);
 
   String getDatabaseName();
 

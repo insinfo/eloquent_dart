@@ -43,6 +43,7 @@ void main() {
     ('postgres', false),
     ('postgres', true),
     ('postgres_v3', false),
+    ('postgres_v3', true),
     ('dargres', false),
     ('dargres', true),
     ('dpgsql', false),
@@ -133,11 +134,7 @@ void main() {
           await ctx.table(_table).insert({'nome': 'Decreto'});
         });
         expect(await db.table(_table).count(), 2);
-      },
-          skip: driver == 'postgres_v3'
-              ? 'postgres 3.x ends the whole transaction after any SQL error '
-                  '(see transaction_savepoint_integration_test)'
-              : null);
+      });
 
       test('createOrFirst inserts, then returns the existing row', () async {
         final created =

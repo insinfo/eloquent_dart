@@ -49,8 +49,9 @@ class PostgreSQLSchemaManager extends AbstractSchemaManager {
 
   /// Verifica se um identificador está entre aspas (", `, []).
   bool isIdentifierQuoted(String identifier) {
-    if (identifier.length < 2)
+    if (identifier.length < 2) {
       return false; // Precisa de pelo menos 2 caracteres para as aspas
+    }
     final firstChar = identifier[0];
     final lastChar = identifier[identifier.length - 1];
     return (firstChar == '"' && lastChar == '"') ||
@@ -199,12 +200,12 @@ class PostgreSQLSchemaManager extends AbstractSchemaManager {
 
     // Processar cada índice
     for (final indexRow in indexResults) {
-      final String indexName = indexRow['indexname'];
-      final bool isPrimary = indexRow['primary'];
-      final bool isUnique = indexRow['unique'];
-      final String ordinalString = indexRow['columns_ordinals'];
-      final String? whereCondition = indexRow['where'];
-      final String indexDef = indexRow['indexdef'];
+      final indexName = indexRow['indexname'] as String;
+      final isPrimary = indexRow['primary'] as bool;
+      final isUnique = indexRow['unique'] as bool;
+      final ordinalString = indexRow['columns_ordinals'] as String;
+      final whereCondition = indexRow['where'] as String?;
+      final indexDef = indexRow['indexdef'] as String;
 
       // Mapear ordinais para nomes de coluna
       final List<String> columnNames = ordinalString
@@ -560,15 +561,18 @@ class PostgreSQLSchemaManager extends AbstractSchemaManager {
     pgDefault = pgDefault.replaceAllMapped(
         RegExp(r'^(.+)::[a-zA-Z_"\s]+(\(.+\))?$'), (m) => m.group(1) ?? '');
     if (pgDefault.toLowerCase().startsWith('nextval(')) return null;
-    if (pgDefault.startsWith("'") && pgDefault.endsWith("'"))
+    if (pgDefault.startsWith("'") && pgDefault.endsWith("'")) {
       return pgDefault.substring(1, pgDefault.length - 1).replaceAll("''", "'");
+    }
     if (dartType == 'boolean') {
       if (pgDefault.toLowerCase() == 'true') return true;
       if (pgDefault.toLowerCase() == 'false') return false;
     }
     if (isNumericType(dartType)) return num.tryParse(pgDefault);
     if (['now()', 'current_timestamp', 'current_date', 'current_time']
-        .contains(pgDefault.toLowerCase())) return QueryExpression(pgDefault);
+        .contains(pgDefault.toLowerCase())) {
+      return QueryExpression(pgDefault);
+    }
     return pgDefault;
   }
 
@@ -592,8 +596,9 @@ class PostgreSQLSchemaManager extends AbstractSchemaManager {
             r'FOREIGN KEY\s*\((.+)\)\s*REFERENCES\s*"?([^"]+)"?(?:\."?([^"]+)"?)?\s*\((.+)\)',
             caseSensitive: false)
         .firstMatch(definition);
-    if (fkMatch == null)
+    if (fkMatch == null) {
       throw FormatException("Could not parse FK definition: $definition");
+    }
 
     final localColumns =
         fkMatch.group(1)!.split(',').map((s) => trimQuotes(s.trim())).toList();

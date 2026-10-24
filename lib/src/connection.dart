@@ -147,7 +147,9 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
 
   /// Returns the schema grammar [useDefaultSchemaGrammar] sets: null here,
   /// driver subclasses return their dialect's.
-  dynamic getDefaultSchemaGrammar() {}
+  SchemaGrammar? getDefaultSchemaGrammar() {
+    return null;
+  }
 
   /// Sets the post processor to [getDefaultPostProcessor].
   void useDefaultPostProcessor() {
@@ -162,7 +164,7 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   /// Returns a schema builder for this connection, setting the default
   /// schema grammar first when none is set.
   SchemaBuilder getSchemaBuilder() {
-    if (Utils.is_null(schemaGrammar)) {
+    if (Utils.isNull(schemaGrammar)) {
       useDefaultSchemaGrammar();
     }
     return SchemaBuilder(this);
@@ -182,7 +184,7 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   /// Returns a [QueryBuilder] with this connection's grammar and post
   /// processor.
   QueryBuilder query() {
-    return QueryBuilder(this, this.getQueryGrammar(), this.getPostProcessor());
+    return QueryBuilder(this, this.getQueryGrammar(), this.getPostProcessor()!);
   }
 
   /// Returns a raw SQL expression: [value] goes into the query as written,
@@ -200,8 +202,8 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   }
 
   /// Runs a select statement on the write PDO ([pdo]) and returns its rows.
-  Future<List<Map<String, dynamic>>> selectFromWriteConnection(query,
-      [bindings = const []]) {
+  Future<List<Map<String, dynamic>>> selectFromWriteConnection(String query,
+      [List bindings = const []]) {
     return this.select(query, bindings, false);
   }
 
@@ -229,7 +231,7 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
       // For select statements, we'll simply execute the query and return the
       // rows of the result set, one map per row.
       final pdoL = me.getPdoForSelect(useReadPdo);
-      final params = me.prepareBindings(bindings);
+      final params = me.prepareBindings(bindings as List);
       return pdoL.query(query, params, timeoutInSeconds);
     }, timeoutInSeconds);
 
@@ -504,8 +506,8 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   }
 
   /// The same as [statement].
-  Future<PDOResults> rawQuery(query,
-      [bindings = const [], int? timeoutInSeconds]) async {
+  Future<PDOResults> rawQuery(String query,
+      [List bindings = const [], int? timeoutInSeconds]) async {
     return this.statement(query, bindings, timeoutInSeconds);
   }
 
@@ -532,7 +534,7 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
       }
 
       final pdoL = me.getPdo();
-      final params = me.prepareBindings(bindings);
+      final params = me.prepareBindings(bindings as List);
       return await pdoL.query(query, params, timeoutInSeconds);
     }, timeoutInSeconds);
 
@@ -570,7 +572,7 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
       // For update or delete statements, we want to get the number of rows
       // affected by the statement and return that back to the developer.
       final _pdo = me.getPdo();
-      final params = me.prepareBindings(bindings);
+      final params = me.prepareBindings(bindings as List);
       final res = await _pdo.query(query, params, timeoutInSeconds);
       return res.rowsAffected;
     }, timeoutInSeconds);
@@ -602,7 +604,7 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   /// the `datetime_bindings` option is `'native'`) and `false` becomes `0`
   /// on drivers other than PostgreSQL. The conversions go into a copy:
   /// [bindingsP] itself is not modified.
-  dynamic prepareBindings(List<dynamic> bindingsP) {
+  List<dynamic> prepareBindings(List<dynamic> bindingsP) {
     var grammar = getQueryGrammar();
     String? driverName;
     // Converted values go into a copy: the caller's list (often a builder's
@@ -891,7 +893,7 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   /// queries and leaves the outer one pretending. A query started in
   /// [callback] but run after it returned (an unawaited future) is not
   /// pretended.
-  Future<dynamic> pretend(Function callback) async {
+  Future<List<Map<String, dynamic>>> pretend(Function callback) async {
     final scope = _PretendScope();
     _openPretends++;
     try {
@@ -980,7 +982,7 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
               int? timeoutInSeconds)
           callback,
       int? timeoutInSeconds) async {
-    var result;
+    dynamic result;
     // Here we will run this query. If an exception occurs we'll determine if
     // it was caused by a connection that has been lost. If that is the cause,
     // we'll try to re-establish connection and, when that is safe, re-run
@@ -1011,7 +1013,7 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
       int? timeoutInSeconds) async {
     // The callback runs the SQL against the PDO connection; [run] times and
     // logs it.
-    var result;
+    dynamic result;
     result = await callback(this, query, bindings, timeoutInSeconds);
 
     return result;
@@ -1066,7 +1068,7 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
 
     // Counted per call: concurrent statements retry independently.
     final keepPool = _keepsPool;
-    Object lastError = e;
+    Object lastError = e as Object;
     for (var attempt = 1; attempt <= tryReconnectLimit; attempt++) {
       // Linear backoff, capped at 5 s. A kept pool hands another connection
       // at once, so its first attempt does not wait.
@@ -1395,7 +1397,7 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   /// manager.
   ///
   /// Throws an [Exception] inside a transaction.
-  dynamic setPdo(PDOExecutionContext pdo) {
+  Connection setPdo(PDOExecutionContext pdo) {
     if (isInTransaction) {
       //RuntimeException
       throw Exception("Can't swap PDO instance while within transaction.");
@@ -1409,7 +1411,7 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   }
 
   /// Sets [readPdo]; null makes reads use [pdo].
-  dynamic setReadPdo(PDOExecutionContext? pdo) {
+  Connection setReadPdo(PDOExecutionContext? pdo) {
     this.readPdo = pdo;
     return this;
   }
@@ -1492,7 +1494,7 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   }
 
   /// Returns the query post processor used by the connection.
-  dynamic getPostProcessor() {
+  Processor? getPostProcessor() {
     return this.postProcessor;
   }
 
@@ -1575,7 +1577,7 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   }
 
   /// Sets this connection's table prefix on [grammar] and returns it.
-  dynamic withTablePrefix(BaseGrammar grammar) {
+  T withTablePrefix<T extends BaseGrammar>(T grammar) {
     grammar.setTablePrefix(this._tablePrefix);
 
     return grammar;

@@ -42,6 +42,7 @@ void main() {
     ('postgres', false),
     ('postgres', true),
     ('postgres_v3', false),
+    ('postgres_v3', true),
     ('dargres', false),
     ('dargres', true),
     ('dpgsql', false),
@@ -149,12 +150,29 @@ void main() {
           await ctx.table(_table).insert({'id': 2});
         });
         expect(await ids(), [1, 2]);
-      },
-          skip: driver == 'postgres_v3'
-              ? 'postgres 3.x rolls back the whole transaction after any SQL '
-                  'error (runTx _transactionException), so ROLLBACK TO '
-                  'SAVEPOINT cannot recover it'
-              : null);
+      });
+
+      test(
+          'an SQL error caught without a savepoint: the transaction fails '
+          'and saves nothing', () async {
+        // PostgreSQL answers the COMMIT of an aborted transaction with a
+        // ROLLBACK, not with an error; MySQL only fails the statement.
+        final run = db.transaction((ctx) async {
+          await ctx.table(_table).insert({'id': 1});
+          try {
+            await ctx.table(_table).insert({'id': 1});
+          } catch (_) {}
+        });
+        if (driver == 'mysql') {
+          await run;
+          expect(await ids(), [1]);
+        } else {
+          await expectLater(run, throwsA(anything));
+          expect(await ids(), isEmpty);
+        }
+        // The connection is usable afterwards.
+        expect(await db.selectOne('select 1 as one'), {'one': 1});
+      });
 
       test('transactionIfNeeded reuses the current transaction', () async {
         await db.transaction((ctx) async {

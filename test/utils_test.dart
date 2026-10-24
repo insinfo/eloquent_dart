@@ -5,8 +5,8 @@ void main() {
   group('utils', () {
     test('implode', () {
       var array = ['lastname', 'email', 'phone'];
-      var comma_separated = Utils.implode(',', array);
-      expect(comma_separated, equals('lastname,email,phone'));
+      var commaSeparated = Utils.implode(',', array);
+      expect(commaSeparated, equals('lastname,email,phone'));
     });
 
     test('explode', () {
@@ -22,9 +22,8 @@ void main() {
       expect(pos, equals(0));
     });
 
-    test('str_replace', () {
-      var bodytag =
-          Utils.str_replace("%body%", "black", "<body text='%body%'>");
+    test('strReplace', () {
+      var bodytag = Utils.strReplace("%body%", "black", "<body text='%body%'>");
       expect(bodytag, equals("<body text='black'>"));
     });
   });
@@ -36,23 +35,23 @@ void main() {
       expect(Utils.toSnakeCase('already_snake'), equals('already_snake'));
     });
 
-    test('array_map', () {
+    test('arrayMap', () {
       var input = [1, 2, 3];
-      var output = Utils.array_map((x) => x * 2, input);
+      var output = Utils.arrayMap((x) => x * 2, input);
       expect(output, equals([2, 4, 6]));
     });
 
-    test('array_filter', () {
+    test('arrayFilter', () {
       var input = [1, 2, 3, 4, 5];
-      var output = Utils.array_filter(input, (x) => x % 2 == 0);
+      var output = Utils.arrayFilter(input, (x) => x % 2 == 0);
       expect(output, equals([2, 4]));
     });
 
-    test('in_array', () {
+    test('inArray', () {
       var input = [1, 'teste', true];
-      expect(Utils.in_array(1, input), isTrue);
-      expect(Utils.in_array('teste', input), isTrue);
-      expect(Utils.in_array(false, input), isFalse);
+      expect(Utils.inArray(1, input), isTrue);
+      expect(Utils.inArray('teste', input), isTrue);
+      expect(Utils.inArray(false, input), isFalse);
     });
 
     test('implode', () {
@@ -60,16 +59,16 @@ void main() {
       expect(Utils.implode(',', input), equals('a,b,c'));
     });
 
-    test('str_replace', () {
-      expect(Utils.str_replace('world', 'Dart', 'Hello world!'),
+    test('strReplace', () {
+      expect(Utils.strReplace('world', 'Dart', 'Hello world!'),
           equals('Hello Dart!'));
       // Teste com array
-      expect(Utils.str_replace(['a', 'e'], 'X', 'banana'), equals('bXnXnX'));
+      expect(Utils.strReplace(['a', 'e'], 'X', 'banana'), equals('bXnXnX'));
     });
 
-    test('is_string', () {
-      expect(Utils.is_string('abc'), isTrue);
-      expect(Utils.is_string(123), isFalse);
+    test('isString', () {
+      expect(Utils.isString('abc'), isTrue);
+      expect(Utils.isString(123), isFalse);
     });
 
     test('explode', () {
@@ -101,68 +100,68 @@ void main() {
       expect(result[1], equals(['name']));
     });
 
-    group('data_get / array_get / array_exists', () {
+    group('dataGet / arrayGet / arrayExists', () {
       final sample = {
         'id': 1,
         'name': 'John',
         'address': {'city': 'Gotham', 'zip': 12345},
       };
 
-      test('array_exists - Map', () {
-        expect(Utils.array_exists(sample, 'id'), isTrue);
-        expect(Utils.array_exists(sample, 'foo'), isFalse);
+      test('arrayExists - Map', () {
+        expect(Utils.arrayExists(sample, 'id'), isTrue);
+        expect(Utils.arrayExists(sample, 'foo'), isFalse);
       });
 
-      test('array_exists - List', () {
+      test('arrayExists - List', () {
         var arr = [10, 20, 30];
         // chave int
-        expect(Utils.array_exists(arr, 1), isTrue); // arr[1] = 20
-        expect(Utils.array_exists(arr, 10), isFalse);
+        expect(Utils.arrayExists(arr, 1), isTrue); // arr[1] = 20
+        expect(Utils.arrayExists(arr, 10), isFalse);
       });
 
-      test('array_get - simples', () {
-        expect(Utils.array_get(sample, 'id'), equals(1));
+      test('arrayGet - simples', () {
+        expect(Utils.arrayGet(sample, 'id'), equals(1));
         // Dot notation, as Arr::get.
-        expect(Utils.array_get(sample, 'address.city'), equals('Gotham'));
-        expect(Utils.array_get(sample, 'address.country'), isNull);
+        expect(Utils.arrayGet(sample, 'address.city'), equals('Gotham'));
+        expect(Utils.arrayGet(sample, 'address.country'), isNull);
       });
 
-      test('data_get - busca aninhada (dot notation)', () {
-        expect(Utils.data_get(sample, 'id'), equals(1));
-        expect(Utils.data_get(sample, 'address.city'), equals('Gotham'));
-        expect(Utils.data_get(sample, 'address.zip'), equals(12345));
-        expect(Utils.data_get(sample, 'address.country'), isNull);
+      test('dataGet - busca aninhada (dot notation)', () {
+        expect(Utils.dataGet(sample, 'id'), equals(1));
+        expect(Utils.dataGet(sample, 'address.city'), equals('Gotham'));
+        expect(Utils.dataGet(sample, 'address.zip'), equals(12345));
+        expect(Utils.dataGet(sample, 'address.country'), isNull);
       });
     });
 
-    group('array_pluck', () {
-      test('array_pluck sem key', () {
+    group('arrayPluck', () {
+      test('arrayPluck sem key', () {
         var array = [
           {'id': 1, 'name': 'Isaque'},
           {'id': 2, 'name': 'John'},
           {'id': 3, 'name': 'Jane'}
         ];
-        var result = Utils.array_pluck(array, 'name');
+        var result = Utils.arrayPluck(array, 'name');
         expect(result, equals(['Isaque', 'John', 'Jane']));
       });
 
-      test('array_pluck com key', () {
+      test('arrayPluck com key', () {
         var array = [
           {'id': 1, 'name': 'Isaque'},
           {'id': 2, 'name': 'John'},
           {'id': 3, 'name': 'Jane'}
         ];
-        var result = Utils.array_pluck(array, 'name', 'id');
+        var result = Utils.arrayPluck(array, 'name', 'id');
         expect(result, equals({1: 'Isaque', 2: 'John', 3: 'Jane'}));
       });
 
-      test('array_pluck: an item without the key is keyed by null', () {
+      test('arrayPluck: an item without the key is keyed by null', () {
         var array = [
           {'id': 1, 'name': 'Isaque'},
           // No 'id' here.
           {'ID': 2, 'name': 'John'},
         ];
-        var result = Utils.array_pluck(array, 'name', 'id');
+        var result = Utils.arrayPluck(array, 'name', 'id');
         expect(result, equals({1: 'Isaque', null: 'John'}));
       });
     });
@@ -184,18 +183,18 @@ void main() {
       expect(Utils.formatDate(dt, 'dd/MM/yyyy'), equals('15/05/2023'));
     });
 
-    test('array_fill', () {
-      expect(Utils.array_fill(0, 3, 'x'), equals(['x', 'x', 'x']));
+    test('arrayFill', () {
+      expect(Utils.arrayFill(0, 3, 'x'), equals(['x', 'x', 'x']));
     });
 
-    test('array_merge', () {
-      expect(Utils.array_merge([1, 2], [3, 4]), equals([1, 2, 3, 4]));
+    test('arrayMerge', () {
+      expect(Utils.arrayMerge([1, 2], [3, 4]), equals([1, 2, 3, 4]));
     });
 
-    test('map_merge_sd', () {
+    test('mapMergeSd', () {
       var map1 = {'driver': 'pgsql', 'host': 'localhost'};
       var map2 = {'host': '127.0.0.1', 'port': 5432};
-      var merged = Utils.map_merge_sd(map1, map2);
+      var merged = Utils.mapMergeSd(map1, map2);
       // Esperamos que host seja '127.0.0.1' (sobrescrito) e inclua 'port'
       expect(merged,
           equals({'driver': 'pgsql', 'host': '127.0.0.1', 'port': 5432}));
