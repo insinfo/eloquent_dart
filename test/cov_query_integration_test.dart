@@ -150,8 +150,12 @@ void main() {
                     SqlJoin.inner, (join) => join.onRaw('j.x = cov_qb_a.id'))
                 .pluck('cov_qb_a.nome'),
             ['a']);
-        expect(() => db.table('cov_qb_a').joinRaw('cov_qb_b'),
-            throwsArgumentError);
+        // The ON written in the expression (as new_sali does).
+        expect(
+            await db.table('cov_qb_a').joinRaw(
+                'cov_qb_b b ON b.a_id = cov_qb_a.id AND b.n = ?',
+                [2]).pluck('cov_qb_a.nome'),
+            ['a']);
       });
 
       test('update with a raw join condition', () async {
