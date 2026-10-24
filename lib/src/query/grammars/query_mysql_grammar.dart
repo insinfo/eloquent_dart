@@ -98,9 +98,26 @@ class QueryMySqlGrammar extends QueryGrammar {
   }
 
   /// Compiles `json_contains(column, value)`, with [value] already SQL (a
-  /// placeholder).
+  /// placeholder). A JSON selector `column->a->b` gives
+  /// `json_contains(column, value, '$."a"."b"')`, which MariaDB (without the
+  /// `->` operator) also runs.
   String compileJsonContains(column, value) {
-    return 'json_contains(' + this.wrap(column) + ', ' + value + ')';
+    final path = (column as String).split('->');
+    final field = this.wrapValue(path.removeAt(0));
+    if (path.isEmpty) {
+      return 'json_contains($field, $value)';
+    }
+    final jsonPath =
+        path.map((key) => '"$key"').join('.').replaceAll("'", "''");
+    return "json_contains($field, $value, '\$.$jsonPath')";
+  }
+
+  /// `[not] json_contains(column, ?[, path])`, used by `whereJsonContains`.
+  @override
+  String whereJsonContains(QueryBuilder query, Map<String, dynamic> where) {
+    final not = where['not'] == true ? 'not ' : '';
+    return not +
+        this.compileJsonContains(where['column'], parameter(where['value']));
   }
 
   /// Compiles one union with its query parenthesized:
@@ -111,9 +128,23 @@ class QueryMySqlGrammar extends QueryGrammar {
   }
 
   /// Compiles the expression of a random order: `RAND(seed)`, or `RAND()`
-  /// with an empty seed.
+  /// with a null or empty seed.
+  ///
+  /// The seed is inlined, so only an integer (or its decimal text) is
+  /// accepted; anything else throws [ArgumentError].
   String compileRandom(seed) {
-    return 'RAND(' + seed + ')';
+    if (seed == null || seed == '') {
+      return 'RAND()';
+    }
+    final text = seed is int
+        ? '$seed'
+        : seed is String
+            ? seed.trim()
+            : null;
+    if (text == null || !RegExp(r'^-?\d+$').hasMatch(text)) {
+      throw ArgumentError.value(seed, 'seed', 'Must be an integer.');
+    }
+    return 'RAND($text)';
   }
 
   /// Compiles the row lock.
@@ -314,8 +345,9 @@ class QueryMySqlGrammar extends QueryGrammar {
   /// Bindings of an UPDATE, in SQL order:
   /// `[with] update t [joins] set ... [where] [order by] [limit]`.
   ///
-  /// A boolean assigned to a JSON selector is emitted inline by
-  /// [compileJsonUpdateColumn], so it has no binding.
+  /// A boolean or a number assigned to a JSON selector is emitted inline by
+  /// [compileJsonUpdateColumn] (see [JsonExpression.isInlined]), so it has
+  /// no binding.
   @override
   List<dynamic> prepareBindingsForUpdate(
       QueryBuilder query, Map<String, dynamic> values) {
@@ -323,7 +355,9 @@ class QueryMySqlGrammar extends QueryGrammar {
       ...query.bindings['expressions'],
       ...query.bindings['join'],
       for (final entry in values.entries)
-        if (!(isJsonSelector(entry.key) && entry.value is bool)) entry.value,
+        if (!(isJsonSelector(entry.key) &&
+            JsonExpression.isInlined(entry.value)))
+          entry.value,
       ...query.bindings['where'],
       ...query.bindings['order'],
     ];

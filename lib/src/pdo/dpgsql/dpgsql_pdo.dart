@@ -480,9 +480,14 @@ class DpgsqlPDO extends PDOInterface {
     if (password != null) {
       settings.password = password;
     }
-    final sslMode = config.sslmode;
-    if (sslMode != null) {
-      settings.sslMode = _sslMode(sslMode);
+    // libpq semantics: require (and allow/prefer) accept any certificate;
+    // verify-ca and verify-full verify it. dpgsql trusts every certificate
+    // by default ("Trust Server Certificate"), also with VerifyFull.
+    final sslMode = config.parsedSslMode;
+    settings.sslMode = _sslMode(sslMode);
+    if (sslMode != PDOSslMode.disable) {
+      settings.trustServerCertificate =
+          sslMode != PDOSslMode.verifyCa && sslMode != PDOSslMode.verifyFull;
     }
     final charset = config.charset;
     if (charset != null) {
@@ -578,21 +583,20 @@ class DpgsqlPDO extends PDOInterface {
     'Use Extended Query For Unparameterized Commands',
   };
 
-  static SslMode _sslMode(String raw) {
-    switch (raw.trim().toLowerCase().replaceAll('-', '')) {
-      case 'allow':
-        return SslMode.allow;
-      case 'prefer':
-        return SslMode.prefer;
-      case 'require':
-        return SslMode.require;
-      case 'verifyca':
-        return SslMode.verifyCa;
-      case 'verifyfull':
-        return SslMode.verifyFull;
-      case 'disable':
-      default:
+  static SslMode _sslMode(PDOSslMode mode) {
+    switch (mode) {
+      case PDOSslMode.disable:
         return SslMode.disable;
+      case PDOSslMode.allow:
+        return SslMode.allow;
+      case PDOSslMode.prefer:
+        return SslMode.prefer;
+      case PDOSslMode.require:
+        return SslMode.require;
+      case PDOSslMode.verifyCa:
+        return SslMode.verifyCa;
+      case PDOSslMode.verifyFull:
+        return SslMode.verifyFull;
     }
   }
 

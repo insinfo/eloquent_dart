@@ -12,6 +12,10 @@ mixin DetectsLostConnections {
   /// connection killed (MariaDB), 4031 disconnected for inactivity.
   static const _lostMySqlCodes = {2002, 2006, 2013, 1053, 1927, 4031};
 
+  /// A TLS handshake failure wrapped by a driver exception.
+  static final _tlsHandshakeInMessage = RegExp(
+      'HandshakeException|CertificateException|CERTIFICATE_VERIFY_FAILED');
+
   /// `MySQLServerException [2006]: ...`
   static final _mySqlCodeInMessage = RegExp(r'\[(\d{4})\]');
 
@@ -55,6 +59,11 @@ mixin DetectsLostConnections {
   /// statement may be retried on a new connection (outside transactions).
   ///
   bool causedByLostConnection(dynamic e) {
+    // A failed TLS handshake (a certificate verify-full rejects, no TLS on
+    // the server) is a configuration error: retrying only delays it.
+    if (e is HandshakeException || e is CertificateException) return false;
+    if (_tlsHandshakeInMessage.hasMatch('$e')) return false;
+
     // Network level: the socket was closed, reset or could not be opened.
     if (e is SocketException || e is TlsException) return true;
 

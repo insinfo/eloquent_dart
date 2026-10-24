@@ -33,19 +33,23 @@ class Fluent {
     return Utils.value(defaultP);
   }
 
-  /// Returns [attributes].
+  /// Returns [attributes] itself, not a copy as in PHP.
   Map getAttributes() {
     return attributes;
   }
 
   /// Encodes [attributes] as JSON.
+  ///
+  /// It returns a String, as Laravel's `toJson`, so `jsonEncode(fluent)`
+  /// gives a JSON string, not an object: encode [attributes] instead.
   String toJson() {
     return jsonEncode(attributes);
   }
 
-  /// Returns whether the attribute [offset] is set.
+  /// Returns whether the attribute [offset] is set and not null, as PHP's
+  /// `isset`.
   bool offsetExists(String offset) {
-    return this.attributes.containsKey(offset);
+    return this.attributes[offset] != null;
   }
 
   /// Returns the attribute [offset], or null when it is not set.
@@ -68,9 +72,10 @@ class Fluent {
     attributes[key] = value;
   }
 
-  /// Returns whether the attribute [key] is set.
+  /// Returns whether the attribute [key] is set and not null, as PHP's
+  /// `isset`.
   bool isset(String key) {
-    return attributes.containsKey(key);
+    return attributes[key] != null;
   }
 
   /// Removes the attribute [key].

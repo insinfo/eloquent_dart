@@ -76,8 +76,8 @@ sealed class Predicate {
 }
 
 /// `column <operator> ?`
-final class ComparisonPredicate extends Predicate {
-  const ComparisonPredicate(this.column, this.operator, this.value);
+final class CompPredicate extends Predicate {
+  const CompPredicate(this.column, this.operator, this.value);
 
   final String column;
   final CompOperator operator;

@@ -247,6 +247,7 @@ class Arr {
   /// Pluck: extrai valores de [value] e opcionalmente define
   /// a chave do array usando [key], ambos podem ser dot notation.
   /// Se [key] for fornecido, retorna Map; caso contrário, retorna List.
+  /// An item without a value at [key] is keyed by null (PHP uses `''`).
   static dynamic pluck(dynamic array, dynamic value, [dynamic key]) {
     var results = key == null ? <dynamic>[] : <dynamic, dynamic>{};
     var exploded = explodePluckParameters(value, key);
@@ -259,11 +260,8 @@ class Arr {
         if (keyPath == null) {
           (results as List).add(itemValue);
         } else {
-          var itemKey = dataGet(item, keyPath);
-          if (itemKey == null) {
-            itemKey = item;
-          }
-          (results as Map)[itemKey] = itemValue;
+          // An item without a key value is keyed by null.
+          (results as Map)[dataGet(item, keyPath)] = itemValue;
         }
       }
     } else if (array is Map) {
@@ -272,11 +270,7 @@ class Arr {
         if (keyPath == null) {
           (results as List).add(itemValue);
         } else {
-          var itemKey = dataGet(entry.value, keyPath);
-          if (itemKey == null) {
-            itemKey = entry.value;
-          }
-          (results as Map)[itemKey] = itemValue;
+          (results as Map)[dataGet(entry.value, keyPath)] = itemValue;
         }
       }
     }
@@ -301,7 +295,7 @@ class Arr {
       if (target is Map) {
         target = target[segment];
       } else if (target is List) {
-        var idx = int.tryParse(segment);
+        var idx = segment is int ? segment : int.tryParse(segment);
         if (idx == null || idx < 0 || idx >= target.length) {
           return null;
         }

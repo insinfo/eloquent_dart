@@ -34,7 +34,7 @@ class DargresPDO extends PDOInterface {
   // Same session as PostgresV2PDO._onOpen: client_encoding, timezone and
   // application_name go in the startup packet; search_path and the timeouts
   // run on every physical connection (pool slots and reconnects included)
-  // before it serves a query.
+  // before it serves a query. TLS follows sslmode (see _resolveSsl).
   dargres.ConnectionSettings _settings(bool allowAttemptToReconnect) {
     // dargres 4.0.0: TimeZoneSettings is immutable; pass the decode flags via
     // the constructor instead of mutating fields after construction.
@@ -78,9 +78,66 @@ class DargresPDO extends PDOInterface {
       sourceAddress: options.text('sourceAddress') ?? '',
       searchPath: config.schema,
       sessionStatements: config.postgresTimeoutStatements(),
+      sslContext: _sslContext,
       // postgres_fork (the default driver) returns numeric as an exact String.
       numericAsString: options.flag('numericAsString') ?? true,
     );
+  }
+
+  /// The TLS settings for `sslmode`, set by [_resolveSsl]: null is plain.
+  dargres.SslContext? _sslContext;
+
+  /// Sets [_sslContext] for `sslmode` (see [PDOSslMode]). require (and
+  /// allow/prefer when the server accepts TLS) accepts any certificate;
+  /// verify-ca and verify-full leave the verification to dart:io (trusted
+  /// chain and host name), which rejects a certificate it cannot verify.
+  Future<void> _resolveSsl() async {
+    _tlsOptional = false;
+    switch (config.parsedSslMode) {
+      case PDOSslMode.disable:
+        _sslContext = null;
+        break;
+      case PDOSslMode.allow:
+      case PDOSslMode.prefer:
+        _tlsOptional = await config.resolvePgSslMode() == PDOSslMode.require;
+        _sslContext =
+            _tlsOptional ? dargres.SslContext.createDefaultContext() : null;
+        break;
+      case PDOSslMode.require:
+        _sslContext = dargres.SslContext.createDefaultContext();
+        break;
+      case PDOSslMode.verifyCa:
+      case PDOSslMode.verifyFull:
+        _sslContext = dargres.SslContext();
+        break;
+    }
+  }
+
+  /// allow/prefer with a server that accepts TLS: a failed TLS handshake
+  /// falls back to a plain connection, as libpq does.
+  bool _tlsOptional = false;
+
+  /// Opens a CoreConnection with [_settings]. With [_tlsOptional], a failed
+  /// TLS handshake clears [_sslContext] and opens a plain one.
+  Future<dargres.CoreConnection> _openCore(bool allowAttemptToReconnect) async {
+    final core =
+        dargres.CoreConnection.fromSettings(_settings(allowAttemptToReconnect));
+    try {
+      await core.connect();
+      return core;
+    } catch (e) {
+      final tlsFailure =
+          '$e'.contains('HandshakeException') || '$e'.contains('TlsException');
+      if (!_tlsOptional || _sslContext == null || !tlsFailure) rethrow;
+      try {
+        await core.close();
+      } catch (_) {}
+      _sslContext = null;
+      final plain = dargres.CoreConnection.fromSettings(
+          _settings(allowAttemptToReconnect));
+      await plain.connect();
+      return plain;
+    }
   }
 
   @override
@@ -90,8 +147,8 @@ class DargresPDO extends PDOInterface {
   /// reconnect by itself: the listener reconnects and runs LISTEN again.
   @override
   Future<PDONotificationConnection> openNotificationConnection() async {
-    final core = dargres.CoreConnection.fromSettings(_settings(false));
-    await core.connect();
+    await _resolveSsl();
+    final core = await _openCore(false);
     return PDONotificationConnection(
       notifications: core.notifications.map((n) => DriverNotification(
           n['channel'] as String,
@@ -104,14 +161,18 @@ class DargresPDO extends PDOInterface {
 
   //called from postgres_connector.dart
   Future<DargresPDO> connect() async {
-    final settings = _settings(config.allowReconnect ?? false);
+    await _resolveSsl();
 
     if (config.pool == true) {
-      connection = dargres.PostgreSqlPool(config.poolSize ?? 1, settings,
+      if (_tlsOptional) {
+        // The pool connects later: one connection tells whether TLS works.
+        await (await _openCore(false)).close();
+      }
+      connection = dargres.PostgreSqlPool(
+          config.poolSize ?? 1, _settings(config.allowReconnect ?? false),
           allowAttemptToReconnect: config.allowReconnect ?? false);
     } else {
-      connection = dargres.CoreConnection.fromSettings(settings);
-      await connection!.connect();
+      connection = await _openCore(config.allowReconnect ?? false);
     }
 
     return this;

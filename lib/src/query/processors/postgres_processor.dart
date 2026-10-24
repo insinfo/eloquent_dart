@@ -13,13 +13,8 @@ class PostgresProcessor extends Processor {
     return id;
   }
 
-  /// Maps each row of a column listing query to its `column_name`.
+  /// Maps each row (a map) of a column listing query to its `column_name`.
   List processColumnListing(List results) {
-    var mapping = (item) {
-      var r = item;
-      return r.column_name;
-    };
-
-    return Utils.array_map(mapping, results);
+    return [for (final row in results) (row as Map)['column_name']];
   }
 }

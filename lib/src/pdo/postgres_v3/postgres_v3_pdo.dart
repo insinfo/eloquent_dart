@@ -65,9 +65,7 @@ class PostgresV3PDO extends PDOInterface {
       password: config.password,
     );
 
-    final sslMode = config.sslmode?.toString() == 'require'
-        ? SslMode.require
-        : SslMode.disable;
+    final sslMode = await _sslMode();
     // driver_options: ConnectionSettings / PoolSettings fields (durations as
     // Duration or seconds; queryMode 'extended' or 'simple').
     final options = config.driverOptionsFor('postgres_v3', {
@@ -133,6 +131,25 @@ class PostgresV3PDO extends PDOInterface {
     return this;
   }
 
+  /// The postgres 3.x SSL mode for `sslmode` (see [PDOSslMode]). The
+  /// package has no allow/prefer: those use TLS when the server accepts it
+  /// (asked before connecting) and plain otherwise. verify-ca is
+  /// [SslMode.verifyFull]: dart:io verifies the chain and the host name
+  /// together.
+  Future<SslMode> _sslMode() async {
+    switch (await config.resolvePgSslMode()) {
+      case PDOSslMode.disable:
+      case PDOSslMode.allow:
+      case PDOSslMode.prefer:
+        return SslMode.disable;
+      case PDOSslMode.require:
+        return SslMode.require;
+      case PDOSslMode.verifyCa:
+      case PDOSslMode.verifyFull:
+        return SslMode.verifyFull;
+    }
+  }
+
   static QueryMode? _queryMode(String? name) {
     if (name == null) return null;
     for (final mode in QueryMode.values) {
@@ -163,9 +180,7 @@ class PostgresV3PDO extends PDOInterface {
             await _onOpen(conn, config);
           },
           encoding: _getEncoding(config.charset ?? 'utf8'),
-          sslMode: config.sslmode?.toString() == 'require'
-              ? SslMode.require
-              : SslMode.disable,
+          sslMode: await _sslMode(),
           typeRegistry: postgresV3TypeRegistry(config),
         ));
     return PDONotificationConnection(
@@ -179,19 +194,28 @@ class PostgresV3PDO extends PDOInterface {
   }
 
   /// inicializa configurações ao conectar com o banco de dados
+  /// The values are quoted as string literals; the schema comes formatted
+  /// by PostgresConnector.formatSchema (quoted identifiers), and an empty
+  /// one sets no search_path.
   Future<void> _onOpen(Connection conn, PDOConfig dsnParser) async {
-    if (dsnParser.charset != null) {
-      await conn.execute("SET client_encoding = '${dsnParser.charset}'");
+    final charset = dsnParser.charset;
+    if (charset != null) {
+      await conn.execute(
+          'SET client_encoding = ${PDOConfig.quotePgLiteral(charset)}');
     }
-    if (dsnParser.schema != null) {
-      await conn.execute("SET search_path TO ${dsnParser.schema}");
+    final schema = dsnParser.schema;
+    if (schema != null && schema.trim().isNotEmpty) {
+      await conn.execute('SET search_path TO $schema');
     }
-    if (dsnParser.timezone != null) {
-      await conn.execute("SET timezone TO '${dsnParser.timezone}'");
-    }
-    if (dsnParser.applicationName != null) {
+    final timezone = dsnParser.timezone;
+    if (timezone != null) {
       await conn
-          .execute("SET application_name TO '${dsnParser.applicationName}'");
+          .execute('SET timezone TO ${PDOConfig.quotePgLiteral(timezone)}');
+    }
+    final applicationName = dsnParser.applicationName;
+    if (applicationName != null) {
+      await conn.execute('SET application_name TO '
+          '${PDOConfig.quotePgLiteral(applicationName)}');
     }
     // statement/lock/idle-in-transaction timeouts, as in the other adapters.
     for (final statement in dsnParser.postgresTimeoutStatements()) {

@@ -288,14 +288,16 @@ class QueryBuilder {
   /// Inserts the rows selected by [query] into [columns] of the table:
   /// `insert into table (columns) select ...`.
   ///
-  /// [query] is a [QueryBuilder], a `Function(QueryBuilder)` or raw SQL.
-  /// Returns the driver's insert result.
+  /// [query] is a [QueryBuilder], a `Function(QueryBuilder)` or raw SQL. The
+  /// common table expressions of this builder ([withExpression]) are
+  /// compiled into the insert. Returns the driver's insert result.
   Future<dynamic> insertUsing(columns, query) async {
     final sub = this.createSub(query);
     final sql = sub[0];
     final subBindings = sub[1];
 
-    // The CTE bindings come first, then the subquery's.
+    // The CTEs come before the select in the SQL of every grammar, so their
+    // bindings come first, then the subquery's.
     final List<dynamic> exprBindings = bindings['expressions'] ?? <dynamic>[];
 
     final List<dynamic> mergedBindings = [
@@ -812,7 +814,7 @@ class QueryBuilder {
   /// - Without [operator] the clause is `column is null`.
   /// - A `Function(QueryBuilder)` value is a subquery, as in [whereSub].
   ///
-  /// Unlike [where], a list value is spread into one binding per element.
+  /// As in [where], a list value is one binding for its one placeholder.
   ///
   /// ```dart
   /// query.whereFlex('email', 'test@example.com'); // "email" = ?
@@ -895,7 +897,8 @@ class QueryBuilder {
     });
 
     if (!(finalValue is QueryExpression)) {
-      this.addBinding(finalValue, 'where');
+      // One placeholder, one binding (addBinding spreads a bare list).
+      this.addBinding([finalValue], 'where');
     }
 
     return this;
@@ -1537,17 +1540,26 @@ class QueryBuilder {
 
   /// Adds `column between ? and ?` (`not between` when [not]).
   ///
-  /// [values] holds the two bounds, both included. Its length is not
-  /// checked; the SQL always has two placeholders.
+  /// [values] holds the two bounds, both included; anything other than two
+  /// bounds throws [ArgumentError]. A [QueryExpression] bound is inlined.
   QueryBuilder whereBetween(String column,
       [List? values, String boolean = SqlBool.and, bool not = false]) {
+    if (values == null || values.length != 2) {
+      throw ArgumentError.value(
+          values, 'values', 'Must hold exactly two bounds.');
+    }
     const type = SqlWhereType.between;
 
-    this
-        .wheresProp
-        .add({'column': column, 'type': type, 'boolean': boolean, 'not': not});
+    this.wheresProp.add({
+      'column': column,
+      'type': type,
+      'values': values,
+      'boolean': boolean,
+      'not': not
+    });
 
-    this.addBinding(values, 'where');
+    this.addBinding(
+        [...values.where((value) => value is! QueryExpression)], 'where');
 
     return this;
   }
@@ -1788,8 +1800,9 @@ class QueryBuilder {
 
   // --- PostgreSQL JSON / array / full-text helpers -------------------------
 
-  /// Adds a JSON containment condition: `("column")::jsonb @> ?`
-  /// (PostgreSQL; other grammars throw [UnsupportedError]).
+  /// Adds a JSON containment condition: `("column")::jsonb @> ?` on
+  /// PostgreSQL, `json_contains(column, ?[, path])` on MySQL/MariaDB; other
+  /// grammars throw [UnsupportedError].
   ///
   /// [value] is JSON-encoded and bound; a [QueryExpression] is inlined. Use
   /// for jsonb columns and arrays, e.g. `whereJsonContains('tags', ['urgent'])`
@@ -1933,8 +1946,7 @@ class QueryBuilder {
   }
 
   /// Compares the time part of [column] with [value] (e.g. `'12:00:00'`):
-  /// `time("column") op ?` on MySQL, `extract(time from "column") op ?` on
-  /// PostgreSQL.
+  /// `time("column") op ?` on MySQL, `"column"::time op ?` on PostgreSQL.
   QueryBuilder whereTime(String column, String operator, dynamic value,
       [String boolean = SqlBool.and]) {
     return this.addDateBasedWhere('Time', column, operator, value, boolean);
@@ -2320,9 +2332,10 @@ class QueryBuilder {
 
   /// Orders the results randomly: `order by RANDOM()`.
   ///
-  /// On MySQL [seed] is inlined as `RAND(seed)` (not bound, so it must not
-  /// come from user input); other grammars ignore it.
-  QueryBuilder inRandomOrder([String seed = '']) {
+  /// On MySQL [seed] is inlined as `RAND(seed)`: it must be an int or the
+  /// decimal text of one, anything else throws [ArgumentError]. Other
+  /// grammars ignore it.
+  QueryBuilder inRandomOrder([Object? seed = '']) {
     final randomExpression = this.grammar.compileRandom(seed);
     return this.orderByRaw(randomExpression);
   }
@@ -2645,11 +2658,15 @@ class QueryBuilder {
       this.columnsProp = columnsP;
     }
 
-    final resultRunSelect = await this.runSelect(timeoutInSeconds);
-    var results = this.processor.processSelect(this, resultRunSelect);
-
-    if (!hadColumns) {
-      this.columnsProp = null;
+    List<Map<String, dynamic>> results;
+    try {
+      final resultRunSelect = await this.runSelect(timeoutInSeconds);
+      results = this.processor.processSelect(this, resultRunSelect);
+    } finally {
+      // Restored even when the query fails, so the builder stays usable.
+      if (!hadColumns) {
+        this.columnsProp = null;
+      }
     }
     if (this.afterQueryCallbacks.isNotEmpty && this.aggregateProp == null) {
       results = await _applyAfterQuery(results);
@@ -3440,15 +3457,35 @@ class QueryBuilder {
 
   /// Returns the smallest value of [column], or null when there are no
   /// rows.
-  Future<num?> min(String column) async {
-    final result = await this.aggregate("min", [column]);
-    return result is String ? num.tryParse(result) : result;
+  ///
+  /// The value is the driver's: a `DateTime` for a date column, a `String`
+  /// for a text column (and for a PostgreSQL `numeric`). When [T] is a
+  /// numeric type (`num`, `int`, `double`), given or inferred as in
+  /// `final num? m = await q.min('price')`, a text value is parsed (null if
+  /// it is not a number) and the number converted to [T].
+  Future<T?> min<T>(String column) async {
+    return _minMaxResult<T>(await this.aggregate("min", [column]));
   }
 
-  /// Returns the largest value of [column], or null when there are no rows.
-  Future<num?> max(String column) async {
-    final result = await this.aggregate("max", [column]);
-    return result is String ? num.tryParse(result) : result;
+  /// Returns the largest value of [column], or null when there are no rows;
+  /// the value is typed as in [min].
+  Future<T?> max<T>(String column) async {
+    return _minMaxResult<T>(await this.aggregate("max", [column]));
+  }
+
+  static T? _minMaxResult<T>(dynamic result) {
+    if (result == null) return null;
+    // `<T>[] is List<num?>` holds for num, int and double (nullable or not),
+    // not for dynamic or Object.
+    if (<T>[] is List<num?>) {
+      // A value that is neither a number nor text (a DateTime) throws.
+      num? number = result is String ? num.tryParse(result) : result as num;
+      if (number == null) return null;
+      if (<T>[] is List<int?>) number = number.toInt();
+      if (<T>[] is List<double?>) number = number.toDouble();
+      return number as T;
+    }
+    return result as T;
   }
 
   /// Returns the sum of [column], or null when there are no rows (SQL
@@ -3868,7 +3905,7 @@ class QueryBuilder {
       await this.connection.select(
           'select pg_advisory_xact_lock(hashtextextended(?, 0))', [key], false);
     }
-    final max = await query.max(column);
+    final max = await query.max<num>(column);
     return max == null ? start : max.toInt() + 1;
   }
 
@@ -4181,13 +4218,13 @@ class QueryBuilder {
     return this.bindings;
   }
 
-  /// Replaces the bindings of [type]; throws [ArgumentError] for an unknown
-  /// type.
-  QueryBuilder setBindings(Map<String, dynamic> bindingsP, [type = 'where']) {
+  /// Replaces the bindings of [type] with [bindingsP], one value per
+  /// placeholder; throws [ArgumentError] for an unknown type.
+  QueryBuilder setBindings(List bindingsP, [String type = 'where']) {
     if (!bindings.containsKey(type)) {
       throw ArgumentError.value(type, 'type', 'Invalid binding type.');
     }
-    bindings[type] = bindingsP;
+    bindings[type] = [...bindingsP];
     return this;
   }
 
@@ -4282,8 +4319,8 @@ class QueryBuilder {
   /// [bindings] for its `?` placeholders.
   ///
   /// [on] adds the `on` conditions to the [JoinClause] (`onRaw` included).
-  /// Only a `cross` join may go without them: any other type compiles an
-  /// empty `on`.
+  /// Only a `cross` join may go without them: any other type without a
+  /// condition throws [ArgumentError] (it would compile an invalid join).
   ///
   /// ```dart
   /// qb.joinRaw('(select * from foo) as f', [], SqlJoin.inner,
@@ -4298,17 +4335,22 @@ class QueryBuilder {
     final tableExpr = QueryExpression(tableExpression);
 
     final join = JoinClause(type, tableExpr, this);
+    if (on != null) {
+      on(join);
+    }
+    if (join.clauses.isEmpty && type.toLowerCase() != SqlJoin.cross) {
+      throw ArgumentError.value(on, 'on',
+          'A "$type" join needs at least one condition; use SqlJoin.cross.');
+    }
+
     this.joinsProp.add(join);
 
+    // The table expression's placeholders come before the conditions'.
     if (bindings.isNotEmpty) {
       this.addBinding(bindings, 'join');
     }
-
-    if (on != null) {
-      on(join);
-      if (join.bindingsLocal.isNotEmpty) {
-        this.addBinding(join.bindingsLocal, 'join');
-      }
+    if (join.bindingsLocal.isNotEmpty) {
+      this.addBinding(join.bindingsLocal, 'join');
     }
 
     return this;
@@ -4317,30 +4359,33 @@ class QueryBuilder {
   /// Inserts [values] in one statement:
   /// `INSERT INTO table (...) VALUES (...), (...), ...`.
   ///
-  /// The columns are the keys of the first row; a row without one of them
-  /// binds null. Every value is bound (a [QueryExpression] is not inlined),
-  /// and nothing is returned. One statement is limited by the database's
-  /// parameter limit (65535 on PostgreSQL); [copyInto] splits large loads.
+  /// The columns are the keys of every row, in the order they first appear;
+  /// a row without one of them binds null. A [QueryExpression] value is
+  /// inlined. Returns the driver's [PDOResults] (empty, with no rows
+  /// affected, for an empty [values]). One statement is limited by the
+  /// database's parameter limit (65535 on PostgreSQL); [copyInto] splits
+  /// large loads.
   Future<dynamic> insertMany(List<Map<String, dynamic>> values) async {
     if (values.isEmpty) {
-      return;
+      return PDOResults(<Map<String, dynamic>>[], 0);
     }
     final table = grammar.wrapTable(fromProp);
-    final columns = values.first.keys.toList();
+    final columns = <String>{for (final row in values) ...row.keys}.toList();
     final columnsSql = grammar.columnize(columns);
-    final singleRowPlaceholders =
-        '(${List.filled(columns.length, '?').join(', ')})';
-    final allPlaceholders =
-        List.filled(values.length, singleRowPlaceholders).join(', ');
-    final sql = 'INSERT INTO $table ($columnsSql) VALUES $allPlaceholders';
     // Row by row, in the order of the columns.
+    final rowsSql = <String>[];
     final bindings = <dynamic>[];
     for (final row in values) {
+      final parameters = <String>[];
       for (final column in columns) {
-        bindings.add(row[column]);
+        final value = row[column];
+        parameters.add(grammar.parameter(value));
+        bindings.add(value);
       }
+      rowsSql.add('(${parameters.join(', ')})');
     }
-    await connection.insert(sql, bindings);
+    final sql = 'INSERT INTO $table ($columnsSql) VALUES ${rowsSql.join(', ')}';
+    return connection.insert(sql, this.cleanBindings(bindings));
   }
 
   /// Adds an amount to several columns at once

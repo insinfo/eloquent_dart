@@ -346,6 +346,13 @@ await db.transactionScope((ctx) async {
 });
 ```
 
+`outsideTransaction` takes another connection of the pool while the scope's
+transaction holds one: it needs `'pool': true` and `'poolsize' >= 2` (it
+throws `StateError` otherwise). It still waits for a free connection, so when
+every connection of the pool is held by a scope that calls
+`outsideTransaction`, they wait for each other until the pool's timeout: size
+the pool above the number of such scopes that run at the same time.
+
 The scope is a `Zone` value, so it covers only the async calls of the
 callback; other requests on the same `db` are not affected. Inside it
 `db.isInTransaction` and `db.isInTransactionScope` are true and
@@ -1132,6 +1139,29 @@ authentication, on every request: in the load test
 (`test/stress_newsali_style_integration_test.dart`, an HTTP server on several
 isolates) it served about 70 requests/s against 500 to 1200 with a pool of 8,
 and under load it can exceed the server's `max_connections`.
+
+When a statement fails because the connection was lost, it runs again only
+if the driver refused it before sending it (a connection the server had
+already closed); otherwise the error is thrown, since a write may have been
+committed. What happens to the connection depends on `pool_reconnect`:
+
+```dart
+manager.addConnection({
+  // ...
+  'pool': true,
+  'poolsize': 8,
+  'pool_reconnect': 'keep', // 'keep' (default) | 'replace'
+});
+```
+
+| | `keep` (default) | `replace` |
+|---|---|---|
+| One connection ended by the server (`pg_terminate_backend`, `idle_session_timeout`, a dropped socket) | only the statement on that connection fails; the pool discards it | the pool is closed and remade: the statements other requests run on it fail too |
+| Cost | none: the pool opens a new connection when needed | every connection of the pool is reopened at once |
+| Server restart (every connection dead) | the pool discards each dead connection when it is used | one clean replacement |
+
+Without a pool the connection is always reopened. `db.reconnect()` called
+directly always reconnects (and replaces a pool).
 
 ```dart
     var manager = new Manager();

@@ -40,9 +40,9 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   @Deprecated('Use transactionLevel() / isInTransaction.')
   int get transactions => transactionLevel();
 
-  /// Query log, listeners and pretend state. Shared with the connections
-  /// handed to transaction callbacks, so queries run through `ctx` are logged
-  /// and reported like the others.
+  /// Query log and listeners. Shared with the connections handed to
+  /// transaction callbacks, so queries run through `ctx` are logged and
+  /// reported like the others.
   _QueryObservers _observers = _QueryObservers();
 
   /// The queries run on this connection while logging is on: maps with
@@ -54,8 +54,14 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   bool get loggingQueries => _observers.logging;
   set loggingQueries(bool value) => _observers.logging = value;
 
-  /// Whether the connection is in a "dry run"; see [pretend].
-  bool get pretendingProp => _observers.pretending;
+  /// Whether the current code runs in a "dry run"; see [pretend].
+  ///
+  /// Setting it puts the whole connection (every request that uses it, and
+  /// its transaction connections) in a dry run until it is set back to
+  /// false; [pretend] only affects the code of its callback.
+  @Deprecated('Use pretend() and pretending().')
+  bool get pretendingProp => pretending();
+  @Deprecated('Use pretend() and pretending().')
   set pretendingProp(bool value) => _observers.pretending = value;
 
   /// The name of the connected database.
@@ -72,8 +78,9 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   doctrine.DoctrineConnection? doctrineConnection;
   AbstractSchemaManager? doctrineSchemaManager;
 
+  /// How many times [tryAgainIfCausedByLostConnection] reconnects and runs a
+  /// statement again before giving up.
   int tryReconnectLimit = 10;
-  int tryReconnectCount = 0;
 
   /// Creates a connection over [pdo], with the database name, table prefix
   /// and configuration options.
@@ -92,7 +99,35 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
     // so we initialize these to their default values while starting.
     useDefaultQueryGrammar();
     useDefaultPostProcessor();
+    _poolReconnect = parsePoolReconnect(_config['pool_reconnect']);
   }
+
+  /// `'keep'` or `'replace'`; see [parsePoolReconnect].
+  late final String _poolReconnect;
+
+  /// Parses the `pool_reconnect` option, which decides what a lost
+  /// connection does with `'pool': true`:
+  ///
+  /// - `'keep'` (the default): the pool is kept. The pool discards the dead
+  ///   connection and opens a new one when needed, so the statements other
+  ///   requests run on the pool are not affected.
+  /// - `'replace'`: the pool is closed and a new one is made (through the
+  ///   [reconnector]); the statements other requests run on the old pool
+  ///   fail.
+  ///
+  /// Without a pool the connection is always reopened. Throws
+  /// [ArgumentError] for another value.
+  static String parsePoolReconnect(Object? value) {
+    if (value == null) return 'keep';
+    final mode = value.toString().toLowerCase();
+    if (mode == 'keep' || mode == 'replace') return mode;
+    throw ArgumentError.value(
+        value, 'pool_reconnect', "Expected 'keep' or 'replace'.");
+  }
+
+  /// Whether a lost connection is left to the pool ([parsePoolReconnect]).
+  bool get _keepsPool =>
+      _poolReconnect == 'keep' && pdo.getConfig().pool == true;
 
   /// Sets the query grammar to [getDefaultQueryGrammar].
   void useDefaultQueryGrammar() {
@@ -174,13 +209,19 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   ///
   /// With [useReadPdo] it runs on [getReadPdo], else on [pdo]. In a "dry
   /// run" ([pretend]) it returns no rows.
+  ///
+  /// After a lost connection it is run again on a new one only when the
+  /// driver refused it before sending it (see
+  /// [tryAgainIfCausedByLostConnection]): a select can have side effects
+  /// (`nextval`, a function that writes), so one that may have reached the
+  /// server is not run twice.
   Future<List<Map<String, dynamic>>> select(String query,
       [List bindings = const [],
       bool useReadPdo = true,
       int? timeoutInSeconds]) async {
     //print('Connection@select timeout $timeoutInSeconds');
 
-    final res = await this.run(query, bindings,
+    final res = await this._run(query, bindings,
         (me, query, bindings, timeoutInSeconds) async {
       if (me.pretending()) {
         return <Map<String, dynamic>>[];
@@ -216,12 +257,12 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
       return;
     }
     if (this.pretending()) {
-      _reportQuery(query, bindings, Duration.zero, null);
+      _reportQuery(query, bindings, Duration.zero, null, _pretendScope());
       return;
     }
     final pdoL = this.getPdoForSelect(useReadPdo);
     if (!pdoL.supportsQueryStream) {
-      yield* _sqlCursor(query, bindings, fetchSize);
+      yield* _sqlCursor(pdoL, query, bindings, fetchSize);
       return;
     }
     final params = this.prepareBindings(bindings);
@@ -246,11 +287,12 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
 
   /// [cursor] for drivers without an incremental reader, on PostgreSQL:
   /// `DECLARE name NO SCROLL CURSOR FOR <query>` and `FETCH FORWARD n` in a
-  /// loop, inside the current transaction or one opened for the stream (and
-  /// closed when it ends or is cancelled). Rows are fetched [fetchSize]
-  /// (default 1000) at a time and only when the consumer asks for them.
+  /// loop, inside the current transaction or one opened for the stream on
+  /// [pdoL] (and closed when it ends or is cancelled; cancelling the
+  /// subscription waits for that). Rows are fetched [fetchSize] (default
+  /// 1000) at a time and only when the consumer asks for them.
   Stream<Map<String, dynamic>> _sqlCursor(
-      String query, List bindings, int? fetchSize) {
+      PDOExecutionContext pdoL, String query, List bindings, int? fetchSize) {
     if (_resolvedDriverName() != 'pgsql') {
       throw UnsupportedError(
           'cursor() needs the dpgsql adapter or PostgreSQL (SQL cursors); on '
@@ -264,10 +306,12 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
     // consumed: the rows are handed over through a paused controller.
     late StreamController<Map<String, dynamic>> controller;
     Completer<void>? resumed;
+    Future<void>? running;
     var cancelled = false;
     controller = StreamController<Map<String, dynamic>>(
       onListen: () {
-        transaction((ctx) async {
+        running = pdoL.pdoInstance.runInTransaction((pdoCtx) async {
+          final ctx = _childConnection(pdoCtx);
           await for (final row
               in _fetchCursor(ctx, name, query, bindings, size)) {
             if (cancelled) break;
@@ -276,8 +320,11 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
               await (resumed = Completer<void>()).future;
             }
           }
-        }).then((_) => controller.close(), onError: (Object e, StackTrace s) {
+        }).then<void>((_) {}, onError: (Object e, StackTrace s) {
           if (!cancelled) controller.addError(e, s);
+        }).whenComplete(() {
+          // Not awaited: after a cancel, close() waits for onCancel, which
+          // waits for this future.
           controller.close();
         });
       },
@@ -292,6 +339,9 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
         final waiting = resumed;
         resumed = null;
         if (waiting != null && !waiting.isCompleted) waiting.complete();
+        // `subscription.cancel()` completes once the cursor is closed and
+        // the transaction ended.
+        return running;
       },
     );
     return controller.stream;
@@ -755,18 +805,31 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   /// normally (another connection of the pool), and are not rolled back with
   /// the scope. Outside a scope it just runs [callback].
   ///
-  /// Inside a scope it needs a pool (`'pool': true`): with a single
-  /// connection there is no "outside" while the transaction holds it, so it
-  /// throws [StateError] instead of waiting for the transaction forever.
+  /// Inside a scope it needs a pool of at least 2 connections (`'pool':
+  /// true`, `'poolsize' >= 2`): with a single connection there is no
+  /// "outside" while the transaction holds it, so it throws [StateError]
+  /// instead of waiting for the transaction forever. With a pool it still
+  /// waits for a free connection: when every connection of the pool is held
+  /// by a transaction that calls `outsideTransaction`, they wait for each
+  /// other until the pool's connect/acquire timeout. Size the pool above the
+  /// number of such transactions running at the same time.
   Future<T> outsideTransaction<T>(FutureOr<T> Function() callback) async {
     final root = _root ?? this;
-    if (root.isInTransactionScope && root.getConfig('pool') != true) {
+    if (root.isInTransactionScope && !root._poolHasSecondConnection()) {
       throw StateError(
           'outsideTransaction() inside a transactionScope needs a connection '
-          "pool ('pool': true): with a single connection the query would wait "
-          'for the transaction to end.');
+          "pool of at least 2 connections ('pool': true, 'poolsize' >= 2): "
+          'the transaction holds the only connection, so the query would '
+          'wait for the transaction to end.');
     }
     return await runZoned(callback, zoneValues: {root._scopeKey: null});
+  }
+
+  /// Whether the PDO is a pool that can hand out a connection while the
+  /// transaction holds another one (the adapters default to a pool of one).
+  bool _poolHasSecondConnection() {
+    final config = pdo.getConfig();
+    return config.pool == true && (config.poolSize ?? 1) >= 2;
   }
 
   /// Whether the current code runs inside a [transactionScope] of this
@@ -817,54 +880,84 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   /// Runs [callback] in "dry run" mode and returns the queries it would have
   /// run.
   ///
-  /// [callback] receives this connection. No statement reaches the
-  /// database: selects return no rows and other statements report nothing
-  /// done. The result holds query log entries ([queryLog]).
+  /// [callback] receives this connection (or takes no parameters). No
+  /// statement reaches the database: selects return no rows and other
+  /// statements report nothing done. The result holds query log entries
+  /// ([queryLog]); the connection's own query log is not changed.
+  ///
+  /// The dry run covers only the async calls of [callback] (it is a
+  /// [Zone], as in [transactionScope]): queries of other requests on the
+  /// same connection run normally, and a nested `pretend` returns its own
+  /// queries and leaves the outer one pretending. A query started in
+  /// [callback] but run after it returned (an unawaited future) is not
+  /// pretended.
   Future<dynamic> pretend(Function callback) async {
-    final loggingQueries = this.loggingQueries;
-    final previousLog = this.queryLog;
-
-    this.enableQueryLog();
-    this.pretendingProp = true;
-    this.queryLog = [];
-
-    // Basically to make the database connection "pretend", we will just
-    // return the default values for all the query methods, then we will
-    // return the queries that were "executed" within the callback.
-    // The callback is awaited (it used to return before an async callback
-    // ran, giving an empty log).
-    final List log;
+    final scope = _PretendScope();
+    _openPretends++;
     try {
-      await callback(this);
+      // Basically to make the database connection "pretend", we will just
+      // return the default values for all the query methods, then we will
+      // return the queries that were "executed" within the callback.
+      await runZoned(
+          () async =>
+              await (callback is Function() ? callback() : callback(this)),
+          zoneValues: {(_root ?? this)._pretendKey: scope});
     } finally {
-      log = this.queryLog;
-      this.pretendingProp = false;
-      this.loggingQueries = loggingQueries;
-      this.queryLog = previousLog;
+      scope.active = false;
+      _openPretends--;
     }
-    return log;
+    return scope.log;
+  }
+
+  /// Zone key of the [pretend] calls of this (root) connection.
+  final Object _pretendKey = Object();
+
+  /// [pretend] calls running in this isolate; while 0 no query looks up the
+  /// zone.
+  static int _openPretends = 0;
+
+  /// The [pretend] call the current code runs in, on this connection or the
+  /// one it was made from for a transaction.
+  _PretendScope? _pretendScope() {
+    if (_openPretends == 0) return null;
+    final scope = Zone.current[(_root ?? this)._pretendKey];
+    return scope is _PretendScope && scope.active ? scope : null;
   }
 
   /// Runs [query] through [callback] and returns what it returns.
   ///
   /// The statement is timed and reported to the query log and the
   /// [listen] listeners when any is active. A unique constraint violation
-  /// is rethrown as a [UniqueConstraintViolationException]; after a lost
-  /// connection the statement may be run again, see
-  /// [tryAgainIfCausedByLostConnection].
+  /// is rethrown as a [UniqueConstraintViolationException]. After a lost
+  /// connection it reconnects; the statement is run again only when the
+  /// driver refused it before sending it, since a write may have been
+  /// committed before the connection dropped (see
+  /// [tryAgainIfCausedByLostConnection]).
   Future<dynamic> run(
       String query,
       dynamic bindings,
       Future<dynamic> Function(Connection con, String query, dynamic bindings,
               int? timeoutInSeconds)
           callback,
-      [int? timeoutInSeconds]) async {
+      [int? timeoutInSeconds]) {
+    return _run(query, bindings, callback, timeoutInSeconds);
+  }
+
+  /// [run], with the ambient transaction and [pretend] applied.
+  Future<dynamic> _run(
+      String query,
+      dynamic bindings,
+      Future<dynamic> Function(Connection con, String query, dynamic bindings,
+              int? timeoutInSeconds)
+          callback,
+      int? timeoutInSeconds) async {
     final ambient = _ambient();
     if (ambient != null) {
-      return ambient.run(query, bindings, callback, timeoutInSeconds);
+      return ambient._run(query, bindings, callback, timeoutInSeconds);
     }
+    final pretend = _pretendScope();
     // Fast path: nothing observes the queries, so nothing is timed.
-    if (!_observers.active) {
+    if (!_observers.active && pretend == null) {
       return _runUnobserved(query, bindings, callback, timeoutInSeconds);
     }
     final watch = Stopwatch()..start();
@@ -876,7 +969,7 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
       rethrow;
     } finally {
       watch.stop();
-      _reportQuery(query, bindings, watch.elapsed, error);
+      _reportQuery(query, bindings, watch.elapsed, error, pretend);
     }
   }
 
@@ -887,19 +980,14 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
               int? timeoutInSeconds)
           callback,
       int? timeoutInSeconds) async {
-    //this.reconnectIfMissingConnection();
-
-    //var start = Utils.microtime();
     var result;
     // Here we will run this query. If an exception occurs we'll determine if
     // it was caused by a connection that has been lost. If that is the cause,
-    // we'll try to re-establish connection and re-run the query with a fresh
-    // connection.
+    // we'll try to re-establish connection and, when that is safe, re-run
+    // the query with a fresh connection.
     try {
-      // print('Connection@run');
       result = await this
           .runQueryCallback(query, bindings, callback, timeoutInSeconds);
-      //print('Connection@run $result');
     } catch (e, stackTrace) {
       final unique = UniqueConstraintViolationException.fromDriverError(
           e, query, bindings);
@@ -929,16 +1017,31 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
     return result;
   }
 
-  /// Runs the statement again after [e] if [e] was caused by a lost
-  /// connection.
+  /// Reconnects and runs the statement again after [e] if [e] was caused by
+  /// a lost connection and running it again is safe.
   ///
   /// Rethrows [e] (with [stackTrace]) when it was not caused by a lost
   /// connection, inside a transaction (the transaction was lost with the
-  /// connection) or without a [reconnector]. Otherwise it reconnects and
-  /// runs [callback] again, up to [tryReconnectLimit] times, waiting
-  /// [delay] milliseconds times the attempt number (at most 5 s) before
-  /// each one. An error not caused by a lost connection is rethrown at
-  /// once; when the attempts run out, the last error is thrown.
+  /// connection) or without a [reconnector].
+  ///
+  /// A statement that may have reached the server is not run again: a write
+  /// the server committed just before the connection dropped would be
+  /// written twice, and a select can have side effects too (`nextval`, a
+  /// function that writes). Then it reconnects, so the next statement
+  /// works, and rethrows [e]. A statement is run again only when the driver
+  /// refused it before sending it, because it already knew the connection
+  /// was closed (the server ended an idle session; see
+  /// [causedByLostConnectionBeforeSending]).
+  ///
+  /// With `'pool': true` and `pool_reconnect: 'keep'` (the default) it does
+  /// not reconnect: the pool already discarded the dead connection, and the
+  /// statement runs again on another one (see [parsePoolReconnect]).
+  ///
+  /// Otherwise it reconnects and runs [callback] again, up to
+  /// [tryReconnectLimit] times, waiting [delay] milliseconds times the
+  /// attempt number (at most 5 s) before each one. An error not caused by a
+  /// lost connection is rethrown at once; when the attempts run out, the
+  /// last error is thrown.
   Future<dynamic> tryAgainIfCausedByLostConnection(
       dynamic e,
       String query,
@@ -956,42 +1059,127 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
         this.reconnector == null) {
       Error.throwWithStackTrace(e as Object, stackTrace ?? StackTrace.current);
     }
+    if (!causedByLostConnectionBeforeSending(e)) {
+      await _reconnectForNextStatement();
+      Error.throwWithStackTrace(e as Object, stackTrace ?? StackTrace.current);
+    }
 
+    // Counted per call: concurrent statements retry independently.
+    final keepPool = _keepsPool;
     Object lastError = e;
-    tryReconnectCount = 0;
-    while (tryReconnectCount < tryReconnectLimit) {
-      tryReconnectCount++;
-      // Linear backoff, capped at 5 s.
-      final wait = delay * tryReconnectCount;
+    for (var attempt = 1; attempt <= tryReconnectLimit; attempt++) {
+      // Linear backoff, capped at 5 s. A kept pool hands another connection
+      // at once, so its first attempt does not wait.
+      final wait = keepPool && attempt == 1 ? 0 : delay * attempt;
       await Future.delayed(Duration(milliseconds: wait > 5000 ? 5000 : wait));
       try {
-        await this.reconnect();
-        final result = await this
-            .runQueryCallback(query, bindings, callback, timeoutInSeconds);
-        tryReconnectCount = 0;
-        return result;
+        // A kept pool already discarded the dead connection.
+        if (!keepPool) await this.reconnect();
       } catch (error) {
-        if (!this.causedByLostConnection(error)) {
-          tryReconnectCount = 0;
+        // Nothing was sent: try again while the server cannot be reached.
+        if (!this.causedByLostConnection(error)) rethrow;
+        lastError = error;
+        continue;
+      }
+      try {
+        return await this
+            .runQueryCallback(query, bindings, callback, timeoutInSeconds);
+      } catch (error) {
+        if (!this.causedByLostConnection(error)) rethrow;
+        if (!causedByLostConnectionBeforeSending(error)) {
+          await _reconnectForNextStatement();
           rethrow;
         }
         lastError = error;
       }
     }
-    tryReconnectCount = 0;
     throw lastError;
   }
 
-  /// Closes the LISTEN listener and the PDO of this connection.
+  /// [reconnect] after a statement was lost and is not run again; a failure
+  /// is left to the next statement, which reconnects again. Nothing to do
+  /// for a kept pool ([parsePoolReconnect]).
+  Future<void> _reconnectForNextStatement() async {
+    if (_keepsPool) return;
+    try {
+      await this.reconnect();
+    } catch (_) {}
+  }
+
+  /// Messages (lower case) of the driver adapters that refuse a statement
+  /// without sending it, because the connection is already closed.
+  static const _notSentMessages = [
+    // postgres (postgres_fork), postgres_v3
+    'but connection is not open',
+    // mysql_dart
+    'can not execute query: connection closed',
+    // dpgsql (checked before the command is written)
+    'the connection to the server was lost',
+    // dargres (the exception prints the server's last notice instead)
+    'connection is closed, cannot execute',
+    // a pool that could not open a connection
+    "can't create a connection",
+    'connection refused',
+  ];
+
+  /// PostgreSQL 14+ idle_session_timeout: the server only ends a session
+  /// that is waiting for a command, so the statement did not run.
+  static final _idleSessionTimeout = RegExp(r'\b57P05\b');
+
+  /// Whether [e], caused by a lost connection, means the statement was not
+  /// sent (or did not run), so running it again cannot repeat a write.
   ///
-  /// An error closing the PDO is printed, not thrown.
+  /// It recognizes the errors the adapters throw for a connection the
+  /// server already closed (`Attempting to execute query, but connection is
+  /// not open` on postgres and postgres_v3, `connection closed` before the
+  /// query on mysql_dart, `the connection to the server was lost` on
+  /// dpgsql, `Connection is closed, cannot execute query` on dargres) and
+  /// the idle-session timeout (57P05). An error raised while waiting for
+  /// the reply (`terminating connection due to administrator command`, a
+  /// socket closed during the read) is not one of them.
+  bool causedByLostConnectionBeforeSending(dynamic e) {
+    final text = StringBuffer('$e');
+    try {
+      final message = e.message;
+      if (message is String) text.write('\n$message');
+    } catch (_) {
+      // The exception has no message field.
+    }
+    final all = text.toString();
+    if (_idleSessionTimeout.hasMatch(all)) return true;
+    final lower = all.toLowerCase();
+    for (final message in _notSentMessages) {
+      if (lower.contains(message)) return true;
+    }
+    return false;
+  }
+
+  /// Closes the LISTEN listener and the PDOs of this connection ([pdo] and
+  /// a distinct [readPdo]).
+  ///
+  /// An error closing the listener or a PDO is printed, not thrown, and
+  /// does not keep the others open.
   Future<void> disconnect() async {
+    // Both read before the first await: a reconnection may give this
+    // connection new PDOs while the old ones close.
     final pdoInstance = this.pdo.pdoInstance;
+    final readInstance = this.readPdo?.pdoInstance;
     final listener = _notificationListeners[pdoInstance];
     if (listener != null) {
       _notificationListeners[pdoInstance] = null;
-      await listener.close();
+      try {
+        await listener.close();
+      } catch (e, s) {
+        print('eloquent@disconnect error $e $s');
+      }
     }
+    await _close(pdoInstance);
+    if (readInstance != null && !identical(readInstance, pdoInstance)) {
+      await _close(readInstance);
+    }
+  }
+
+  static Future<void> _close(PDOInterface pdoInstance) async {
     try {
       await pdoInstance.close();
     } catch (e, s) {
@@ -999,7 +1187,11 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
     }
   }
 
-  /// Reconnects through [reconnector].
+  /// Reconnects through [reconnector] (the manager's
+  /// [DatabaseManager.reconnect]: with `'pool': true` it replaces the whole
+  /// pool, and the statements other requests run on it fail). A lost
+  /// connection only calls it with `pool_reconnect: 'replace'` (see
+  /// [parsePoolReconnect]); calling it directly always reconnects.
   ///
   /// Throws a [LogicException] when there is no [reconnector].
   Future<void> reconnect() async {
@@ -1011,13 +1203,6 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
     throw LogicException('Lost connection and no reconnector available.');
   }
 
-  /// Reconnects when the PDO or the read PDO is missing.
-  Future<void> reconnectIfMissingConnection() async {
-    if (Utils.is_null(this.getPdo()) || Utils.is_null(this.getReadPdo())) {
-      await this.reconnect();
-    }
-  }
-
   /// Adds [query] to the query log when logging is on; [time] is in
   /// milliseconds.
   dynamic logQuery(String query, bindings, [time = null]) {
@@ -1026,12 +1211,22 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
     }
   }
 
+  /// Logs the statement (to the log of [pretend] when given) and calls the
+  /// listeners. A listener that throws does not change the statement's
+  /// outcome: its error goes to the listener's `onError`, or is printed.
   void _reportQuery(
-      String query, dynamic bindings, Duration elapsed, Object? error) {
+      String query, dynamic bindings, Duration elapsed, Object? error,
+      [_PretendScope? pretend]) {
     final observers = _observers;
     observers.total += elapsed;
     final list = bindings is List ? bindings : const <dynamic>[];
-    if (observers.logging) {
+    if (pretend != null) {
+      pretend.log.add({
+        'query': query,
+        'bindings': list,
+        'time': elapsed.inMicroseconds / 1000
+      });
+    } else if (observers.logging) {
       logQuery(query, list, elapsed.inMicroseconds / 1000);
     }
     if (observers.listeners.isEmpty) return;
@@ -1044,7 +1239,22 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
     );
     // A copy: a listener may unsubscribe itself while being called.
     for (final listener in List.of(observers.listeners)) {
-      listener(event);
+      try {
+        listener.callback(event);
+      } catch (e, s) {
+        final onError = listener.onError;
+        if (onError != null) {
+          try {
+            onError(e, s);
+            continue;
+          } catch (_) {
+            // Printed below with the listener's error.
+          }
+        }
+        // Not Zone.handleUncaughtError: in the root zone that ends the
+        // program, and a log listener must not take a server down.
+        print('eloquent: query listener error: $e\n$s');
+      }
     }
   }
 
@@ -1054,13 +1264,20 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   /// connections given to its transaction callbacks), with its time and
   /// error. Returns a function that removes the listener.
   ///
+  /// An error thrown by [callback] does not change the statement's outcome
+  /// (the statement already ran: failing it would make a caller retry a
+  /// committed write) and does not stop the other listeners. It goes to
+  /// [onError] when given, else it is printed.
+  ///
   /// ```dart
   /// final stop =
   ///     db.listen((q) => print('${q.time.inMilliseconds} ms ${q.sql}'));
   /// ```
-  void Function() listen(void Function(QueryExecuted query) callback) {
-    _observers.listeners.add(callback);
-    return () => _observers.listeners.remove(callback);
+  void Function() listen(void Function(QueryExecuted query) callback,
+      {void Function(Object error, StackTrace stackTrace)? onError}) {
+    final listener = _QueryListener(callback, onError);
+    _observers.listeners.add(listener);
+    return () => _observers.listeners.remove(listener);
   }
 
   /// Calls [handler] for every statement slower than [threshold].
@@ -1085,14 +1302,10 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
     throw UnimplementedError();
   }
 
-  /// Returns the time elapsed since [start], a [Utils.microtime] value,
-  /// times 1000 and rounded.
-  ///
-  /// In Laravel `microtime(true)` is in seconds, so this gives
-  /// milliseconds; [Utils.microtime] is in microseconds, so here the
-  /// result is in nanoseconds.
-  dynamic getElapsedTime(int start) {
-    return Utils.round((Utils.microtime() - start) * 1000);
+  /// Returns the milliseconds elapsed since [start], a [Utils.microtime]
+  /// value (microseconds), rounded to 2 decimal places as in Laravel.
+  double getElapsedTime(int start) {
+    return ((Utils.microtime() - start) / 10).round() / 100;
   }
 
   /// Returns true: the Doctrine schema port is part of this package.
@@ -1303,9 +1516,9 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
     this._events = $events;
   }
 
-  /// Returns whether the connection is in a "dry run"; see [pretend].
+  /// Returns whether the current code runs in a "dry run"; see [pretend].
   bool pretending() {
-    return this.pretendingProp == true;
+    return _pretendScope() != null || _observers.pretending;
   }
 
   /// Returns the query log; see [queryLog].
@@ -1352,11 +1565,13 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
     return this._tablePrefix;
   }
 
-  /// Sets the table prefix of the connection and of its query grammar.
+  /// Sets the table prefix of the connection and of its query and schema
+  /// grammars.
   void setTablePrefix(String prefix) {
     this._tablePrefix = prefix;
 
     this.getQueryGrammar().setTablePrefix(prefix);
+    this.schemaGrammar?.setTablePrefix(prefix);
   }
 
   /// Sets this connection's table prefix on [grammar] and returns it.
@@ -1367,18 +1582,39 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   }
 }
 
-/// Query log, listeners and pretend state of a connection and of the
-/// connections created for its transactions.
+/// Query log and listeners of a connection and of the connections created
+/// for its transactions.
 class _QueryObservers {
   bool logging = false;
   List log = [];
+
+  /// Set through the deprecated `Connection.pretendingProp`: the whole
+  /// connection pretends.
   bool pretending = false;
   Duration total = Duration.zero;
-  final List<void Function(QueryExecuted)> listeners =
-      <void Function(QueryExecuted)>[];
+  final List<_QueryListener> listeners = <_QueryListener>[];
 
   /// Whether statements must be timed and reported.
   bool get active => logging || listeners.isNotEmpty;
+}
+
+/// A [Connection.listen] callback and its error handler.
+final class _QueryListener {
+  _QueryListener(this.callback, this.onError);
+
+  final void Function(QueryExecuted query) callback;
+  final void Function(Object error, StackTrace stackTrace)? onError;
+}
+
+/// A [Connection.pretend] call, kept in the zone.
+final class _PretendScope {
+  /// The queries the callback would have run.
+  final List<Map<String, dynamic>> log = [];
+
+  /// False once the callback returned: a query started inside it and run
+  /// later (an unawaited future) runs normally, whether or not another
+  /// pretend is running then.
+  bool active = true;
 }
 
 /// The transaction of a [Connection.transactionScope], kept in the zone.

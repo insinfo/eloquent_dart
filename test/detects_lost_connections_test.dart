@@ -86,6 +86,28 @@ void main() {
     expect(lost(StateError('Bad state: no element')), isFalse);
     expect(lost(TimeoutExceptionLike()), isFalse);
   });
+
+  test('a TLS handshake or certificate failure is not a lost connection', () {
+    // A configuration error (sslmode verify-full against a self-signed
+    // certificate, no TLS on the server): retrying only delays the error.
+    expect(lost(HandshakeException('CERTIFICATE_VERIFY_FAILED')), isFalse);
+    expect(lost(CertificateException('bad certificate')), isFalse);
+    expect(
+        lost(_DriverError('MySQLClientException: HandshakeException: '
+            'Handshake error in client (OS Error: CERTIFICATE_VERIFY_FAILED: '
+            'self signed certificate)')),
+        isFalse);
+    // A TLS error in an open session is still a lost connection.
+    expect(lost(TlsException('bad record mac')), isTrue);
+    expect(lost(SocketException('Connection reset by peer')), isTrue);
+  });
+}
+
+class _DriverError implements Exception {
+  _DriverError(this.message);
+  final String message;
+  @override
+  String toString() => message;
 }
 
 class TimeoutExceptionLike implements Exception {

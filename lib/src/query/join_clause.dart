@@ -62,26 +62,19 @@ class JoinClause {
     }
 
     if (where) {
-      this.bindingsLocal.add(second);
+      final isIn =
+          operator == SqlOperator.inList || operator == SqlOperator.notInList;
+      if (isIn && second is Iterable) {
+        // `in (?, ?, ...)`: one binding per value (a raw value is inlined by
+        // the grammar); the grammar compiles the placeholders from the list.
+        second = List.of(second);
+        this.bindingsLocal.addAll(
+            (second as List).where((value) => value is! QueryExpression));
+      } else {
+        // The usual case: one placeholder, one binding.
+        this.bindingsLocal.add(second);
+      }
     }
-    if (where &&
-        (operator == SqlOperator.inList || operator == SqlOperator.notInList) &&
-        Utils.is_array(second)) {
-      second = Utils.count(second);
-    }
-
-    // if (where) {
-    //   final isIn = operator == 'in' || operator == 'not in';
-    //   if (isIn && Utils.is_array(second)) {
-    //     // bind EVERY value
-    //     this.bindingsLocal = Utils.array_merge(this.bindingsLocal, second);
-    //     // and replace "second" with the count to compile "?, ?, ?"
-    //     second = Utils.count(second);
-    //   } else {
-    //     // the usual case (a single binding)
-    //     this.bindingsLocal.add(second);
-    //   }
-    // }
 
     var nested = false;
 

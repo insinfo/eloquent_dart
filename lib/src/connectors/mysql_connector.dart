@@ -22,16 +22,22 @@ class MySqlConnector extends Connector implements ConnectorInterface {
     // Next we will set the "names" and "collation" on the client's connections
     // so a correct character set will be used by this client.
     if (config.containsKey('charset') && config['charset'] != null) {
-      var charset = config['charset'];
+      var charset = config['charset'].toString();
+      var collation = config['collation'];
+      // A collation given as charset (utf8mb4_general_ci): `set names`
+      // takes the charset, the part before the first '_'.
+      if (charset.contains('_')) {
+        collation ??= charset;
+        charset = charset.substring(0, charset.indexOf('_'));
+      }
 
-      statements.add("set names '$charset'" +
-          (config.containsKey('collation')
-              ? " collate '${config['collation']}'"
-              : ''));
+      statements.add('set names ${_literal(charset)}' +
+          (collation != null ? ' collate ${_literal(collation)}' : ''));
     }
-    // Setting this DB timezone is an optional configuration item.
+    // Setting this DB timezone is an optional configuration item. A string
+    // literal: double quotes are an identifier under ANSI_QUOTES.
     if (config.containsKey('timezone') && config['timezone'] != null) {
-      statements.add('set time_zone="' + config['timezone'] + '"');
+      statements.add('set time_zone=${_literal(config['timezone'])}');
     }
 
     final mode = this.sqlModeStatement(config);
@@ -93,18 +99,26 @@ class MySqlConnector extends Connector implements ConnectorInterface {
   }
 
   /// The `set session sql_mode` statement for [config], if any.
+  ///
+  /// `modes` lists the modes; otherwise `strict: true` sets the strict
+  /// modes and `strict: false` only NO_ENGINE_SUBSTITUTION. The strict list
+  /// has no NO_AUTO_CREATE_USER: MySQL 8 removed it and rejects the SET.
   String? sqlModeStatement(Map<String, dynamic> config) {
     if (config.containsKey('modes')) {
       var modes = Utils.implode(',', config['modes']);
       return "set session sql_mode='" + modes + "'";
-    } else if (config.containsKey('strict')) {
-      if (config['strict'] != null) {
-        return "set session sql_mode='ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION'";
+    } else if (config.containsKey('strict') && config['strict'] != null) {
+      if (config['strict'] == true || config['strict'] == 'true') {
+        return "set session sql_mode='ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'";
       }
       return "set session sql_mode='NO_ENGINE_SUBSTITUTION'";
     }
     return null;
   }
+
+  /// [value] as a single-quoted MySQL string literal.
+  static String _literal(dynamic value) =>
+      "'${value.toString().replaceAll("'", "''")}'";
 
   /// Wraps [schema], a name or a list of names, in double quotes for the
   /// DSN; list items are joined with `, `.

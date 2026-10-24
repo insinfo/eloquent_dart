@@ -9,8 +9,16 @@ class DatabaseManager implements ConnectionResolverInterface {
   /// Creates the connections from their configuration.
   ConnectionFactory factory;
 
-  /// The connections made so far, by name.
+  /// The connections made so far, by name (with the `::read` or `::write`
+  /// suffix they were asked for).
   Map<String, dynamic> connectionsProp = {};
+
+  /// The connections being made, by name: concurrent first calls share one.
+  final Map<String, Future<Connection>> _making = {};
+
+  /// Reconnections in progress, by name: concurrent [reconnect] calls of a
+  /// connection share one.
+  final Map<String, Future<Connection>> _reconnecting = {};
 
   /// The custom connection resolvers, by connection or driver name; see
   /// [extend].
@@ -23,27 +31,33 @@ class DatabaseManager implements ConnectionResolverInterface {
   /// Returns the connection [nameP], making it on first use.
   ///
   /// [nameP] defaults to [getDefaultConnection]. A `::read` or `::write`
-  /// suffix makes the connection use only its read or only its write PDO;
-  /// see [setPdoForType]. The connection is kept under the name without the
-  /// suffix.
+  /// suffix gives a connection, made from the configuration without the
+  /// suffix, that uses only its read or only its write PDO (see
+  /// [setPdoForType]); it is kept apart from the connection without the
+  /// suffix, under the full name.
   Future<Connection> connection([String? nameP]) async {
-    var re = this.parseConnectionName(nameP);
+    final name = nameP ?? this.getDefaultConnection();
+    final made = this.connectionsProp[name];
+    if (made != null) return made;
 
-    var name = re[0];
-    var type = re[1];
     // If we haven't created this connection, we'll create it based on the
     // config provided in the application. Once we've created the connection
     // we will set its read / write type.
+    return _making[name] ??= _makeAndKeep(name).whenComplete(() {
+      // A block: remove() returns this future, which whenComplete would
+      // wait for.
+      _making.remove(name);
+    });
+  }
 
-    if (!Utils.isset(this.connectionsProp[name])) {
-      final connection = await this.makeConnection(name);
+  Future<Connection> _makeAndKeep(String name) async {
+    final re = this.parseConnectionName(name);
+    final connection = await this.makeConnection(re[0]);
 
-      this.setPdoForType(connection, type);
+    this.setPdoForType(connection, re[1]);
 
-      this.connectionsProp[name] = this.prepare(connection);
-    }
-
-    return this.connectionsProp[name];
+    this.connectionsProp[name] = this.prepare(connection, name);
+    return connection;
   }
 
   /// Returns a schema builder for the connection [connectionName] (default:
@@ -68,6 +82,7 @@ class DatabaseManager implements ConnectionResolverInterface {
   /// Disconnects from the connection [name] and forgets it, so the next
   /// [connection] call makes it again.
   Future<void> purge([String? name]) async {
+    name = name ?? this.getDefaultConnection();
     await this.disconnect(name);
     this.connectionsProp.remove(name);
   }
@@ -84,11 +99,28 @@ class DatabaseManager implements ConnectionResolverInterface {
 
   /// Reconnects the connection [name] (default: the default connection).
   ///
-  /// A connection that was made gets the PDOs of a new one (see
-  /// [refreshPdoConnections]); otherwise it is made.
+  /// A connection that was made is disconnected and gets the PDOs of a new
+  /// one (see [refreshPdoConnections]); otherwise it is made. Concurrent
+  /// calls for the same connection (several statements that lost it at
+  /// once) share one reconnection: each making its own would replace the
+  /// PDOs of the others and leave them open.
+  ///
+  /// With `'pool': true` the whole pool is closed and replaced, so the
+  /// statements other requests are running on it fail too. That is why a
+  /// lost connection only calls this with `pool_reconnect: 'replace'`: by
+  /// default (`'keep'`) the pool discards the dead connection by itself (see
+  /// [Connection.parsePoolReconnect]).
   Future<Connection> reconnect([String? name]) {
-    name = name ?? this.getDefaultConnection();
-    this.disconnect(name);
+    final key = name ?? this.getDefaultConnection();
+    // A block body: whenComplete waits for a returned future, and remove()
+    // returns this very one.
+    return _reconnecting[key] ??= _reconnect(key).whenComplete(() {
+      _reconnecting.remove(key);
+    });
+  }
+
+  Future<Connection> _reconnect(String name) async {
+    await this.disconnect(name);
 
     if (!Utils.isset(this.connectionsProp[name])) {
       return this.connection(name);
@@ -97,10 +129,13 @@ class DatabaseManager implements ConnectionResolverInterface {
     return this.refreshPdoConnections(name);
   }
 
-  /// Gives the connection [name] the PDOs of a newly made connection and
-  /// returns it.
+  /// Gives the connection [name] the PDOs of a newly made connection (with
+  /// the read or write type of its `::read`/`::write` suffix) and returns
+  /// it.
   Future<Connection> refreshPdoConnections(String name) async {
-    var fresh = await this.makeConnection(name);
+    final re = this.parseConnectionName(name);
+    final fresh = await this.makeConnection(re[0]);
+    this.setPdoForType(fresh, re[1]);
 
     return this
         .connectionsProp[name]
@@ -135,8 +170,9 @@ class DatabaseManager implements ConnectionResolverInterface {
   }
 
   /// Sets the event dispatcher of [connection] (when [app] has `events`)
-  /// and a reconnector that calls [reconnect], and returns [connection].
-  Connection prepare(Connection connection) {
+  /// and a reconnector that calls [reconnect] with [name] (default: the
+  /// connection's `name` option), and returns [connection].
+  Connection prepare(Connection connection, [String? name]) {
     if (this.app.bound('events')) {
       connection.setEventDispatcher(this.app['events']);
     }
@@ -146,7 +182,7 @@ class DatabaseManager implements ConnectionResolverInterface {
     // name of the connection, which will allow us to reconnect from the
     // connections.
     connection.setReconnector((con) async {
-      await this.reconnect(con.getName());
+      await this.reconnect(name ?? con.getName());
     });
 
     return connection;

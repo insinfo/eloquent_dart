@@ -154,11 +154,13 @@ class Str {
     return match.group(0)!.replaceAll(RegExp(r'\s+$'), '') + end;
   }
 
-  /// Splits a `Class@method` callback into `[class, method]`; without `@`
-  /// the method is [defaultMethod], left out when null.
+  /// Splits a `Class@method` callback at its first `@` into
+  /// `[class, method]`; without `@` the method is [defaultMethod], left out
+  /// when null.
   static List<String> parseCallback(String callback, String? defaultMethod) {
-    return contains(callback, '@')
-        ? callback.split('@') // Dart split doesn't need limit for this case
+    final at = callback.indexOf('@');
+    return at >= 0
+        ? [callback.substring(0, at), callback.substring(at + 1)]
         : [callback, if (defaultMethod != null) defaultMethod];
   }
 

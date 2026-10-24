@@ -23,8 +23,8 @@ dependencies:
   meta: ^1.17.0
   path: ^1.9.1
 
-  dargres: ^4.0.1
-  dpgsql: ^1.1.1
+  dargres: ^4.0.2
+  dpgsql: ^1.1.2
   # postgres v2
   postgres_fork: ^3.0.0
   mysql_dart: ^3.0.3

@@ -76,21 +76,24 @@ class PostgresConnector extends Connector implements ConnectorInterface {
   /// [schema] is a comma-separated `String` or a list of strings; `null`
   /// returns `''` and any other type throws [ArgumentError].
   ///
-  /// - Empty names are skipped.
-  /// - Names are trimmed; names already in double quotes are kept as they
-  ///   are, the others are quoted.
+  /// - A string is split on the commas outside double quotes; list items
+  ///   are names as they are.
+  /// - Names are trimmed and empty names are skipped.
+  /// - A name already quoted (`"my""schema"`, inner quotes doubled) is kept;
+  ///   the others are quoted, doubling their double quotes.
   /// - Duplicates are dropped, keeping the first occurrence.
   String formatSchema(dynamic schema) {
     // 1. Split into names.
     final List<String> parts;
     if (schema is String) {
-      parts = schema.split(',');
+      parts = _splitSchemaList(schema);
     } else if (schema is Iterable) {
       parts = schema.cast<String>().toList();
     } else if (schema == null) {
       return '';
     } else {
-      throw ArgumentError('schema deve ser String ou List<String>');
+      throw ArgumentError.value(
+          schema, 'schema', 'Expected a String or a List<String>.');
     }
 
     // 2. Normalize, skip empty names, drop duplicates.
@@ -98,11 +101,10 @@ class PostgresConnector extends Connector implements ConnectorInterface {
     final buffer = StringBuffer();
     for (var raw in parts) {
       var s = raw.trim();
-      if (s.isEmpty) continue;
+      if (s.isEmpty || s == '""') continue;
 
-      // Already quoted? Keep it.
-      if (!(s.startsWith('"') && s.endsWith('"'))) {
-        s = '"$s"';
+      if (!_isQuotedIdentifier(s)) {
+        s = '"${s.replaceAll('"', '""')}"';
       }
 
       if (seen.add(s)) {
@@ -114,26 +116,88 @@ class PostgresConnector extends Connector implements ConnectorInterface {
     return buffer.toString();
   }
 
+  /// Splits [schema] on the commas outside quoted names. A double quote
+  /// opens a quoted name only at the start of a name (`"a,b"`); inside one,
+  /// `""` is a quote. Elsewhere it is part of the name (`my"schema`).
+  static List<String> _splitSchemaList(String schema) {
+    final parts = <String>[];
+    var start = 0;
+    var inQuotes = false;
+    var atNameStart = true;
+    for (var i = 0; i < schema.length; i++) {
+      final char = schema[i];
+      if (inQuotes) {
+        if (char == '"') {
+          if (i + 1 < schema.length && schema[i + 1] == '"') {
+            i++;
+          } else {
+            inQuotes = false;
+          }
+        }
+      } else if (char == ',') {
+        parts.add(schema.substring(start, i));
+        start = i + 1;
+        atNameStart = true;
+      } else if (char == '"' && atNameStart) {
+        inQuotes = true;
+        atNameStart = false;
+      } else if (char.trim().isNotEmpty) {
+        atNameStart = false;
+      }
+    }
+    parts.add(schema.substring(start));
+    return parts;
+  }
+
+  /// Whether [name] is a quoted identifier: it starts and ends with a double
+  /// quote and every double quote inside is doubled.
+  static bool _isQuotedIdentifier(String name) {
+    if (name.length < 3 || !name.startsWith('"') || !name.endsWith('"')) {
+      return false;
+    }
+    final inner = name.substring(1, name.length - 1);
+    return !inner.replaceAll('""', '').contains('"');
+  }
+
+  /// The values `driver_implementation` accepts; the first is the default.
+  static const driverImplementations = [
+    'postgres',
+    'postgres_v3',
+    'dargres',
+    'dpgsql',
+  ];
+
   /// Opens the driver connection with the settings in [conf].
   ///
   /// The `driver_implementation` key picks the driver: `postgres` (the
-  /// default), `postgres_v3`, `dargres` or `dpgsql`. A `schema` key is
-  /// formatted with [formatSchema].
+  /// default), `postgres_v3`, `dargres` or `dpgsql`; any other value throws
+  /// [ArgumentError]. A `schema` key is formatted with [formatSchema]; an
+  /// empty result sets no search_path.
   Future<PDOInterface> createConnection(Map<String, dynamic> conf) async {
+    final implementation =
+        (conf['driver_implementation'] ?? driverImplementations.first)
+            .toString()
+            .trim()
+            .toLowerCase();
+    if (!driverImplementations.contains(implementation)) {
+      throw ArgumentError.value(
+          conf['driver_implementation'],
+          'driver_implementation',
+          'Expected one of: ${driverImplementations.join(', ')}');
+    }
+
     // A copy, so formatting the schema does not change the caller's map.
     final config = Map<String, dynamic>.from(conf);
 
     if (config.containsKey('schema')) {
-      config['schema'] = formatSchema(config['schema']);
+      final schema = formatSchema(config['schema']);
+      config['schema'] = schema.isEmpty ? null : schema;
     }
 
     final pdoConfig = PDOConfig.fromMap(config);
     late PDOInterface pdo;
 
-    switch (conf['driver_implementation']) {
-      case 'postgres':
-        pdo = PostgresV2PDO(pdoConfig);
-        break;
+    switch (implementation) {
       case 'postgres_v3':
         pdo = PostgresV3PDO(pdoConfig);
         break;

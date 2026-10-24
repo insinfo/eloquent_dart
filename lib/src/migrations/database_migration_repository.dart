@@ -100,7 +100,7 @@ class DatabaseMigrationRepository implements MigrationRepositoryInterface {
   Future<int> getLastBatchNumber() async {
     final query = await _table();
     // max() parses a numeric text (numeric/bigint on some drivers).
-    return (await query.max('batch'))?.toInt() ?? 0;
+    return (await query.max<num>('batch'))?.toInt() ?? 0;
   }
 
   /// Create the migration repository data store.

@@ -652,7 +652,7 @@ mixin WhereConditions<Self> {
                   'null; "${operator.name}" with null matches nothing.');
       }
     }
-    return ComparisonPredicate(column, operator, _value(value, 'value'));
+    return CompPredicate(column, operator, _value(value, 'value'));
   }
 
   static Predicate _sqlOperator(String column, String operator, Object? value) {
@@ -1300,7 +1300,7 @@ final class QueryBuilder2 with WhereConditions<QueryBuilder2> {
       {CompOperator operator = CompOperator.equalTo}) {
     _havings.add(WhereClause(
         LogicalConnector.and,
-        ComparisonPredicate(
+        CompPredicate(
             column, operator, WhereConditions._value(value, 'value'))));
     return this;
   }
@@ -1309,7 +1309,7 @@ final class QueryBuilder2 with WhereConditions<QueryBuilder2> {
       {CompOperator operator = CompOperator.equalTo}) {
     _havings.add(WhereClause(
         LogicalConnector.or,
-        ComparisonPredicate(
+        CompPredicate(
             column, operator, WhereConditions._value(value, 'value'))));
     return this;
   }
@@ -1633,8 +1633,14 @@ final class QueryBuilder2 with WhereConditions<QueryBuilder2> {
 
   Future<num?> sum(String column) => toQueryBuilder().sum(column);
   Future<num?> avg(String column) => toQueryBuilder().avg(column);
-  Future<num?> min(String column) => toQueryBuilder().min(column);
-  Future<num?> max(String column) => toQueryBuilder().max(column);
+
+  /// The smallest value of [column], typed as in [QueryBuilder.min]: the
+  /// driver's value (a `DateTime` for a date column), or a number when [T]
+  /// is a numeric type.
+  Future<T?> min<T>(String column) => toQueryBuilder().min<T>(column);
+
+  /// The largest value of [column], typed as in [min].
+  Future<T?> max<T>(String column) => toQueryBuilder().max<T>(column);
 
   /// The total rows (one count query) and page [page] (from 1).
   Future<PageResult> paginate({required int page, int perPage = 15}) async {
@@ -1980,7 +1986,7 @@ final class QueryBuilder2 with WhereConditions<QueryBuilder2> {
     for (final clause in clauses) {
       final boolean = clause.connector.sql;
       switch (clause.predicate) {
-        case ComparisonPredicate(:final column, :final operator, :final value):
+        case CompPredicate(:final column, :final operator, :final value):
           _basic(query, column, operator.sql, value, boolean);
         case SqlOperatorPredicate(:final column, :final operator, :final value):
           _basic(query, column, _checkSqlOperator(query, operator), value,
@@ -2130,7 +2136,7 @@ final class QueryBuilder2 with WhereConditions<QueryBuilder2> {
     for (final clause in clauses) {
       final boolean = clause.connector.sql;
       switch (clause.predicate) {
-        case ComparisonPredicate(:final column, :final operator, :final value):
+        case CompPredicate(:final column, :final operator, :final value):
           query.having(column, operator.sql, value, boolean);
         case BetweenPredicate(
             :final column,

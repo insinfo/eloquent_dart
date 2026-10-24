@@ -23,6 +23,11 @@ class PgEndpoint {
   final String? username;
   final String? password;
   final bool requireSsl;
+
+  /// The TLS mode of the connections (disable, prefer, require,
+  /// verify-full); when null, [requireSsl] decides between require and
+  /// disable.
+  final PgSslMode? sslMode;
   final bool isUnixSocket;
 
   /// If provided, it will set that name to the Postgres connection for debugging
@@ -41,6 +46,7 @@ class PgEndpoint {
     this.username,
     this.password,
     this.requireSsl = false,
+    this.sslMode,
     this.isUnixSocket = false,
     this.applicationName,
   });
@@ -66,6 +72,7 @@ class PgEndpoint {
       username: username ?? uri.queryParameters['username'],
       password: password ?? uri.queryParameters['password'],
       requireSsl: uri.queryParameters['sslmode'] == 'require',
+      sslMode: _parseSslMode(uri.queryParameters['sslmode']),
       isUnixSocket: isUnixSocketParam == '1',
       applicationName: applicationNameParam,
     );
@@ -82,6 +89,7 @@ class PgEndpoint {
     String? username,
     String? password,
     bool? requireSsl,
+    PgSslMode? sslMode,
     bool? isUnixSocket,
     String? Function()? applicationName,
   }) {
@@ -92,6 +100,7 @@ class PgEndpoint {
       username: username ?? this.username,
       password: password ?? this.password,
       requireSsl: requireSsl ?? this.requireSsl,
+      sslMode: sslMode ?? this.sslMode,
       isUnixSocket: isUnixSocket ?? this.isUnixSocket,
       applicationName:
           applicationName == null ? this.applicationName : applicationName(),
@@ -107,7 +116,13 @@ class PgEndpoint {
         queryParameters: {
           'username': username,
           'password': password,
-          'sslmode': requireSsl ? 'require' : 'allow',
+          'sslmode': switch (sslMode) {
+            PgSslMode.disable => 'disable',
+            PgSslMode.prefer => 'prefer',
+            PgSslMode.require => 'require',
+            PgSslMode.verifyFull => 'verify-full',
+            null => requireSsl ? 'require' : 'allow',
+          },
           if (isUnixSocket) 'is-unix-socket': '1',
           if (applicationName != null) 'application_name': applicationName,
         },
@@ -124,6 +139,7 @@ class PgEndpoint {
           username == other.username &&
           password == other.password &&
           requireSsl == other.requireSsl &&
+          sslMode == other.sslMode &&
           isUnixSocket == other.isUnixSocket &&
           applicationName == other.applicationName;
 
@@ -135,9 +151,20 @@ class PgEndpoint {
       username.hashCode ^
       password.hashCode ^
       requireSsl.hashCode ^
+      sslMode.hashCode ^
       isUnixSocket.hashCode ^
       applicationName.hashCode;
 }
+
+/// The [PgSslMode] of a URL's `sslmode` (libpq names); null when absent.
+PgSslMode? _parseSslMode(String? value) => switch (value) {
+      null => null,
+      'disable' => PgSslMode.disable,
+      'allow' || 'prefer' => PgSslMode.prefer,
+      'require' => PgSslMode.require,
+      'verify-ca' || 'verify-full' => PgSslMode.verifyFull,
+      _ => throw ArgumentError.value(value, 'sslmode'),
+    };
 
 /// The list of [PgPool] actions.
 abstract class PgPoolAction {
@@ -512,6 +539,7 @@ class PgPool implements PostgreSQLExecutionContext {
             username: _url.username,
             password: _url.password,
             useSSL: _url.requireSsl,
+            sslMode: _url.sslMode,
             isUnixSocket: _url.isUnixSocket,
             timeoutInSeconds: settings.connectTimeout.inSeconds,
             queryTimeoutInSeconds: settings.queryTimeout.inSeconds,

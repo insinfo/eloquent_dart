@@ -1,3 +1,29 @@
+import 'dart:io';
+
+/// The `sslmode` config key, with libpq's meaning.
+enum PDOSslMode {
+  /// Plain connection (also when `sslmode` is absent).
+  disable,
+
+  /// TLS when the server accepts it, plain otherwise. Handled as [prefer]:
+  /// TLS is tried first.
+  allow,
+
+  /// TLS when the server accepts it, plain otherwise. The certificate is
+  /// not verified.
+  prefer,
+
+  /// TLS or no connection. The certificate is not verified.
+  require,
+
+  /// TLS with a certificate signed by a trusted CA. The drivers built on
+  /// dart:io cannot skip the host name check, so this is [verifyFull].
+  verifyCa,
+
+  /// TLS with a certificate signed by a trusted CA and issued for the host.
+  verifyFull,
+}
+
 /// How DateTime bindings are sent (`datetime_bindings` config key).
 enum DateTimeBindings {
   /// Formatted with the grammar date format (`yyyy-MM-dd HH:mm:ss`) before
@@ -44,8 +70,15 @@ class PDOConfig {
   String? applicationName;
   final bool? allowReconnect;
 
-  /// require | disable
+  /// disable | allow | prefer | require | verify-ca | verify-full (see
+  /// [PDOSslMode] and [parseSslMode]).
   String? sslmode;
+
+  /// [sslmode] parsed; throws [ArgumentError] for an unknown value.
+  PDOSslMode get parsedSslMode => parseSslMode(sslmode);
+
+  /// MySQL: the collation of the connection (`collation` config key).
+  String? collation;
 
   /// UTC | America/Sao_Paulo
   String? timezone;
@@ -121,6 +154,7 @@ class PDOConfig {
       'applicationName': applicationName,
       'allowReconnect': allowReconnect,
       'sslmode': sslmode,
+      'collation': collation,
       'timezone': timezone,
       'schema': schema,
       'datetime_bindings': dateTimeBindings.name,
@@ -147,24 +181,34 @@ class PDOConfig {
       return null;
     }
 
+    // A missing key keeps the constructor default instead of passing null.
+    // charset is the exception: it has no default here, because the MySQL
+    // adapter falls back to its own collation when it is null.
+    final sslmode = map['sslmode']?.toString();
+    parseSslMode(sslmode);
     final co = PDOConfig(
       driver: map['driver'],
       host: map['host'],
-      port: map['port'] is int ? map['port'] : int.parse(map['port']),
+      port: _port(map['port'], map['driver']),
       database: map['database'],
       username: map['username'],
       password: map['password'],
-      isUnixSocket: key(['is_unix_socket', 'isUnixSocket']),
+      isUnixSocket:
+          _bool(key(['is_unix_socket', 'isUnixSocket']), 'is_unix_socket') ??
+              false,
       charset: map['charset'],
-      pool: map['pool'],
-      poolSize: key(['poolsize', 'pool_size', 'poolSize']),
+      pool: _bool(map['pool'], 'pool') ?? false,
+      poolSize:
+          _int(key(['poolsize', 'pool_size', 'poolSize']), 'poolsize') ?? 1,
       applicationName: key(['application_name', 'applicationName']),
-      allowReconnect:
+      allowReconnect: _bool(
           key(['allowreconnect', 'allow_reconnect', 'allowReconnect']),
-      sslmode: map['sslmode'],
+          'allowreconnect'),
+      sslmode: sslmode,
       timezone: map['timezone'],
       schema: map['schema'],
     );
+    co.collation = map['collation'];
     if (map['forceDecodeTimestamptzAsUTC'] is bool) {
       co.forceDecodeTimestamptzAsUTC = map['forceDecodeTimestamptzAsUTC'];
     }
@@ -196,6 +240,113 @@ class PDOConfig {
         co.idleInTransactionSessionTimeout;
 
     return co;
+  }
+
+  /// The `port` config value: an int or a numeric string; null or `''` is
+  /// the default port of [driver] (3306 for `mysql`, 5432 otherwise).
+  static int _port(dynamic value, dynamic driver) {
+    if (value == null || (value is String && value.trim().isEmpty)) {
+      return driver == 'mysql' ? 3306 : 5432;
+    }
+    return _int(value, 'port')!;
+  }
+
+  /// An int config value, also given as a numeric string (an environment
+  /// variable).
+  static int? _int(dynamic value, String name) {
+    if (value == null || value is int) return value;
+    final parsed = int.tryParse(value.toString().trim());
+    if (parsed == null) {
+      throw ArgumentError.value(value, name, 'Expected an integer.');
+    }
+    return parsed;
+  }
+
+  /// A bool config value, also given as `'true'`/`'false'` or `1`/`0`.
+  static bool? _bool(dynamic value, String name) {
+    if (value == null || value is bool) return value;
+    switch (value.toString().trim().toLowerCase()) {
+      case 'true':
+      case '1':
+        return true;
+      case 'false':
+      case '0':
+        return false;
+    }
+    throw ArgumentError.value(value, name, 'Expected true or false.');
+  }
+
+  /// Parses the `sslmode` config value (`null` or `''` means `disable`).
+  ///
+  /// Accepts libpq's names (`disable`, `allow`, `prefer`, `require`,
+  /// `verify-ca`, `verify-full`), in any case and with `-`, `_` or no
+  /// separator, and MySQL's (`DISABLED`, `PREFERRED`, `REQUIRED`,
+  /// `VERIFY_CA`, `VERIFY_IDENTITY`). Throws [ArgumentError] for any other
+  /// value: a typo must not turn TLS off.
+  static PDOSslMode parseSslMode(dynamic value) {
+    if (value == null) return PDOSslMode.disable;
+    if (value is PDOSslMode) return value;
+    final name =
+        value.toString().trim().toLowerCase().replaceAll(RegExp('[-_]'), '');
+    switch (name) {
+      case '':
+      case 'disable':
+      case 'disabled':
+        return PDOSslMode.disable;
+      case 'allow':
+        return PDOSslMode.allow;
+      case 'prefer':
+      case 'preferred':
+        return PDOSslMode.prefer;
+      case 'require':
+      case 'required':
+        return PDOSslMode.require;
+      case 'verifyca':
+        return PDOSslMode.verifyCa;
+      case 'verifyfull':
+      case 'verifyidentity':
+        return PDOSslMode.verifyFull;
+    }
+    throw ArgumentError.value(value, 'sslmode',
+        'Expected disable, allow, prefer, require, verify-ca or verify-full');
+  }
+
+  /// [parsedSslMode] for a PostgreSQL driver that cannot fall back to a
+  /// plain connection by itself: `allow` and `prefer` become `require` when
+  /// the server accepts TLS (see [pgServerAcceptsSsl]) and `disable`
+  /// otherwise. The other modes are returned as they are.
+  Future<PDOSslMode> resolvePgSslMode({Duration? timeout}) async {
+    final mode = parsedSslMode;
+    if (mode != PDOSslMode.allow && mode != PDOSslMode.prefer) return mode;
+    return await pgServerAcceptsSsl(host, port,
+            timeout: timeout ?? const Duration(seconds: 15))
+        ? PDOSslMode.require
+        : PDOSslMode.disable;
+  }
+
+  /// Whether the PostgreSQL server at [host]:[port] accepts TLS: sends an
+  /// SSLRequest, reads the one-byte answer (`S` or `N`) and closes the
+  /// socket.
+  static Future<bool> pgServerAcceptsSsl(String host, int port,
+      {Duration timeout = const Duration(seconds: 15)}) async {
+    final socket = await Socket.connect(host, port, timeout: timeout);
+    try {
+      socket.add(const [0, 0, 0, 8, 4, 210, 22, 47]);
+      await socket.flush();
+      final answer = await socket.first.timeout(timeout);
+      return answer.isNotEmpty && answer.first == 0x53;
+    } finally {
+      socket.destroy();
+    }
+  }
+
+  /// [value] as a PostgreSQL string literal, as `quote_literal` writes it:
+  /// single quotes doubled and, when there is a backslash, the `E''` form
+  /// with backslashes doubled.
+  static String quotePgLiteral(String value) {
+    final quoted = value.replaceAll("'", "''");
+    if (!quoted.contains(r'\')) return "'$quoted'";
+    return "E'${quoted.replaceAll(r'\', r'\\')}'";
   }
 
   /// Normalizes a PostgreSQL timeout setting: "3000" (ms), "250ms", "3s",
@@ -259,7 +410,7 @@ class PDOConfig {
     final statements = <String>[];
     void add(String name, String? raw) {
       if (raw == null || raw.trim().isEmpty) return;
-      statements.add("SET $name = '${normalizePgTimeout(raw)}'");
+      statements.add('SET $name = ${quotePgLiteral(normalizePgTimeout(raw))}');
     }
 
     add('statement_timeout', statementTimeout);

@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:eloquent/src/pdo/core/pdo_config.dart';
 import 'package:eloquent/src/pdo/core/pdo_interface.dart';
 import 'package:eloquent/src/pdo/core/pdo_result.dart';
@@ -120,6 +122,63 @@ class MySqlClientPDO extends PDOInterface {
     final zeroDateBehavior =
         options.enumeration('zeroDateBehavior', ZeroDateBehavior.values) ??
             ZeroDateBehavior.convertToNull;
+    // sslmode: disable (or absent) is plain; require uses TLS without
+    // verifying the certificate (mysql_dart's default); verify-ca and
+    // verify-full reject a certificate dart:io cannot verify (chain and host
+    // name); allow and prefer use TLS when the server offers it.
+    final sslMode = config.parsedSslMode;
+    final verify =
+        sslMode == PDOSslMode.verifyCa || sslMode == PDOSslMode.verifyFull;
+    final onBadCertificate =
+        verify ? (X509Certificate certificate) => false : null;
+    final collation = handshakeCollation(config);
+
+    Future<MySQLConnection> open(bool secure) async {
+      final conn = await MySQLConnection.createConnection(
+        host: config.host,
+        port: config.port,
+        databaseName: config.database,
+        userName: config.username ?? '',
+        password: config.password ?? '',
+        collation: collation,
+        secure: secure,
+        onBadCertificate: onBadCertificate,
+        autoPreparedStatementCacheCapacity:
+            options.integer('autoPreparedStatementCacheCapacity') ?? 32,
+        allowPublicKeyRetrieval:
+            options.flag('allowPublicKeyRetrieval') ?? false,
+        serverPublicKey: options.text('serverPublicKey'),
+        queueConcurrentCalls: options.flag('queueConcurrentCalls') ?? true,
+        zeroDateBehavior: zeroDateBehavior,
+      );
+      try {
+        await conn.connect();
+      } catch (_) {
+        try {
+          await conn.close();
+        } catch (_) {}
+        rethrow;
+      }
+      return conn;
+    }
+
+    var secure = sslMode != PDOSslMode.disable;
+    MySQLConnection? opened;
+    if (sslMode == PDOSslMode.allow || sslMode == PDOSslMode.prefer) {
+      // TLS first; a plain connection only when the server has no TLS.
+      try {
+        opened = await open(true);
+      } catch (e) {
+        if (!'$e'.contains('does not support SSL')) rethrow;
+        secure = false;
+      }
+      if (pool) {
+        // The pool connects later: this connection only told which mode.
+        await opened?.close();
+        opened = null;
+      }
+    }
+
     if (pool) {
       connection = MySQLConnectionPool(
         host: config.host,
@@ -127,9 +186,10 @@ class MySqlClientPDO extends PDOInterface {
         databaseName: config.database,
         userName: config.username ?? '',
         password: config.password,
-        collation: config.charset ?? 'utf8mb4_general_ci',
+        collation: collation,
         maxConnections: config.poolSize ?? 1,
-        secure: config.sslmode?.toString() == 'require',
+        secure: secure,
+        onBadCertificate: onBadCertificate,
         onConnectionOpen: _initSession,
         autoPreparedStatementCacheCapacity:
             options.integer('autoPreparedStatementCacheCapacity') ?? 32,
@@ -147,30 +207,25 @@ class MySqlClientPDO extends PDOInterface {
         zeroDateBehavior: zeroDateBehavior,
       );
     } else {
-      connection = await MySQLConnection.createConnection(
-        host: config.host,
-        port: config.port,
-        databaseName: config.database,
-        userName: config.username ?? '',
-        password: config.password ?? '',
-        collation: config.charset ?? 'utf8mb4_general_ci',
-        secure: config.sslmode?.toString() == 'require',
-        autoPreparedStatementCacheCapacity:
-            options.integer('autoPreparedStatementCacheCapacity') ?? 32,
-        allowPublicKeyRetrieval:
-            options.flag('allowPublicKeyRetrieval') ?? false,
-        serverPublicKey: options.text('serverPublicKey'),
-        queueConcurrentCalls: options.flag('queueConcurrentCalls') ?? true,
-        zeroDateBehavior: zeroDateBehavior,
-      );
-    }
-    if (connection is MySQLConnection) {
-      final conn = connection as MySQLConnection;
-      await conn.connect();
+      final conn = opened ?? await open(secure);
+      connection = conn;
       await _initSession(conn);
     }
 
     return this;
+  }
+
+  /// The collation mysql_dart sets when it connects: the `collation` config
+  /// key, else `charset` when it names a collation (`utf8mb4_general_ci`),
+  /// else utf8mb4_general_ci. A charset name such as `utf8mb4` is not a
+  /// collation and failed the connection ("Unknown collation"); the
+  /// connector's `set names` applies the charset afterwards.
+  static String handshakeCollation(PDOConfig config) {
+    final collation = config.collation;
+    if (collation != null && collation.isNotEmpty) return collation;
+    final charset = config.charset;
+    if (charset != null && charset.contains('_')) return charset;
+    return 'utf8mb4_general_ci';
   }
 
   /// Serializes callers of the single (non-pool) connection: mysql_dart

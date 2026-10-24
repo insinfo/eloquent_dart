@@ -200,40 +200,32 @@ void main() {
 
     // Teste com operador '='
     qb.whereTime('start_time', '=', '10:00:00');
-    expect(
-        grammar.compileSelect(qb),
-        contains(
-            'select * from "events" where extract(time from "start_time") = ?'));
+    expect(grammar.compileSelect(qb),
+        contains('select * from "events" where "start_time"::time = ?'));
 
     // Teste com operador '!='
     qb = QueryBuilder(FakeConnection(), grammar, Processor());
     qb.select(['*']);
     qb.from('events');
     qb.whereTime('start_time', '!=', '10:00:00');
-    expect(
-        grammar.compileSelect(qb),
-        contains(
-            'select * from "events" where extract(time from "start_time") != ?'));
+    expect(grammar.compileSelect(qb),
+        contains('select * from "events" where "start_time"::time != ?'));
 
     // Teste com operador '>'
     qb = QueryBuilder(FakeConnection(), grammar, Processor());
     qb.select(['*']);
     qb.from('events');
     qb.whereTime('start_time', '>', '10:00:00');
-    expect(
-        grammar.compileSelect(qb),
-        contains(
-            'select * from "events" where extract(time from "start_time") > ?'));
+    expect(grammar.compileSelect(qb),
+        contains('select * from "events" where "start_time"::time > ?'));
 
     // Teste com operador '<'
     qb = QueryBuilder(FakeConnection(), grammar, Processor());
     qb.select(['*']);
     qb.from('events');
     qb.whereTime('start_time', '<', '10:00:00');
-    expect(
-        grammar.compileSelect(qb),
-        contains(
-            'select * from "events" where extract(time from "start_time") < ?'));
+    expect(grammar.compileSelect(qb),
+        contains('select * from "events" where "start_time"::time < ?'));
   });
 
   test('compileSelect - sem from', () {

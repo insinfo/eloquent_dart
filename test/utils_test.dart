@@ -75,8 +75,8 @@ void main() {
     test('explode', () {
       // sem limit
       expect(Utils.explode('.', 'a.b.c'), equals(['a', 'b', 'c']));
-      // com limit
-      expect(Utils.explode('.', 'a.b.c', 2), equals(['a', 'b']));
+      // with a limit, the last piece keeps the rest (PHP semantics)
+      expect(Utils.explode('.', 'a.b.c', 2), equals(['a', 'b.c']));
     });
 
     test('count', () {
@@ -122,9 +122,9 @@ void main() {
 
       test('array_get - simples', () {
         expect(Utils.array_get(sample, 'id'), equals(1));
-        expect(Utils.array_get(sample, 'address.city'), isNull,
-            reason:
-                'array_get não desce no dot notation, só 1 nível (veja data_get).');
+        // Dot notation, as Arr::get.
+        expect(Utils.array_get(sample, 'address.city'), equals('Gotham'));
+        expect(Utils.array_get(sample, 'address.country'), isNull);
       });
 
       test('data_get - busca aninhada (dot notation)', () {
@@ -156,26 +156,14 @@ void main() {
         expect(result, equals({1: 'Isaque', 2: 'John', 3: 'Jane'}));
       });
 
-      test('array_pluck falha se key não existe no 2° item', () {
+      test('array_pluck: an item without the key is keyed by null', () {
         var array = [
           {'id': 1, 'name': 'Isaque'},
-          // aqui 'id' vira 'ID', para simular bug
+          // No 'id' here.
           {'ID': 2, 'name': 'John'},
         ];
         var result = Utils.array_pluck(array, 'name', 'id');
-        // Esperamos que o 2° item não encontre 'id',
-        // e retorne fallback => { {ID:2, name:John} : 'John' }
-        // ou algo do gênero. Vamos verificar:
-        expect(result.length, equals(2));
-
-        // A primeira chave deve ser '1'
-        expect(result.keys.first, equals(1));
-
-        // A segunda chave será 'ID'?? Vamos checar se é o Map inteiro:
-        var secondKey = result.keys.last;
-        // secondKey provavelmente vai ser {ID:2, name:John}
-
-        expect(secondKey, equals({'ID': 2, 'name': 'John'}));
+        expect(result, equals({1: 'Isaque', null: 'John'}));
       });
     });
 

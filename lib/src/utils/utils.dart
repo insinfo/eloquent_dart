@@ -92,23 +92,33 @@ class Utils {
     return index;
   }
 
-  /// Splits [string] at each [separator].
+  /// Splits [string] at each [separator], as PHP's `explode`.
   ///
-  /// With [limit], only the first [limit] pieces are returned: unlike PHP,
-  /// the rest of the string is dropped, not kept in the last piece. A
-  /// [limit] of 0 or less returns an empty list.
+  /// A positive [limit] returns at most [limit] pieces, the last one holding
+  /// the rest of the string; 0 counts as 1. A negative [limit] leaves out
+  /// that many pieces at the end.
   static List explode(Pattern separator, String string, [int? limit]) {
-    var items = string.split(separator);
     if (limit == null) {
-      return items;
-    } else {
-      limit = limit > items.length ? items.length : limit;
-      var result = [];
-      for (var i = 0; i < limit; i++) {
-        result.add(items[i]);
-      }
-      return result;
+      return string.split(separator);
     }
+    if (limit < 0) {
+      var items = string.split(separator);
+      return items.length + limit <= 0
+          ? []
+          : items.sublist(0, items.length + limit);
+    }
+    // Split at the first limit - 1 separators only; empty matches are not
+    // separators here.
+    var result = [];
+    var start = 0;
+    for (var match in separator.allMatches(string)) {
+      if (result.length >= limit - 1) break;
+      if (match.end == match.start) continue;
+      result.add(string.substring(start, match.start));
+      start = match.end;
+    }
+    result.add(string.substring(start));
+    return result;
   }
 
   /// Returns the number of elements in [items].
@@ -168,7 +178,8 @@ class Utils {
   ///
   /// Without [keyP] the result is a List; with [keyP] it is a Map from the
   /// value at the path [keyP] in each item to the value plucked from it. An
-  /// item without a value at [keyP] is its own key.
+  /// item without a value at [keyP] is keyed by null (PHP uses `''`), so a
+  /// later one replaces it.
   static array_pluck(dynamic arrayP, dynamic valueP, [dynamic keyP]) {
     if (arrayP == null) {
       return keyP != null ? <dynamic, dynamic>{} : <dynamic>[];
@@ -188,14 +199,8 @@ class Utils {
         if (keyPath == null) {
           (results as List).add(itemValue);
         } else {
-          var itemKey = data_get(item, keyPath);
-
-          // Without a key, the whole item is the key.
-          if (itemKey == null) {
-            itemKey = item;
-          }
-
-          (results as Map)[itemKey] = itemValue;
+          // An item without a key value is keyed by null.
+          (results as Map)[data_get(item, keyPath)] = itemValue;
         }
       }
     } else if (arrayP is Map) {
@@ -205,13 +210,7 @@ class Utils {
         if (keyPath == null) {
           (results as List).add(itemValue);
         } else {
-          var itemKey = data_get(entry.value, keyPath);
-
-          if (itemKey == null) {
-            itemKey = entry.value;
-          }
-
-          (results as Map)[itemKey] = itemValue;
+          (results as Map)[data_get(entry.value, keyPath)] = itemValue;
         }
       }
     }
@@ -238,22 +237,31 @@ class Utils {
     return map;
   }
 
-  /// Returns `array[key]`, or [defaultP] (called first when it is a
-  /// function) when [array] is not a List or Map or has no such key.
+  /// Returns the value at the "dot" path [key] in [array], or [defaultP]
+  /// (called first when it is a function) when [array] is not a List or Map
+  /// or the path is missing, as Laravel's `Arr::get`.
   ///
-  /// Like Laravel's `Arr::get`, without "dot" notation: [key] is a top-level
-  /// key.
+  /// A top-level key that holds dots is found first; a List index may be a
+  /// numeric String (`'items.0.id'`).
   static dynamic array_get(dynamic array, String key, [dynamic defaultP]) {
     if (!array_accessible(array)) {
       return value(defaultP);
     }
 
-    // Return the key when it exists at the top level, else the default.
+    // A top-level key wins, even when it has dots.
     if (array_exists(array, key)) {
-      return array[key];
+      return _offsetGet(array, key);
     }
 
-    return value(defaultP);
+    for (var segment in key.split('.')) {
+      if (array_accessible(array) && array_exists(array, segment)) {
+        array = _offsetGet(array, segment);
+      } else {
+        return value(defaultP);
+      }
+    }
+
+    return array;
   }
 
   /// Returns the value at the "dot" path [originalKey] in [target], or
@@ -261,8 +269,8 @@ class Utils {
   /// missing.
   ///
   /// [originalKey] is a dotted String or a list of segments; null returns
-  /// [target]. A `*` segment plucks the rest of the path from every element
-  /// of a List.
+  /// [target]. A List index may be a numeric String. A `*` segment plucks the
+  /// rest of the path from every element of a List or value of a Map.
   static dynamic data_get(dynamic target, dynamic originalKey,
       [dynamic defaultP]) {
     if (is_null(originalKey)) {
@@ -273,7 +281,7 @@ class Utils {
     // it is not modified:
     List<dynamic> segments;
     if (is_array(originalKey)) {
-      segments = List.of(originalKey); // cria cópia
+      segments = List.of(originalKey);
     } else {
       segments = explode('.', originalKey.toString());
     }
@@ -281,7 +289,7 @@ class Utils {
     while (segments.isNotEmpty) {
       var segment = segments.removeAt(0); // array_shift
       if (segment == '*') {
-        if (!is_array(target)) {
+        if (!array_accessible(target)) {
           return value(defaultP);
         }
         var result = array_pluck(target, segments);
@@ -289,7 +297,7 @@ class Utils {
       }
 
       if (array_accessible(target) && array_exists(target, segment)) {
-        target = target[segment];
+        target = _offsetGet(target, segment);
       } else {
         return value(defaultP);
       }
@@ -308,55 +316,77 @@ class Utils {
     return value is Object;
   }
 
-  /// Collapses a list of lists into one list.
+  /// Collapses the lists and maps in [array] (a List, or the values of a
+  /// Map) into one, as Laravel's `Arr::collapse`; other elements are
+  /// skipped.
   ///
-  /// Elements that are not lists are skipped.
+  /// The result is a List when no element is a Map. Otherwise it is a Map,
+  /// merged as PHP's `array_merge`: later String keys win and the elements
+  /// of lists (and int keys) get the next int keys.
   static dynamic array_collapse(dynamic array) {
-    var results = array is List ? [] : <String, dynamic>{};
+    var merged = <dynamic, dynamic>{};
+    var nextIndex = 0;
+    var hasMap = false;
 
-    for (var values in array) {
-      if (!is_array(values)) {
-        continue;
-      }
-      if (results is List) {
-        results = array_merge(results, values);
-      } else if (results is Map<String, dynamic>) {
-        results = map_merge_sd(results, values);
+    for (var values in array is Map ? array.values : array as Iterable) {
+      if (values is List) {
+        for (var item in values) {
+          merged[nextIndex++] = item;
+        }
+      } else if (values is Map) {
+        hasMap = true;
+        values.forEach((key, item) {
+          merged[key is int ? nextIndex++ : key] = item;
+        });
       }
     }
 
-    return results;
+    return hasMap ? merged : merged.values.toList();
   }
 
-  /// Removes and returns the first element of a List, or the first entry
-  /// (a [MapEntry]) of a Map.
+  /// Removes and returns the first element of a List, or the value of the
+  /// first entry of a Map, as PHP's `array_shift`.
   ///
   /// Returns null when [array] is empty or neither.
   static dynamic array_shift(dynamic array) {
     if (array is List && array.length > 0) {
-      var fistItem = array.first;
-      array.removeAt(0);
-      return fistItem;
+      return array.removeAt(0);
     } else if (array is Map && array.isNotEmpty) {
-      var fistItem = array.entries.first;
-      array.remove(fistItem.key);
-      return fistItem;
+      return array.remove(array.keys.first);
     }
 
     return null;
   }
 
   /// Returns whether [key] exists in [array]: a key of a Map, or a valid
-  /// index of a List.
+  /// index of a List (an int or, as in PHP, a numeric String).
   ///
   /// Throws an [Exception] when [array] is neither.
   static bool array_exists(dynamic array, dynamic key) {
     if (array is Map) {
       return map_key_exists(key, array);
     } else if (array is List) {
-      return key >= 0 && array.length > key;
+      var index = _listIndex(key);
+      return index != null && index >= 0 && index < array.length;
     }
     throw Exception('array is not List or Map');
+  }
+
+  /// Returns [key] as a List index: an int, or a String holding one as PHP
+  /// writes it (`'1'`, not `'01'`); else null.
+  static int? _listIndex(dynamic key) {
+    if (key is int) return key;
+    if (key is String) {
+      var index = int.tryParse(key);
+      if (index != null && index.toString() == key) return index;
+    }
+    return null;
+  }
+
+  /// Returns `array[key]`, [key] being a List index as [array_exists]
+  /// accepts it.
+  static dynamic _offsetGet(dynamic array, dynamic key) {
+    return array is List ? array[_listIndex(key)!] : array[key];
   }
 
   /// Returns whether [haystack] contains any of [needles]; empty needles
@@ -452,11 +482,12 @@ class Utils {
     };
   }
 
-  /// Sets [key] to [value] in [map] unless [key] is already there, and
+  /// Sets [key] to [value] in [map] unless [key] already holds a value that
+  /// is not null (as Laravel's `Arr::add`, without "dot" notation), and
   /// returns [map].
   static Map<String, dynamic> map_add_sd(
       Map<String, dynamic> map, String key, dynamic value) {
-    if (map.containsKey(key)) {
+    if (map[key] != null) {
       return map;
     }
     map[key] = value;
@@ -465,11 +496,12 @@ class Utils {
   }
 
   /// Removes [keys] (a String or a `List<String>`) from [map] and its nested
-  /// maps, in place, and returns [map].
+  /// maps, in place, and returns [map]: unlike Laravel's `Arr::except`, it
+  /// does not copy [map], and nested maps are searched too.
   ///
-  /// A key whose value is a map is not removed: its map is searched instead.
-  /// Throws an [Exception] when [keys] is neither a String nor a
-  /// `List<String>`.
+  /// A matching key is removed whatever its value; the other values that are
+  /// `Map<String, dynamic>` are searched. Throws an [Exception] when [keys]
+  /// is neither a String nor a `List<String>`.
   ///
   /// ```dart
   /// var map = {
@@ -500,17 +532,10 @@ class Utils {
 
   /// Removes [key] from [map] and its nested maps; see [map_except_sd].
   static void map_unset_deep_sd(Map<String, dynamic> map, String key) {
-    var clone = <String, dynamic>{}..addAll(map);
-    var length = clone.entries.length;
-    var entries = clone.entries.toList();
-    for (var i = 0; i < length; i++) {
-      var entry = entries[i];
-      if (entry.value is Map) {
-        map_unset_deep_sd(map[entry.key], key);
-      } else {
-        if (entry.key == key) {
-          map.remove(key);
-        }
+    map.remove(key);
+    for (var value in map.values) {
+      if (value is Map<String, dynamic>) {
+        map_unset_deep_sd(value, key);
       }
     }
   }
@@ -521,20 +546,23 @@ class Utils {
     return array.length;
   }
 
-  /// Returns [numero] random indexes of [array], as PHP's `array_rand` picks
-  /// random keys.
+  /// Returns a random index of [array] or, when [numero] is more than 1, a
+  /// list of [numero] distinct random indexes in ascending order, as PHP's
+  /// `array_rand`.
   ///
-  /// The result is always a list, even for one index, and an index can
-  /// repeat. Throws when [array] is empty.
+  /// Throws an [ArgumentError] when [numero] is not between 1 and the length
+  /// of [array].
   static dynamic array_rand(List array, [int numero = 1]) {
-    var rng = Random();
-    var len = array.length;
-
-    var list = [];
-    for (var i = 0; i < numero; i++) {
-      list.add(rng.nextInt(len));
+    if (numero < 1 || numero > array.length) {
+      throw ArgumentError.value(numero, 'numero',
+          'Must be between 1 and the number of elements (${array.length})');
     }
-    return list;
+    var rng = Random();
+    if (numero == 1) {
+      return rng.nextInt(array.length);
+    }
+    var indexes = List.generate(array.length, (i) => i)..shuffle(rng);
+    return indexes.sublist(0, numero)..sort();
   }
 
   /// Returns whether [value] is a List.
@@ -560,15 +588,15 @@ class Utils {
     return val.isEmpty;
   }
 
-  /// Returns whether [val] is `''`, null or 0, like PHP's `empty` (which
-  /// also counts `false`, `'0'` and empty arrays).
+  /// Returns whether [val] is empty as PHP's `empty` sees it: null, `false`,
+  /// 0, `''`, `'0'` or an empty List or Map.
   static bool empty(dynamic val) {
-    if (val == '') {
+    if (val == null || val == false || val == 0 || val == '' || val == '0') {
       return true;
-    } else if (val == null) {
-      return true;
-    } else if (val == 0) {
-      return true;
+    } else if (val is List) {
+      return val.isEmpty;
+    } else if (val is Map) {
+      return val.isEmpty;
     }
     return false;
   }
@@ -589,7 +617,7 @@ class Utils {
   }
 
   /// Returns whether [val] is set: false for null and for an empty List or
-  /// Map.
+  /// Map (PHP's `isset` is true for an empty array).
   static bool isset(dynamic val) {
     if (val == null) {
       return false;
@@ -605,7 +633,11 @@ class Utils {
     return str.trim();
   }
 
+  /// Returns [val] as a String, as PHP's `strval`: null and `false` give
+  /// `''`, `true` gives `'1'`.
   static String strval(dynamic val) {
+    if (val == null || val == false) return '';
+    if (val == true) return '1';
     return val.toString();
   }
 
@@ -613,8 +645,10 @@ class Utils {
     return map.containsKey(key);
   }
 
+  /// Returns the first key of [map], or null when it is empty (PHP's
+  /// `array_key_first`).
   static dynamic map_first_key(Map map) {
-    return map.entries.first.key;
+    return map.isEmpty ? null : map.keys.first;
   }
 
   /// Returns the last element of [array], or false when it is empty.
@@ -631,44 +665,45 @@ class Utils {
   }
 
   /// Returns whether [haystack] ends with [needles], a String or any element
-  /// of a List.
+  /// of a List, as Laravel's `Str::endsWith`; an empty needle never matches.
   static bool endsWith(String haystack, dynamic needles) {
-    if (needles is List) {
-      for (var needle in needles) {
-        if (needle == substr(haystack, -str_length(needle))) {
-          return true;
-        }
+    for (var needle in needles is List ? needles : [needles]) {
+      if (needle is String && needle != '' && haystack.endsWith(needle)) {
+        return true;
       }
-    } else if (needles is String) {
-      return haystack.endsWith(needles);
     }
     return false;
   }
 
-  /// Removes the characters in [chars] from the start of [string]; null
-  /// [chars] removes whitespace.
+  /// Removes the characters in [chars] from the start of [string], as PHP's
+  /// `ltrim`; null [chars] stands for PHP's default list: space, `\n`, `\r`,
+  /// `\t`, `\v` and `\0`.
   ///
-  /// [chars] goes into a regular expression character class as written, so
-  /// `]`, `\`, `^` and `-` must be escaped.
-  static ltrim(String string, [String? chars = " \n\r\t"]) {
-    //chars =chars.replaceAll('from', replace)
-    var pattern = chars != null ? RegExp('^[$chars]+') : RegExp(r'^\s+');
-    return string.replaceAll(pattern, '');
+  /// Each character of [chars] counts as written: PHP's `a..z` ranges are
+  /// not supported.
+  static String ltrim(String string, [String? chars = _phpTrimChars]) {
+    var set = (chars ?? _phpTrimChars).codeUnits.toSet();
+    var start = 0;
+    while (start < string.length && set.contains(string.codeUnitAt(start))) {
+      start++;
+    }
+    return string.substring(start);
   }
 
-  /// Removes the last element of a List or the last entry of a Map.
+  /// The characters PHP's `trim` functions remove by default.
+  static const String _phpTrimChars = ' \n\r\t\v\x00';
+
+  /// Removes and returns the last element of a List or the value of the
+  /// last entry of a Map, as PHP's `array_pop`.
   ///
-  /// Unlike PHP's `array_pop`, it returns nothing. Throws a [StateError]
-  /// when [array] is empty.
-  static void array_pop(dynamic array) {
-    var last;
-    if (array is Map) {
-      last = array.entries.last;
-      array.remove(last.key);
-    } else if (array is List) {
-      last = array.last;
-      array.removeLast();
+  /// Returns null when [array] is empty or neither.
+  static dynamic array_pop(dynamic array) {
+    if (array is List && array.isNotEmpty) {
+      return array.removeLast();
+    } else if (array is Map && array.isNotEmpty) {
+      return array.remove(array.keys.last);
     }
+    return null;
   }
 
   /// Returns the values of [map] as a list (PHP's `array_values`).
@@ -679,39 +714,24 @@ class Utils {
   /// Returns the part of [str] from [offset] on, at most [length] characters,
   /// as PHP's `substr`.
   ///
-  /// A negative [offset] counts from the end. Unlike PHP, a negative
-  /// [length] or an [offset] past the end throws a [RangeError].
+  /// A negative [offset] counts from the end, and a negative [length] leaves
+  /// out that many characters at the end. As in PHP 8, an [offset] past the
+  /// end gives `''`.
   ///
   /// ```dart
   /// substr('abcdef', -2, 10); // 'ef'
+  /// substr('abcdef', 1, -1); // 'bcde'
   /// ```
   static String substr(String str, int offset, [int? length]) {
-    // With length: take `length` characters from offset.
-    if (length != null) {
-      // Non-negative offset: the end is offset + length.
-      if (offset >= 0) {
-        length = offset + length;
-        if (length > str.length) length = str.length;
-        return str.substring(offset, length);
-      } else {
-        // Negative offset: start at str.length + offset.
-        int start =
-            str.length + offset; // por ex. offset=-2 => start = str.length-2
-        int end = start + length;
-        if (start < 0) start = 0;
-        if (end > str.length) end = str.length;
-        return str.substring(start, end);
-      }
-    } else {
-      // Without length: from offset to the end.
-      if (offset >= 0) {
-        return str.substring(offset);
-      } else {
-        int start = str.length + offset;
-        if (start < 0) start = 0;
-        return str.substring(start);
-      }
-    }
+    var start = offset < 0 ? max(0, str.length + offset) : offset;
+    if (start >= str.length) return '';
+
+    var end = length == null
+        ? str.length
+        : length < 0
+            ? str.length + length
+            : min(str.length, start + length);
+    return end <= start ? '' : str.substring(start, end);
   }
 
   /// Returns the larger of [value1] and [value2].
@@ -794,6 +814,10 @@ class Utils {
   //   }
   // }
 
+  /// Returns a list of [count] copies of [value].
+  ///
+  /// Unlike PHP's `array_fill`, [start_index] is ignored: the indexes of a
+  /// List always start at 0.
   static List array_fill(int start_index, int count, dynamic value) {
     return List.generate(count, (v) => value);
   }

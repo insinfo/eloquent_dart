@@ -55,6 +55,60 @@ Details and migration notes: [doc/release_notes_4.0.0.md](doc/release_notes_4.0.
   `UniqueConstraintViolationException` (a `QueryException` with the driver's
   exception in `previous` and its text in `toString()`) instead of the
   driver's exception; other errors are not wrapped.
+- A statement that loses its connection while it runs is not run again:
+  the server may have committed a write (running it twice duplicated the
+  row), and a select can have side effects too (`nextval`, a function that
+  writes). The connection is reopened for the next statement and the error
+  is thrown. A statement the driver refused before sending it (a
+  connection the server had already closed, issue #2) is still retried.
+  Concurrent reconnections of a connection share one (each made its own
+  and left the others' PDOs open).
+- With `'pool': true`, a lost connection no longer closes and remakes the
+  whole pool, which failed the statements other requests were running on
+  it: the pool discards the dead connection (`pool_reconnect: 'keep'`, the
+  default). `pool_reconnect: 'replace'` keeps the old behavior.
+  A TLS handshake or certificate failure is not taken for a lost
+  connection (it was retried 10 times, about 40 s).
+- `sslmode` is honored by every adapter (`disable`, `allow`, `prefer`,
+  `require`, `verify-ca`, `verify-full`, and the MySQL names): postgres and
+  dargres ignored it and connected in plain text, postgres_v3 only knew
+  `require`, dpgsql trusted any certificate in `verify-full`. An unknown
+  value, or a mode the adapter cannot honor (verify-full on a postgres pool),
+  throws `ArgumentError` instead of connecting with less security. The
+  dargres adapter requires dargres 4.0.2 (its TLS handshake always failed).
+- An unknown `driver_implementation` throws `ArgumentError` (it fell back to
+  `postgres`); `port` is optional (5432, 3306 for mysql); `pool`,
+  `poolsize` and `port` accept strings.
+- `min`/`max` (`QueryBuilder` and `QueryBuilder2`) are generic: without a
+  type they return the driver's value (a `DateTime` for a date column, text
+  for a PostgreSQL `numeric`); `final num? m = await q.max('x')` still gets
+  a number. They threw on date columns.
+- `pretend()` covers only the code of its callback (a Zone): another request
+  on the same connection was pretended too, and a query started in the
+  callback but run after it is not pretended. `pretendingProp` is
+  deprecated.
+- A query listener that throws no longer turns a successful statement into
+  an error: its error goes to `listen(callback, onError: ...)`, or is
+  printed.
+- `outsideTransaction()` inside a `transactionScope` needs `poolsize >= 2`
+  (it waited forever on a pool of one).
+- `Connection.tryReconnectCount` and `reconnectIfMissingConnection()` were
+  removed; `getElapsedTime` returns milliseconds (it returned nanoseconds).
+- `DatabaseManager` keeps `name::read`/`name::write` apart from `name`, and
+  concurrent `connection(name)` calls share one connection (the second one
+  leaked).
+- MySQL: `strict: false` turns strict mode off (it turned it on), the strict
+  modes no longer include `NO_AUTO_CREATE_USER` (removed in MySQL 8),
+  `charset`/`collation` work as in Laravel (`charset: 'utf8mb4'` failed with
+  "Unknown collation").
+- `QueryBuilder`: `setBindings` takes a List; `joinRaw` without a condition
+  (other than cross) throws; `whereBetween` needs two bounds; `insertMany`
+  returns `PDOResults`, uses the keys of every row and inlines
+  `QueryExpression` values; `inRandomOrder` takes an integer seed only.
+- `Utils`/`Arr`/`Fluent` follow their PHP namesakes: `explode` with a limit,
+  `array_get` with dot notation, `array_pop`, `array_shift`, `array_rand`,
+  `map_except_sd`, `ltrim`, `substr`, `empty`, `strval`, `endsWith`,
+  `Fluent.isset`, `Str.parseCallback`.
 
 ### Added
 
@@ -294,6 +348,23 @@ Details and migration notes: [doc/release_notes_4.0.0.md](doc/release_notes_4.0.
   retry loop; `getConfig()`; driver extensions lookup.
 - Empty insert SQL, `List` schema config, migration batches and rollback,
   PostgreSQL and MySQL introspection, `ColumnDiff` comparison.
+- Connections: the read connection (`readPdo`) is closed by `disconnect`
+  and used by the SQL cursor fallback; cancelling a cursor waits for it to
+  close; `purge(null)` and `reconnect` close the old connection;
+  `setTablePrefix` reaches the schema grammar; `ConnectionFactory` closes
+  the write connection when the read one fails, rejects read/write configs
+  with different drivers or no read host, accepts `read` without `write`
+  (and the reverse), several read hosts, a null `prefix`, and no longer
+  changes the caller's config map.
+- PostgreSQL session: `schema` names with quotes or commas, an empty
+  `schema` (no `SET search_path TO` with nothing), `application_name` and
+  `timezone` with quotes on postgres and postgres_v3.
+- SQL: `whereTime` on PostgreSQL (`::time`, it produced invalid SQL),
+  `whereIn` inside a join, `insertUsing` with a CTE on PostgreSQL,
+  `whereJsonContains` on MySQL, JSON updates on MySQL, `onRaw` in a
+  PostgreSQL update with joins, leading `AND`/`OR` of raw wheres,
+  `whereFlex` with a list, `get()` restores the columns after a failure.
+- Migrator: pretend mode without the `pretend` key threw.
 
 ### Performance
 

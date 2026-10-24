@@ -90,6 +90,7 @@ class PostgresV2PDO extends PDOInterface {
         database: config.database,
         username: config.username,
         password: config.password,
+        sslMode: _sslMode(),
       );
       final settings = PgPoolSettings();
       settings.encoding = _getEncoding(config.charset ?? 'utf8');
@@ -135,6 +136,7 @@ class PostgresV2PDO extends PDOInterface {
         queryTimeoutInSeconds: queryTimeoutInSeconds =
             options.integer('queryTimeoutInSeconds') ?? queryTimeoutInSeconds,
         useSSL: options.flag('useSSL') ?? false,
+        sslMode: _sslMode(options.flag('useSSL')),
         allowClearTextPassword: options.flag('allowClearTextPassword') ?? false,
         isUnixSocket: options.flag('isUnixSocket') ?? false,
         cancelQueryOnTimeout: options.flag('cancelQueryOnTimeout') ?? false,
@@ -147,6 +149,26 @@ class PostgresV2PDO extends PDOInterface {
     return this;
   }
 
+  /// The postgres_fork SSL mode for `sslmode` (see [PDOSslMode]); `null`
+  /// when `sslmode` is absent, so the `useSSL` driver option decides.
+  /// `useSSL: true` still forces TLS over `disable`.
+  PgSslMode? _sslMode([bool? useSSL]) {
+    if (config.sslmode == null) return null;
+    switch (config.parsedSslMode) {
+      case PDOSslMode.disable:
+        return useSSL == true ? PgSslMode.require : PgSslMode.disable;
+      case PDOSslMode.allow:
+      case PDOSslMode.prefer:
+        return PgSslMode.prefer;
+      case PDOSslMode.require:
+        return PgSslMode.require;
+      // postgres_fork verifies the chain and the host name together.
+      case PDOSslMode.verifyCa:
+      case PDOSslMode.verifyFull:
+        return PgSslMode.verifyFull;
+    }
+  }
+
   static int _seconds(Duration duration) =>
       (duration.inMicroseconds / Duration.microsecondsPerSecond).ceil();
 
@@ -156,6 +178,8 @@ class PostgresV2PDO extends PDOInterface {
   /// A new PostgreSQLConnection, outside the pool, for LISTEN.
   @override
   Future<PDONotificationConnection> openNotificationConnection() async {
+    final useSSL = config.driverOptions['useSSL'] == true ||
+        config.driverOptions['useSSL'] == 'true';
     final timeZone = TimeZoneSettings(config.timezone ?? 'UTC');
     timeZone.forceDecodeTimestamptzAsUTC = config.forceDecodeTimestamptzAsUTC;
     timeZone.forceDecodeTimestampAsUTC = config.forceDecodeTimestampAsUTC;
@@ -168,6 +192,9 @@ class PostgresV2PDO extends PDOInterface {
       password: config.password,
       timeZone: timeZone,
       encoding: _getEncoding(config.charset ?? 'utf8'),
+      // The same TLS mode as the queries' connections.
+      useSSL: useSSL,
+      sslMode: _sslMode(useSSL),
     );
     await conn.open();
     try {
@@ -186,18 +213,28 @@ class PostgresV2PDO extends PDOInterface {
   }
 
   /// inicializa configurações ao conectar com o banco de dados
+  /// The values are quoted as string literals; the schema comes formatted
+  /// by PostgresConnector.formatSchema (quoted identifiers), and an empty
+  /// one sets no search_path.
   Future<void> _onOpen(PostgreSQLExecutionContext conn, PDOConfig conf) async {
-    if (conf.charset != null) {
-      await conn.execute("SET client_encoding = '${conf.charset}'");
+    final charset = conf.charset;
+    if (charset != null) {
+      await conn.execute(
+          'SET client_encoding = ${PDOConfig.quotePgLiteral(charset)}');
     }
-    if (conf.schema != null) {
-      await conn.execute("SET search_path TO ${conf.schema}");
+    final schema = conf.schema;
+    if (schema != null && schema.trim().isNotEmpty) {
+      await conn.execute('SET search_path TO $schema');
     }
-    if (conf.timezone != null) {
-      await conn.execute("SET timezone TO '${conf.timezone}'");
+    final timezone = conf.timezone;
+    if (timezone != null) {
+      await conn
+          .execute('SET timezone TO ${PDOConfig.quotePgLiteral(timezone)}');
     }
-    if (conf.applicationName != null) {
-      await conn.execute("SET application_name TO '${conf.applicationName}'");
+    final applicationName = conf.applicationName;
+    if (applicationName != null) {
+      await conn.execute('SET application_name TO '
+          '${PDOConfig.quotePgLiteral(applicationName)}');
     }
     for (final statement in conf.postgresTimeoutStatements()) {
       await conn.execute(statement);

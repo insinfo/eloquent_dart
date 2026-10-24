@@ -81,6 +81,14 @@ class QueryPostgresGrammar extends QueryGrammar {
         value;
   }
 
+  /// Compiles `column::time <operator> ?` (`extract(time from ...)` is not
+  /// valid PostgreSQL).
+  @override
+  String whereTime(QueryBuilder query, dynamic where) {
+    return '${this.wrap(where['column'])}::time ${where['operator']} '
+        '${this.parameter(where['value'])}';
+  }
+
   /// Compiles `extract(type from column) <operator> ?`, with [type] a field
   /// such as `day`, `month` or `year`.
   String dateBasedWhere(type, QueryBuilder query, dynamic where) {
@@ -584,41 +592,5 @@ class QueryPostgresGrammar extends QueryGrammar {
     }
 
     return sql.join(' '); // Junta todos os joins com espaço
-  }
-
-  /// Compiles one join condition, its boolean first: `and first = second`.
-  ///
-  /// [JoinClause.onTrue] compiles to `and TRUE`. `second` is a column, or a
-  /// placeholder for a `where` condition.
-  String compileJoinConstraint(Map<String, dynamic> clause) {
-    bool isNested = clause['nested'] ?? false;
-    if (isNested) {
-      return this.compileNestedJoinConstraint(clause);
-    }
-
-    // `on TRUE` (JoinClause.onTrue) has no operator or second operand.
-    if (clause['first'] is QueryExpression &&
-        (clause['first'] as QueryExpression).getValue() == 'TRUE') {
-      return "${clause['boolean']} TRUE";
-    }
-
-    var first = this.wrap(clause['first']);
-    dynamic second;
-    bool isWhereClause = clause['where'] ?? false;
-
-    if (isWhereClause) {
-      if ((clause['operator'] == 'in' || clause['operator'] == 'not in') &&
-          clause['second'] is List) {
-        // Only the placeholders are compiled here; the values are bound by
-        // JoinClause.
-        second = this.parameterize(clause['second']); // Gera (?, ?, ?)
-      } else {
-        second = '?'; // Placeholder para where simples
-      }
-    } else {
-      second = this.wrap(clause['second']); // Coluna ou valor direto
-    }
-
-    return "${clause['boolean']} $first ${clause['operator']} $second";
   }
 }

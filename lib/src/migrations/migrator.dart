@@ -375,7 +375,7 @@ class Migrator {
     final conn = await _resolveConnection(migration.getConnectionName());
 
     // Check if the connection object supports pretend mode
-    if (conn is! Connection || !(conn).getConfigs()['pretend'] == true) {
+    if (conn is! Connection || conn.getConfigs()['pretend'] != true) {
       note(
           "<warning>Pretend mode not supported or enabled for this connection.</warning> Simulating $method for ${migration.runtimeType}");
       if (method == 'up') {

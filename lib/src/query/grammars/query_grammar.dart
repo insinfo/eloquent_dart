@@ -139,16 +139,16 @@ class QueryGrammar extends BaseGrammar {
   }
 
   /// Compiles an insert of the rows selected by [sql], the compiled subquery:
-  /// `insert into table (columns) select ...`.
+  /// `[with ...] insert into table (columns) select ...`.
   ///
-  /// The common table expressions of [query] are not compiled here.
+  /// The common table expressions of [query] come first, as their bindings
+  /// do in `QueryBuilder.insertUsing`.
   String compileInsertUsing(QueryBuilder query, dynamic columns, String sql) {
-    //final expressions = this.compileExpressions(query);
-    //final recursionLimit = this.compileRecursionLimit(query);
-    //return expressions + ' ' + ' ' + recursionLimit;
     final table = this.wrapTable(query.fromProp);
     final columnsSql = this.columnize(columns);
-    return 'insert into $table ($columnsSql) $sql';
+    return '${this.compileExpressions(query)} '
+            'insert into $table ($columnsSql) $sql'
+        .trim();
   }
 
   /// Compiles a select query into SQL.
@@ -292,22 +292,18 @@ class QueryGrammar extends BaseGrammar {
       }
 
       var clauses = <String>[];
-      // for (var clause in join.clauses) {
-      //   clauses.add(this.compileJoinConstraint(clause));
-      // }
       for (var clause in join.clauses) {
-        // Raw conditions (JoinClause.onRaw) are written as given.
-        if (clause['type'] == 'raw') {
-          clauses.add('${clause['boolean']} ${clause['sql']}');
-        } else {
-          clauses.add(this.compileJoinConstraint(clause));
-        }
+        clauses.add(this.compileJoinConstraint(clause));
       }
 
-      if (clauses.isNotEmpty) {
-        // The first condition takes no leading `and`/`or`.
-        clauses[0] = this.removeLeadingBoolean(clauses[0]);
+      // Without conditions there is no `on` (a dangling `on` is invalid).
+      if (clauses.isEmpty) {
+        sql.add("$type join $table");
+        continue;
       }
+
+      // The first condition takes no leading `and`/`or`.
+      clauses[0] = this.removeLeadingBoolean(clauses[0]);
 
       var clausesString = Utils.implode(' ', clauses);
       sql.add("$type join $table on $clausesString");
@@ -318,22 +314,42 @@ class QueryGrammar extends BaseGrammar {
 
   /// Compiles one join condition, its boolean first: `and first = second`.
   ///
-  /// `second` is a column, or for a `where` condition a placeholder: `?`, or
-  /// `(?, ?, ...)` for `in` and `not in`, where `second` holds the count.
+  /// A raw condition (`JoinClause.onRaw`) is written as given and
+  /// `JoinClause.onTrue` compiles to `and TRUE`. `second` is a column, or for
+  /// a `where` condition a placeholder: `?`, or `(?, ?, ...)` for `in` and
+  /// `not in` with a list of values (an empty list compiles `0 = 1` for `in`
+  /// and `1 = 1` for `not in`).
   String compileJoinConstraint(Map<String, dynamic> clause) {
+    if (clause['type'] == 'raw') {
+      return '${clause['boolean']} ${clause['sql']}';
+    }
+
     bool isNested = clause['nested'] ?? false;
     if (isNested) {
       return this.compileNestedJoinConstraint(clause);
+    }
+
+    // `on TRUE` (JoinClause.onTrue) has no operator or second operand.
+    if (clause['first'] is QueryExpression &&
+        (clause['first'] as QueryExpression).getValue() == 'TRUE') {
+      return "${clause['boolean']} TRUE";
     }
 
     var first = this.wrap(clause['first']);
     var second;
     bool isWhereClause = clause['where'] ?? false;
     if (isWhereClause) {
-      if (clause['operator'] == 'in' || clause['operator'] == 'not in') {
-        second = '(' +
-            Utils.implode(', ', Utils.array_fill(0, clause['second'], '?')) +
-            ')';
+      final operator = clause['operator'];
+      final values = clause['second'];
+      if ((operator == SqlOperator.inList ||
+              operator == SqlOperator.notInList) &&
+          values is List) {
+        if (values.isEmpty) {
+          final always = operator == SqlOperator.inList ? '0 = 1' : '1 = 1';
+          return "${clause['boolean']} $always";
+        }
+        // The values are bound one by one by JoinClause.
+        second = '(' + this.parameterize(values) + ')';
       } else {
         second = '?';
       }
@@ -473,10 +489,14 @@ class QueryGrammar extends BaseGrammar {
     return this.wrap(where['column']) + ' ' + where['operator'] + ' ' + value;
   }
 
-  /// Compiles `column [not] between ? and ?`.
+  /// Compiles `column [not] between ? and ?`; a [QueryExpression] bound is
+  /// inlined.
   String whereBetween(QueryBuilder query, Map<String, dynamic> where) {
     var between = where['not'] ? 'not between' : 'between';
-    return this.wrap(where['column']) + ' ' + between + ' ? and ?';
+    final values = where['values'];
+    final low = values is List ? this.parameter(values[0]) : '?';
+    final high = values is List ? this.parameter(values[1]) : '?';
+    return this.wrap(where['column']) + ' ' + between + ' $low and $high';
   }
 
   /// Compiles `exists (select ...)`.
@@ -1126,11 +1146,13 @@ class QueryGrammar extends BaseGrammar {
   String escapeRawBinary(Uint8List value) =>
       "x'${value.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}'";
 
-  /// Removes the boolean that leads a list of conditions: the first `and `
-  /// or `or ` in [value].
-  ///
-  /// The match is case-sensitive and not anchored at the start.
+  /// Removes the boolean that leads a list of conditions: an `and ` or `or `
+  /// (in any case) at the start of [value]. An `and`/`or` further in is
+  /// kept.
   String removeLeadingBoolean(String value) {
-    return value.replaceFirst(RegExp(r"and |or ", caseSensitive: true), '');
+    return value.replaceFirst(_leadingBoolean, '');
   }
+
+  static final RegExp _leadingBoolean =
+      RegExp(r'^\s*(and|or)\s+', caseSensitive: false);
 }
