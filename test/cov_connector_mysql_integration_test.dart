@@ -100,12 +100,26 @@ void main() {
         }
       });
 
-      test('sslmode require, REQUIRED, prefer: TLS', () async {
-        for (final mode in ['require', 'REQUIRED', 'prefer']) {
-          await _withDb(config({'sslmode': mode}), (db) async {
-            expect(await _sslCipher(db), isNotEmpty, reason: mode);
-          });
+      // The CI's MariaDB 10.11 has no TLS; 11.x and the local server do.
+      test('sslmode require, REQUIRED, prefer: TLS when the server has it',
+          () async {
+        final serverTls = await _withDb(
+            config({}),
+            (db) async =>
+                (await _value(db, 'select @@have_ssl as v')) == 'YES');
+        for (final mode in ['require', 'REQUIRED']) {
+          final connect = _withDb(config({'sslmode': mode}), _sslCipher);
+          if (serverTls) {
+            expect(await connect, isNotEmpty, reason: mode);
+          } else {
+            await expectLater(connect, throwsA(anything),
+                reason: '$mode never connects in plain text');
+          }
         }
+        await _withDb(config({'sslmode': 'prefer'}), (db) async {
+          expect(await _sslCipher(db), serverTls ? isNotEmpty : isEmpty,
+              reason: 'prefer');
+        });
       });
 
       test('sslmode verify-ca and verify-full refuse the certificate',
