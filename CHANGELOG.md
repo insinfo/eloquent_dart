@@ -101,8 +101,7 @@ Details and migration notes: [doc/release_notes_4.0.0.md](doc/release_notes_4.0.
   modes no longer include `NO_AUTO_CREATE_USER` (removed in MySQL 8),
   `charset`/`collation` work as in Laravel (`charset: 'utf8mb4'` failed with
   "Unknown collation").
-- `QueryBuilder`: `setBindings` takes a List; `joinRaw` without a condition
-  (other than cross) throws; `whereBetween` needs two bounds; `insertMany`
+- `QueryBuilder`: `setBindings` takes a List; `whereBetween` needs two bounds; `insertMany`
   returns `PDOResults`, uses the keys of every row and inlines
   `QueryExpression` values; `inRandomOrder` takes an integer seed only.
 - `Utils`/`Arr`/`Fluent` follow their PHP namesakes: `explode` with a limit,

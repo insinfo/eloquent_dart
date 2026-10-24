@@ -257,10 +257,19 @@ void main() {
   });
 
   group('joinRaw', () {
-    test('a join other than cross needs conditions', () {
-      expect(() => pg().from('a').joinRaw('b'), throwsArgumentError);
-      expect(() => pg().from('a').joinRaw('b', [], SqlJoin.left, (join) {}),
-          throwsArgumentError);
+    // new_sali writes the ON inside the expression (ProcessoRelacionado):
+    // a check that asked for conditions broke it.
+    test('an expression with its own ON compiles as written', () {
+      final qb = pg().from('r').joinRaw(
+          'processo p ON p.id = (CASE WHEN r.a = ? THEN r.b ELSE r.a END)',
+          [7]).where('r.ativo', true);
+      expect(
+          qb.toSql(),
+          'select * from "r" inner join processo p ON p.id = '
+          '(CASE WHEN r.a = ? THEN r.b ELSE r.a END) where "r"."ativo" = ?');
+      expect(qb.getBindings(), [7, true]);
+      expect(my().from('a').joinRaw('b', [], SqlJoin.left, (join) {}).toSql(),
+          'select * from `a` left join b');
     });
 
     test('cross join without conditions', () {

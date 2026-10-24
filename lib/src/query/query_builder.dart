@@ -4326,12 +4326,14 @@ class QueryBuilder {
   /// [bindings] for its `?` placeholders.
   ///
   /// [on] adds the `on` conditions to the [JoinClause] (`onRaw` included).
-  /// Only a `cross` join may go without them: any other type without a
-  /// condition throws [ArgumentError] (it would compile an invalid join).
+  /// Without them no `on` is compiled, so [tableExpression] may carry its
+  /// own (`'processo p ON p.id = ?'`), a `USING`, or need none
+  /// (`generate_series(1, 10) as g` with a lateral or natural join).
   ///
   /// ```dart
   /// qb.joinRaw('(select * from foo) as f', [], SqlJoin.inner,
   ///     (join) => join.onRaw('true'));
+  /// qb.joinRaw('processo p ON p.id = r.id_processo AND p.ano = ?', [ano]);
   /// ```
   QueryBuilder joinRaw(
     String tableExpression, [
@@ -4344,10 +4346,6 @@ class QueryBuilder {
     final join = JoinClause(type, tableExpr, this);
     if (on != null) {
       on(join);
-    }
-    if (join.clauses.isEmpty && type.toLowerCase() != SqlJoin.cross) {
-      throw ArgumentError.value(on, 'on',
-          'A "$type" join needs at least one condition; use SqlJoin.cross.');
     }
 
     this.joinsProp.add(join);
