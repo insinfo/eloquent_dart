@@ -1,5 +1,5 @@
 name: eloquent
-version: 4.1.0
+version: 4.1.1
 description: >-
   Laravel-style (Eloquent 5.2) query builder, schema builder and migrations
   for Dart, with PostgreSQL and MySQL drivers.

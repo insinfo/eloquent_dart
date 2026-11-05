@@ -1,3 +1,8 @@
+## 4.1.1
+
+- README: what each `sslmode` does, the host name a certificate must name, what
+  `require` does not protect from, and a "What's new in 4.1" section.
+
 ## 4.1.0
 
 - TLS certificates on every adapter: the `sslrootcert`, `sslcert`, `sslkey`

@@ -20,6 +20,15 @@ Runnable examples, one per topic (query builders, transactions, both ORM
 styles, migrations, bulk and streaming, PostgreSQL features, MySQL,
 connection options), are in [example/](example/README.md).
 
+### What's new in 4.1
+
+- [TLS certificates](#tls-certificates) on every driver, single connection and
+  pool: `sslrootcert` for a private CA, `sslcert`/`sslkey`/`sslpassword` for a
+  client certificate, and `security_context` for certificates in memory.
+- mysql_dart 4.0.1, dpgsql 1.2.0 and postgres_fork 3.1.0. `sslmode` keeps its
+  meaning on MySQL: `require`, `allow` and `prefer` do not verify the
+  certificate, `verify-ca` and `verify-full` do.
+
 ### What's new in 4.0
 
 Details, breaking changes and migration notes:
@@ -1291,11 +1300,23 @@ settings).
 
 ## TLS certificates
 
-`sslmode` chooses how TLS is used on every driver: `disable` (or absent),
-`allow`, `prefer`, `require` (TLS, the certificate is not verified), `verify-ca`
-and `verify-full` (dart:io verifies the chain and the host name together). They
-verify against the system roots. For a private CA, or to present a client
-certificate:
+`sslmode` chooses how TLS is used, on every driver (`postgres`, `postgres_v3`,
+`dargres`, `dpgsql` and MySQL):
+
+| `sslmode` | TLS | Server certificate |
+| --- | --- | --- |
+| `disable` (or absent) | no | - |
+| `allow`, `prefer` | when the server offers it, plain otherwise | not verified |
+| `require` | always, or no connection | not verified |
+| `verify-ca`, `verify-full` | always, or no connection | verified: chain and host name |
+
+The MySQL names also work: `DISABLED`, `PREFERRED`, `REQUIRED`, `VERIFY_CA` and
+`VERIFY_IDENTITY`. `verify-ca` is the same as `verify-full`, because dart:io
+verifies the chain and the host name together.
+
+By default the certificate is verified against the system roots. For a private
+CA, or to present a client certificate, use the keys below (the names Laravel
+uses for PostgreSQL):
 
 ```dart
 manager.addConnection({
@@ -1309,9 +1330,15 @@ manager.addConnection({
 });
 ```
 
-- `sslrootcert` replaces the system roots and requires `verify-ca` or
-  `verify-full`.
-- `sslcert` and `sslkey` go together, in any `sslmode` with TLS.
+- `sslrootcert` is a PEM file. It replaces the system roots, so only that CA is
+  trusted, and it requires `verify-ca` or `verify-full`.
+- `sslcert` and `sslkey` go together, in any `sslmode` with TLS. Without
+  `sslrootcert`, the system roots still verify the server.
+- An empty value counts as absent, such as an environment variable that is not
+  set.
+- The `host` of the connection must be named by the certificate, in its
+  subjectAltName or CN: a certificate issued for `localhost` is refused when
+  connecting to `127.0.0.1`. An IP address must be in the subjectAltName.
 - For certificates that are not in files, pass a `SecurityContext` in
   `security_context` instead of those keys:
 
@@ -1322,7 +1349,23 @@ manager.addConnection({
 ```
 
 Settings that cannot be honored throw `ArgumentError` instead of connecting with
-less security.
+less security: `sslrootcert` with an `sslmode` that does not verify, any
+certificate with `sslmode` `disable` or absent, `sslcert` without `sslkey`, and
+a file that cannot be loaded or a wrong `sslpassword`.
+
+`require` encrypts the traffic but does not prove who the server is: someone
+between the application and the database can impersonate it. On a network you
+do not control, use `verify-full`.
+
+With `postgres_v3` and `pool`, the certificates apply to what runs through
+eloquent. A `Pool` taken from the PDO and used directly does not send them
+(postgres 3.5.7 ignores `PoolSettings.securityContext`), so with `verify-full`
+it verifies against the system roots.
+
+The drivers can also be used directly with the same certificates: see
+`DpgsqlConnectionStringBuilder` in [dpgsql](https://pub.dev/packages/dpgsql)
+(`Root Certificate`, `SSL Certificate`, `SSL Key`, `SSL Password`) and
+`securityContext` in [postgres_fork](https://pub.dev/packages/postgres_fork).
 
 ## DateTime bindings (`datetime_bindings`)
 
@@ -1382,6 +1425,9 @@ void main(List<String> args) async {
     'database': 'banco_teste',
     'username': 'root',
     'password': 'pass',
+    // TLS without verifying the certificate. To verify it, with a private CA:
+    // 'sslmode': 'verify-full', 'sslrootcert': '/etc/ssl/db/ca.pem'
+    // (see "TLS certificates").
     'sslmode': 'require',
     // 'pool': true,
     // 'poolsize': 2,
