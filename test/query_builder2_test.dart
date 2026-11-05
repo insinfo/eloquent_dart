@@ -148,14 +148,16 @@ void main() {
       expect(mysql().whereSqlOperator('a', '<=>', null).toSql(),
           endsWith('where `a` <=> ?'));
 
-      // Arithmetic is not a condition; "?" is the placeholder; regex
-      // operators are PostgreSQL only.
+      // Arithmetic is not a condition; "?" is the placeholder, so it compiles
+      // to its function or is refused; regex operators are PostgreSQL only.
       expect(() => pg().whereSqlOperator('a', '-', 1).toSql(),
           throwsArgumentError);
+      expect(pg().whereSqlOperator('dados', '?', 'k').toSql(),
+          endsWith('where jsonb_exists("dados", ?)'));
       expect(
-          () => pg().whereSqlOperator('dados', '?', 'k').toSql(),
+          () => pg().whereSqlOperator('a', '?#', 'k').toSql(),
           throwsA(isA<ArgumentError>()
-              .having((e) => e.message, 'message', contains('jsonb_exists'))));
+              .having((e) => e.message, 'message', contains('whereRaw'))));
       expect(() => mysql().whereSqlOperator('a', '~', 'x').toSql(),
           throwsArgumentError);
     });

@@ -68,8 +68,8 @@ mixin WhereConditions<Self> {
 
   /// `column <operator> ?` with a dialect operator as text, e.g.
   /// `whereSqlOperator('nome', 'ilike', 'ana%')` or PostgreSQL `'@>'`. The
-  /// operator must be one the grammar knows; it is checked when the query is
-  /// compiled.
+  /// operator must be one the grammar knows, or one added with
+  /// `custom_operators`; it is checked when the query is compiled.
   Self whereSqlOperator(String column, String operator, Object? value) =>
       _add(LogicalConnector.and, _sqlOperator(column, operator, value));
   Self orWhereSqlOperator(String column, String operator, Object? value) =>
@@ -2104,18 +2104,26 @@ final class QueryBuilder2 with WhereConditions<QueryBuilder2> {
 
   static String _checkSqlOperator(QueryBuilder query, String operator) {
     final normalized = operator.toLowerCase().split(RegExp(r'\s+')).join(' ');
+    final grammar = query.grammar;
+    if (grammar.questionOperators.containsKey(normalized) ||
+        grammar.customOperators.contains(normalized) ||
+        (!normalized.contains('?') &&
+            grammar.predicateOperators.contains(normalized))) {
+      return normalized;
+    }
     if (normalized.contains('?')) {
       throw ArgumentError.value(
           operator,
           'operator',
-          '"?" is the bind placeholder; for JSON keys use '
-              "whereRaw('jsonb_exists(column, ?)', [key]).");
+          '"?" is the bind placeholder: call the function of the operator '
+              'with whereRaw.');
     }
-    if (!query.grammar.predicateOperators.contains(normalized)) {
-      throw ArgumentError.value(
-          operator, 'operator', 'Not a predicate operator of this grammar.');
-    }
-    return normalized;
+    throw ArgumentError.value(
+        operator,
+        'operator',
+        'Not a predicate operator of this grammar. To use one of an extension '
+            'or of a CREATE OPERATOR, add it to "custom_operators" in the '
+            'connection config or call Connection.addCustomOperators.');
   }
 
   /// `column operator ?` written directly: the value is one binding and is

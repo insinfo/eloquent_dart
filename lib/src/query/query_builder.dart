@@ -749,8 +749,7 @@ class QueryBuilder {
     }
 
     if (operator != null && operator is! String) {
-      throw ArgumentError.value(operator, 'operator',
-          'Expected an SQL operator such as "=", ">" or "like".');
+      this.grammar.checkOperator(operator);
     }
 
     if (value is Function) {
@@ -774,6 +773,8 @@ class QueryBuilder {
           'Operator "$operator" cannot be compared with null; '
               'use whereNull/whereNotNull.');
     }
+
+    this.grammar.checkOperator(operator, allowFunctions: true);
 
     const type = SqlWhereType.basic;
 
@@ -856,8 +857,9 @@ class QueryBuilder {
         }
       } else {
         // whereFlex('column', x): x is the operator (compared with null
-        // below) when it is a known operator, otherwise the value.
-        if (operator is String && isValidOperator(operator)) {
+        // below) when it is one of these, otherwise the value.
+        if (operator is String &&
+            _flexOperators.contains(QueryGrammar.normalizeOperator(operator))) {
           finalOperator = operator;
           finalValue = null;
         } else {
@@ -914,14 +916,24 @@ class QueryBuilder {
     return this.whereFlex(column, operator, value, SqlBool.or);
   }
 
+  /// What `whereFlex('column', x)` reads as an operator instead of a value. A
+  /// fixed list, shorter than the ones a clause accepts: `'+'` or `'%'` as the
+  /// only argument is a value.
+  static const Set<String> _flexOperators = {
+    '=', '<', '>', '<=', '>=', '<>', '!=', '~', '~*', '!~', '!~*', '&', '|', //
+    '^', '#', '<<', '>>', '<<=', '>>=', '&&', '@>', '<@', '?', '?|', '?&', //
+    '||', '-', '#-', 'in', 'like', 'like binary', 'not like', 'between',
+    'ilike', 'not ilike', 'rlike', 'regexp', 'not regexp', 'similar to',
+    'not similar to', 'is distinct from', 'is not distinct from',
+  };
+
   /// Whether [op] is one of the builder's or the grammar's operators,
   /// ignoring case.
   bool isValidOperator(String? op) {
     if (op == null) return false;
-    final allOperators = {..._operators, ...grammar.getOperators()}
-        .map((o) => o.toString().toLowerCase())
-        .toSet();
-    return allOperators.contains(op.toLowerCase());
+    final normalized = QueryGrammar.normalizeOperator(op);
+    return _operators.contains(normalized) ||
+        grammar.isKnownOperator(normalized);
   }
 
   /// Whether [operator] cannot be used with [value]: only `=`, `==`, `!=`
@@ -945,8 +957,8 @@ class QueryBuilder {
 
   /// Adds a where clause comparing two columns: `first operator second`.
   ///
-  /// When [operator] is not a known operator it is the second column and the
-  /// comparison is `=`: `whereColumn('a', 'b')` is `a = b`. [first] may also
+  /// Without [second], [operator] is the second column and the comparison is
+  /// `=`: `whereColumn('a', 'b')` is `a = b`. [first] may also
   /// be a list or map of conditions, grouped in parentheses (see
   /// [addArrayOfWheres]).
   QueryBuilder whereColumn(dynamic first,
@@ -955,12 +967,12 @@ class QueryBuilder {
       return this.addArrayOfWheres(first, boolean, 'whereColumn');
     }
 
-    // Not a known operator: whereColumn('a', 'b') is shorthand for `a = b`.
-    if (operator == null ||
-        !(this._operators.contains(operator.toLowerCase()) ||
-            this.grammar.getOperators().contains(operator.toLowerCase()))) {
+    // Two arguments: whereColumn('a', 'b') is shorthand for `a = b`.
+    if (operator == null || second == null) {
       second = operator;
       operator = SqlOperator.equals;
+    } else {
+      this.grammar.checkOperator(operator);
     }
 
     const type = SqlWhereType.column;
@@ -1623,6 +1635,7 @@ class QueryBuilder {
   /// on a new query.
   QueryBuilder whereSub(
       String column, String? operator, Function callback, String boolean) {
+    this.grammar.checkOperator(operator);
     const type = SqlWhereType.sub;
 
     var query = this.newQuery();
@@ -1651,6 +1664,7 @@ class QueryBuilder {
     callback(query);
 
     operator ??= SqlOperator.equals;
+    this.grammar.checkOperator(operator);
 
     this.wheresProp.add({
       'type': type,
@@ -1843,6 +1857,7 @@ class QueryBuilder {
   /// `jsonb_array_length(("column")::jsonb) <operator> ?` (PostgreSQL).
   QueryBuilder whereJsonLength(String column, String operator, dynamic value,
       [String boolean = SqlBool.and]) {
+    this.grammar.checkOperator(operator);
     this.wheresProp.add({
       'type': 'JsonLength',
       'column': column,
@@ -1989,6 +2004,7 @@ class QueryBuilder {
   QueryBuilder addDateBasedWhere(
       String type, String column, String? operator, dynamic value,
       [String boolean = SqlBool.and]) {
+    this.grammar.checkOperator(operator);
     this.wheresProp.add({
       'column': column,
       'type': type,
@@ -2103,6 +2119,7 @@ class QueryBuilder {
       value = operator;
       operator = SqlOperator.equals;
     }
+    this.grammar.checkOperator(operator);
     var type = 'basic';
 
     this.havingsProp.add({

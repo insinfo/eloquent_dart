@@ -132,6 +132,27 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   /// Sets the query grammar to [getDefaultQueryGrammar].
   void useDefaultQueryGrammar() {
     this.queryGrammar = getDefaultQueryGrammar();
+    _addConfiguredOperators();
+  }
+
+  /// The operators of `custom_operators` in the config.
+  void _addConfiguredOperators() {
+    final operators = _config['custom_operators'];
+    if (operators == null) return;
+    if (operators is! Iterable) {
+      throw ArgumentError.value(
+          operators, 'custom_operators', 'Expected a list of operators.');
+    }
+    this.queryGrammar.addCustomOperators(operators.map((o) => '$o'));
+  }
+
+  /// Lets the clauses of this connection use [operators]: those of an extension
+  /// or of a `CREATE OPERATOR`. See [QueryGrammar.addCustomOperators].
+  ///
+  /// It lasts as long as this connection object. `custom_operators` in the config
+  /// is the same for every connection the manager creates from it.
+  void addCustomOperators(Iterable<String> operators) {
+    this.queryGrammar.addCustomOperators(operators);
   }
 
   /// Returns the query grammar a new connection uses; driver subclasses
@@ -1479,6 +1500,7 @@ class Connection with DetectsLostConnections implements ConnectionInterface {
   /// Sets the query grammar used by the connection.
   void setQueryGrammar(QueryGrammar grammarP) {
     this.queryGrammar = grammarP;
+    _addConfiguredOperators();
   }
 
   /// Returns the schema grammar used by the connection.

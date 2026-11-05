@@ -20,6 +20,12 @@ Runnable examples, one per topic (query builders, transactions, both ORM
 styles, migrations, bulk and streaming, PostgreSQL features, MySQL,
 connection options), are in [example/](example/README.md).
 
+### What's new in 4.3
+
+- Operators are validated in every clause, and `custom_operators` adds your own
+  (see [Operators](#operators)). An unknown operator now throws `ArgumentError`.
+- JSON selectors are escaped.
+
 ### What's new in 4.2
 
 - The `dargres` and `dpgsql` adapters send the password in clear text only to a
@@ -178,8 +184,7 @@ the comparisons, `ilike`, `~~`, the regex operators `~ ~* !~ !~*`,
 `similar to`, `is [not] distinct from`, `@> <@ &&`, `@@` and the
 inet/range operators; on MySQL `<=>`, `like binary`, `regexp`, `rlike`,
 `sounds like`. Arithmetic operators are rejected because they are not
-conditions. `?`, `?|` and `?&` are rejected too, because `?` is the
-placeholder: use `whereRaw('jsonb_exists(dados, ?)', ['telefone'])`.
+conditions. See [Operators](#operators) for `?` and for your own operators.
 
 Pagination, writes, unions and CTEs:
 
@@ -223,6 +228,50 @@ Since Dart 3.10 you can leave out the enum name:
 `updateReturning`, `delete`, `deleteReturning`, `increment`.
 Locks: `lockForUpdate(skipLocked: true)`. `toQueryBuilder()` returns the
 equivalent `QueryBuilder` for features not exposed yet.
+
+## Operators
+
+An operator goes into the SQL as it is, so every clause checks it, and an unknown
+one throws `ArgumentError`: `where`, `having`, `join`, `whereDate`,
+`whereJsonLength`, the subquery wheres and `whereSqlOperator`. The columns and the
+values never needed this: they are quoted and bound.
+
+On PostgreSQL every operator of `pg_operator` is known, along with the ones written
+in words (`like`, `ilike`, `similar to`, `is distinct from`...). On MySQL, those of
+its manual.
+
+An operator of an extension, or of your own `CREATE OPERATOR`, is added in the
+connection config or at run time, on any database:
+
+```dart
+manager.addConnection({
+  'driver': 'pgsql',
+  // ...
+  'custom_operators': ['===', 'OPERATOR(geo.<->)'],
+});
+
+final db = await manager.connection();
+db.addCustomOperators(['@=@']); // Only for this connection object.
+
+await db.table('places').where('position', 'OPERATOR(geo.<->)', point).get();
+```
+
+An added operator must be symbols, `OPERATOR(schema.symbols)` or words; comments are
+refused. Only add what is yours: adding `or` would let `or` through.
+
+`?` is the bind placeholder, so on PostgreSQL `where` compiles the JSON operators
+with it to their functions: `?` to `jsonb_exists`, `?|` to `jsonb_exists_any`, `?&`
+to `jsonb_exists_all` and `@?` to `jsonb_path_exists_opr`. Other clauses refuse
+them, and so do the geometric `?#`, `?-`, `?-|` and `?||`: call their functions with
+`whereRaw`.
+
+```dart
+await db.table('t').where('data', '?', 'phone').get(); // jsonb_exists("data", ?)
+```
+
+If your code gets an operator from a request, as a search filter does, keep a list
+of the ones your screens use: a known operator is not SQL injection, but a user can
+still pick any of them.
 
 ## whereExists subquery
 ```dart

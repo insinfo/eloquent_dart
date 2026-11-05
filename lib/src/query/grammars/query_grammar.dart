@@ -17,6 +17,101 @@ class QueryGrammar extends BaseGrammar {
     return operators;
   }
 
+  /// `?` is the bind placeholder, so an operator with it cannot go in the SQL.
+  /// A grammar names here the function that does the same.
+  Map<String, String> get questionOperators => const {};
+
+  final Set<String> _customOperators = {};
+
+  /// The operators added by [addCustomOperators], normalized.
+  Set<String> get customOperators => Set.unmodifiable(_customOperators);
+
+  /// Lets `where`, `having`, `join` and the other clauses use [operators]: those
+  /// of an extension or of a `CREATE OPERATOR`, as `<=>`, `OPERATOR(geo.<->)` or
+  /// `sounds like`.
+  ///
+  /// Each one must look like an operator, or it throws [ArgumentError]: symbols,
+  /// `OPERATOR(schema.symbols)`, or words. Comments and `?` are refused.
+  void addCustomOperators(Iterable<String> operators) {
+    final valid = [
+      for (final operator in operators) _checkCustomOperator(operator)
+    ];
+    _customOperators.addAll(valid);
+  }
+
+  static const _symbols = r'[-+*/<>=~!@#%^&|`]+';
+  static final _symbolicOperator = RegExp('^$_symbols\$');
+  static final _qualifiedOperator = RegExp(
+      r'^operator\( ?(?:(?:[a-z_][a-z0-9_$]*|"[^"]+")\.)*(' +
+          _symbols +
+          r') ?\)$');
+  static final _wordOperator =
+      RegExp(r'^[a-z_][a-z0-9_]*(?: [a-z_][a-z0-9_]*)*$');
+  static final _extraWhitespace = RegExp(r'\s+');
+
+  String _checkCustomOperator(String operator) {
+    final normalized = normalizeOperator(operator);
+    final symbols = _symbolicOperator.hasMatch(normalized)
+        ? normalized
+        : _qualifiedOperator.firstMatch(normalized)?.group(1);
+    if (symbols == null && !_wordOperator.hasMatch(normalized)) {
+      throw ArgumentError.value(
+          operator,
+          'custom_operators',
+          normalized.contains('?')
+              ? '"?" is the bind placeholder: call the function of the operator '
+                  'with whereRaw.'
+              : 'Expected symbols, OPERATOR(schema.symbols) or words.');
+    }
+    if (symbols != null && isCommentInOperator(symbols)) {
+      throw ArgumentError.value(
+          operator, 'custom_operators', 'This starts an SQL comment.');
+    }
+    return normalized;
+  }
+
+  /// Whether the symbols of an operator would start a comment in this dialect.
+  bool isCommentInOperator(String symbols) =>
+      symbols.contains('--') || symbols.contains('/*');
+
+  /// [operator] as it is looked up: lower case, and words one space apart.
+  static String normalizeOperator(String operator) =>
+      operator.trim().toLowerCase().replaceAll(_extraWhitespace, ' ');
+
+  /// Whether the normalized [operator] can go in the SQL of this grammar.
+  bool isKnownOperator(String operator) =>
+      SqlOperator.defaults.contains(operator) ||
+      operators.contains(operator) ||
+      predicateOperators.contains(operator) ||
+      questionOperators.containsKey(operator) ||
+      _customOperators.contains(operator);
+
+  /// Throws [ArgumentError] unless [operator] can go in the SQL: it goes as it
+  /// is, so it is what stops SQL arriving as an operator from outside.
+  ///
+  /// [allowFunctions] is for the clauses that compile [questionOperators].
+  void checkOperator(Object? operator, {bool allowFunctions = false}) {
+    if (operator is! String) {
+      throw ArgumentError.value(operator, 'operator',
+          'Expected an SQL operator such as "=", ">" or "like".');
+    }
+    final normalized = normalizeOperator(operator);
+    if (questionOperators.containsKey(normalized)) {
+      if (allowFunctions) return;
+    } else if (!normalized.contains('?') && isKnownOperator(normalized)) {
+      return;
+    }
+    throw ArgumentError.value(
+        operator,
+        'operator',
+        normalized.contains('?')
+            ? '"?" is the bind placeholder: call the function of the operator '
+                'with whereRaw.'
+            : 'Unknown SQL operator. To use one of an extension or of a CREATE '
+                'OPERATOR, add it to "custom_operators" in the connection config '
+                'or call Connection.addCustomOperators.');
+  }
+
   late final Map<String, Function> _methodMap;
 
   QueryGrammar() {
@@ -384,6 +479,8 @@ class QueryGrammar extends BaseGrammar {
       second = this.wrap(clause['second']);
     }
 
+    // A JoinClause does not know its grammar: this is where it is checked.
+    checkOperator(clause['operator']);
     return "${clause['boolean']} $first ${clause['operator']} $second";
   }
 

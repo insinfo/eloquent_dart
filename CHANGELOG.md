@@ -1,3 +1,36 @@
+## 4.3.0
+
+Security: an operator or a JSON selector that came from outside could carry SQL.
+
+- `where`, `orWhere`, `whereNot`, `whereAny`, `whereAll`, `having`, `join`,
+  `joinWhere`, `whereDate` and the other date clauses, `whereJsonLength` and the
+  subquery wheres put the operator in the SQL as it came:
+  `where('id', '= 0 or 1=1 or 1 =', 1)` returned every row. They now accept only
+  known operators and throw `ArgumentError` for any other. If your code builds a
+  query from an operator it received, as a search filter does, update.
+- `where('data->x', ...)` with a quote in the key on PostgreSQL and on MySQL, and
+  a backslash in the path of `whereJsonContains` on MySQL and MariaDB, ended the
+  string and could carry SQL. They are escaped now, and in the JSON key of an
+  `update` on MySQL too.
+- `whereColumn('a', 'unknown', 'b')` was silently `a = unknown`, dropping `b`. It
+  throws now. `whereColumn('a', 'b')` is still `a = b`.
+
+Operators:
+
+- `custom_operators` in the connection config, and
+  `Connection.addCustomOperators`, add the operators of an extension or of a
+  `CREATE OPERATOR`, on any database: `['<=>', 'OPERATOR(geo.<->)']`. They also
+  apply to `whereSqlOperator`.
+- On PostgreSQL every operator of `pg_operator` is accepted, and a test compares
+  the list with the server's catalog. `whereSqlOperator` accepts all the ones that
+  return a boolean.
+- `?`, `?|`, `?&` and `@?` work on PostgreSQL, compiled to `jsonb_exists`,
+  `jsonb_exists_any`, `jsonb_exists_all` and `jsonb_path_exists_opr`, as `?` is the
+  bind placeholder. They failed with a wrong number of parameters.
+- `SqlOperator.postgresRegexAll` and `postgresNotRegexAll` were `~///` and `!~///`.
+  They are `~*` and `!~*`, so `whereFlex('a', '~*', 'x')` works.
+- On MySQL `#` is no longer an operator: it starts a comment.
+
 ## 4.2.1
 
 - `postgres_v3`: a date `DateTime` cannot represent (`infinity`, `-infinity`, a

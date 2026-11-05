@@ -27,12 +27,14 @@ abstract class SqlOperator {
   static const String regexp = 'regexp';
   static const String notRegexp = 'not regexp';
   static const String postgresRegex = '~';
-  static const String postgresRegexAll = '~///';
+  static const String postgresRegexAll = '~*';
   static const String postgresNotRegex = '!~';
-  static const String postgresNotRegexAll = '!~///';
+  static const String postgresNotRegexAll = '!~*';
   static const String similarTo = 'similar to';
   static const String notSimilarTo = 'not similar to';
   static const String isOperator = 'is';
+  static const String isNotOperator = 'is not';
+  static const String notBetween = 'not between';
 
   static const List<String> defaults = [
     equals,
@@ -43,10 +45,14 @@ abstract class SqlOperator {
     notEqualsSql,
     notEquals,
     inList,
+    notInList,
+    isOperator,
+    isNotOperator,
     like,
     likeBinary,
     notLike,
     between,
+    notBetween,
     ilike,
     bitwiseAnd,
     bitwiseOr,

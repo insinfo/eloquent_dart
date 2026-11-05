@@ -14,8 +14,8 @@ class QueryPostgresGrammar extends QueryGrammar {
     return '$text.${micros.toString().padLeft(6, '0')}';
   }
 
-  /// PostgreSQL predicate operators for `QueryBuilder2.whereSqlOperator`.
-  /// `?`, `?|` and `?&` (JSON keys) are not here: `?` is the placeholder.
+  /// PostgreSQL predicate operators for `QueryBuilder2.whereSqlOperator`: the
+  /// boolean ones of `pg_operator`. Those with `?` are [questionOperators].
   @override
   Set<String> get predicateOperators => const {
         // comparison
@@ -33,43 +33,51 @@ class QueryPostgresGrammar extends QueryGrammar {
         '@@',
         // inet containment, range position
         '<<', '>>', '<<=', '>>=', '-|-', '&<', '&>',
+        // geometric, record and pattern comparisons
+        '&<|', '<<|', '|>>', '|&>', '<^', '>^', '~=', '@@@', '^@',
+        '*<', '*<=', '*<>', '*=', '*>', '*>=',
+        '~<~', '~<=~', '~>~', '~>=~',
       };
 
-  /// All of the available clause operators.
+  /// All of the available clause operators: those of `pg_operator`, and the ones
+  /// written in words. `test/query_operators_integration_test.dart` compares
+  /// them with the server's catalog. The ones with `?` are [questionOperators].
   List<String> operators = [
-    '=',
-    '<',
-    '>',
-    '<=',
-    '>=',
-    '<>',
-    '!=',
-    'like',
-    'not like',
-    'between',
-    'ilike',
-    'not ilike',
-    '~',
-    '&',
-    '|',
-    '#',
-    '<<',
-    '>>',
-    '<<=',
-    '>>=',
-    '&&',
-    '@>',
-    '<@',
-    '?',
-    '?|',
-    '?&',
-    '||',
-    '-',
-    '-',
-    '#-',
-    'is distinct from',
-    'is not distinct from',
+    '!!', '!~', '!~*', '!~~', '!~~*', '#', '##', '#-', '#>', '#>>', '%', '&', //
+    '&&', '&<', '&<|', '&>', '*', '*<', '*<=', '*<>', '*=', '*>', '*>=', '+', //
+    '-', '->', '->>', '-|-', '/', '<', '<->', '<<', '<<=', '<<|', '<=', '<>', //
+    '<@', '<^', '=', '>', '>=', '>>', '>>=', '>^', '@', '@-@', '@>', '@@', //
+    '@@@', '^', '^@', '|', '|&>', '|/', '|>>', '||', '||/', '~', '~*',
+    '~<=~', //
+    '~<~', '~=', '~>=~', '~>~', '~~', '~~*', '!=', //
+    'like', 'not like', 'ilike', 'not ilike', 'similar to', 'not similar to',
+    'is distinct from', 'is not distinct from', 'between', 'not between',
   ];
+
+  /// `?`, `?|` and `?&` on `jsonb`, and `@?` on `jsonpath`. The geometric ones
+  /// (`?#`, `?-`, `?-|`, `?||`) have one function per type, and go by `whereRaw`.
+  @override
+  Map<String, String> get questionOperators => const {
+        '?': 'jsonb_exists',
+        '?|': 'jsonb_exists_any',
+        '?&': 'jsonb_exists_all',
+        '@?': 'jsonb_path_exists_opr',
+      };
+
+  /// `column <operator> ?`, or the function of an operator with `?`.
+  @override
+  String whereBasic(QueryBuilder query, Map<String, dynamic> where) {
+    final operator = where['operator'] as String;
+    if (operator.contains('?')) {
+      final function =
+          questionOperators[QueryGrammar.normalizeOperator(operator)];
+      if (function != null) {
+        return '$function(${this.wrap(where['column'])}, '
+            '${this.parameter(where['value'])})';
+      }
+    }
+    return super.whereBasic(query, where);
+  }
 
   /// Compiles `column::date <operator> ?`.
   String whereDate(QueryBuilder query, dynamic where) {
@@ -541,7 +549,7 @@ class QueryPostgresGrammar extends QueryGrammar {
 
   /// Quotes each key of a JSON path as a string literal: `'key'`.
   List<String> wrapJsonPathAttributes(List<String> path) {
-    return path.map((attribute) => "'$attribute'").toList();
+    return path.map((attribute) => this.quoteRawString(attribute)).toList();
   }
 
   /// Compiles the joins: `<type> join [LATERAL] table on ...`, or

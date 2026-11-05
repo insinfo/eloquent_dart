@@ -25,34 +25,25 @@ class QueryMySqlGrammar extends QueryGrammar {
         'sounds like',
       };
 
-  /// All of the available clause operators.
+  /// All of the available clause operators. `#` is not one: it starts a comment.
   List<String> operators = [
-    '=',
-    '<',
-    '>',
-    '<=',
-    '>=',
-    '<>',
-    '!=',
-    'like',
-    'not like',
-    'between',
-    'ilike',
-    '&',
-    '|',
-    '#',
-    '<<',
-    '>>',
-    '@>',
-    '<@',
-    '?',
-    '?|',
-    '?&',
-    '||',
-    '-',
-    '-',
-    '#-'
+    '=', '<', '>', '<=', '>=', '<>', '!=', '<=>', //
+    '&', '|', '^', '~', '<<', '>>', '&&', '||', //
+    '+', '-', '*', '/', '%', '->', '->>', //
+    'like', 'not like', 'like binary', 'not like binary', 'rlike', 'not rlike',
+    'regexp', 'not regexp', 'sounds like', 'between', 'not between', 'ilike',
+    '@>', '<@',
   ];
+
+  /// `#` also starts a comment here.
+  @override
+  bool isCommentInOperator(String symbols) =>
+      symbols.contains('#') || super.isCommentInOperator(symbols);
+
+  /// [value] in double quotes. Backslashes go first, or `\"` would close it; a
+  /// doubled quote is safe with `NO_BACKSLASH_ESCAPES` too.
+  String _doubleQuoted(String value) =>
+      '"' + value.replaceAll('\\', '\\\\').replaceAll('"', '""') + '"';
 
   List<String> selectComponents = [
     // CTEs (MySQL 8 / MariaDB 10.2+); they were dropped while their bindings
@@ -107,9 +98,8 @@ class QueryMySqlGrammar extends QueryGrammar {
     if (path.isEmpty) {
       return 'json_contains($field, $value)';
     }
-    final jsonPath =
-        path.map((key) => '"$key"').join('.').replaceAll("'", "''");
-    return "json_contains($field, $value, '\$.$jsonPath')";
+    final jsonPath = path.map((key) => '"$key"').join('.');
+    return 'json_contains($field, $value, ${quoteRawString('\$.$jsonPath')})';
   }
 
   /// `[not] json_contains(column, ?[, path])`, used by `whereJsonContains`.
@@ -337,7 +327,7 @@ class QueryMySqlGrammar extends QueryGrammar {
 
     var field = this.wrapValue(path.removeAt(0));
 
-    var accessor = '"\$.' + path.join('.') + '"';
+    var accessor = _doubleQuoted('\$.' + path.join('.'));
 
     return '$field = json_set($field, $accessor, ${value.getValue()})';
   }
@@ -472,7 +462,7 @@ class QueryMySqlGrammar extends QueryGrammar {
   String wrapJsonSelector(String value) {
     final path = value.split('->');
     final field = this.wrapValue(path.removeAt(0));
-    return field + '->' + '"\$.' + path.join('.') + '"';
+    return field + '->' + _doubleQuoted('\$.' + path.join('.'));
   }
 
   /// Whether [value] is a JSON selector (contains `->`).
