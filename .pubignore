@@ -34,3 +34,6 @@ teste_insert_get_id.dart
 example/bin/teste_insert_get_id.dart
 # Certificates of the TLS tests: not needed by users of the package.
 test/fixtures/tls/
+
+# Notes for a report to the author of a dependency: not part of the package.
+doc/postgres_package_report.md

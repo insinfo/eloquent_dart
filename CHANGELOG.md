@@ -1,3 +1,18 @@
+## 4.2.1
+
+- `postgres_v3`: a date `DateTime` cannot represent (`infinity`, `-infinity`, a
+  year past its range) is now `null`, as on the other adapters, with any
+  `pg_types`, and in arrays. `'infinity'::date` came back as the wrong date
+  `36070-01-11`, and `'infinity'::timestamp` failed with a `RangeError` no caller
+  could catch, which ended the process. Dates before Christ keep their value.
+- `postgres_v3`: postgres 3.5.7 has errors no caller can catch, which by default
+  end the process: a write to a socket the server reset, a script with two
+  statements that return rows, a malformed message. The adapter now opens its
+  sockets in a zone that drops them. The call they belong to still fails, or
+  succeeds, by itself, and your own errors reach you as before.
+- Requires dargres 4.1.1, dpgsql 1.3.1 and postgres_fork 3.1.2: an error writing
+  to a socket the server reset no longer ends the process there either.
+
 ## 4.2.0
 
 - The `dargres` and `dpgsql` adapters no longer send the password in clear text

@@ -15,13 +15,21 @@ import '../core/pg_uniform_values.dart';
 /// its own objects (Time, Interval, Point, IntRange...) or UndecodedBytes,
 /// whose `asString` decoded binary bytes as text (garbage for inet, an error
 /// for money, timetz, bit and their arrays).
-TypeRegistry? postgresV3TypeRegistry(PDOConfig config) {
-  if (!config.uniformPgTypes) return null;
+///
+/// With any `pg_types`, dates `DateTime` cannot represent are null, as on the
+/// other adapters (see [_DateCodec]).
+TypeRegistry postgresV3TypeRegistry(PDOConfig config) {
+  const dates = _DateCodec();
   const codec = _ServerTextCodec();
   return TypeRegistry(codecs: {
-    for (final oid in _textOids) oid: codec,
-    for (final oid in PgBinaryText.arrayElements.keys) oid: codec,
-    for (final oid in _oidLike) oid: codec,
+    for (final oid in _dateOids) oid: dates,
+    for (final oid in _dateArrayElements.keys) oid: dates,
+    if (config.uniformPgTypes) ...{
+      for (final oid in _textOids) oid: codec,
+      for (final oid in PgBinaryText.arrayElements.keys)
+        if (!_dateArrayElements.containsKey(oid)) oid: codec,
+      for (final oid in _oidLike) oid: codec,
+    },
   });
 }
 
@@ -113,6 +121,119 @@ const _textOids = [
 
 /// oid and the reg* types (an unsigned 4-byte oid in binary).
 const _oidLike = [26, 24, 2202, 2203, 2204, 2205, 2206, 3734, 3769, 4089, 4096];
+
+const _oidDate = 1082;
+const _oidTimestamp = 1114;
+const _oidTimestamptz = 1184;
+const _dateOids = [_oidDate, _oidTimestamp, _oidTimestamptz];
+
+const _dateArrayElements = {
+  1182: _oidDate,
+  1115: _oidTimestamp,
+  1185: _oidTimestamptz,
+};
+
+final _epoch2000 = DateTime.utc(2000);
+
+/// The microseconds since 1970 that `DateTime` can represent.
+const _maxDateTimeMicros = 8640000000000000000;
+const _epoch2000Micros = 946684800000000;
+
+/// `date`, `timestamp` and `timestamptz`, decoded as postgres 3.x does, except
+/// for what `DateTime` cannot represent (`infinity`, or a year past its range),
+/// which is null. postgres 3.5.7 turned the `infinity` of a `date` into a wrong
+/// date, and that of a timestamp into a `RangeError` no caller could catch,
+/// which ends the process. A codec replaces the built-in one of its type: what
+/// it does not decode would be `UndecodedBytes`.
+class _DateCodec implements Codec {
+  const _DateCodec();
+
+  /// Parameters keep the package's own encoders.
+  @override
+  FutureOr<EncodedValue?> encode(TypedValue input, CodecContext context) =>
+      null;
+
+  @override
+  FutureOr<Object?> decode(EncodedValue input, CodecContext context) {
+    final bytes = input.bytes;
+    if (bytes == null) return null;
+    final oid = input.typeOid!;
+    final element = _dateArrayElements[oid];
+    if (input.isText) {
+      if (element != null) return input;
+      return _fromText(context.encoding.decode(bytes));
+    }
+    if (element != null) return _array(bytes, element);
+    return _binary(oid, ByteData.sublistView(bytes));
+  }
+
+  static DateTime? _fromMicros(int micros) {
+    final sinceEpoch = micros + _epoch2000Micros;
+    if (micros.abs() > _maxDateTimeMicros ||
+        sinceEpoch.abs() > _maxDateTimeMicros) {
+      return null;
+    }
+    return _epoch2000.add(Duration(microseconds: micros));
+  }
+
+  static DateTime? _binary(int oid, ByteData data) {
+    if (oid == _oidDate) {
+      final days = data.getInt32(0);
+      // 100,000,000 days from 1970 is the range of DateTime.
+      if (days.abs() > 99000000) return null;
+      return _epoch2000.add(Duration(days: days));
+    }
+    return _fromMicros(data.getInt64(0));
+  }
+
+  /// The text protocol, as the package's text decoder does.
+  static Object? _fromText(String text) {
+    if (text == 'infinity' || text == '-infinity') return null;
+    final DateTime raw;
+    try {
+      raw = DateTime.parse(text);
+    } on FormatException {
+      return text;
+    }
+    if (raw.isUtc) return raw;
+    return DateTime.utc(raw.year, raw.month, raw.day, raw.hour, raw.minute,
+        raw.second, raw.millisecond, raw.microsecond);
+  }
+
+  /// A binary array: dimensions, flags, element oid, a length and lower bound
+  /// per dimension, then each element with its length (-1 for NULL).
+  static List<Object?> _array(Uint8List bytes, int element) {
+    final data = ByteData.sublistView(bytes);
+    final dimensions = data.getInt32(0);
+    if (dimensions == 0) return <DateTime?>[];
+    final lengths = [
+      for (var d = 0; d < dimensions; d++) data.getInt32(12 + d * 8)
+    ];
+    var offset = 12 + dimensions * 8;
+
+    List<Object?> read(int depth) {
+      if (depth < dimensions - 1) {
+        return [
+          for (var i = 0; i < lengths[depth]; i++) read(depth + 1),
+        ];
+      }
+      final values = <DateTime?>[];
+      for (var i = 0; i < lengths[depth]; i++) {
+        final length = data.getInt32(offset);
+        offset += 4;
+        if (length < 0) {
+          values.add(null);
+          continue;
+        }
+        values.add(_binary(element, ByteData.sublistView(bytes, offset)));
+        offset += length;
+      }
+      return values;
+    }
+
+    return read(0);
+  }
+}
 
 class _ServerTextCodec implements Codec {
   const _ServerTextCodec();

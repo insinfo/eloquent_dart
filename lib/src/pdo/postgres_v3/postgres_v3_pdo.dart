@@ -115,7 +115,7 @@ class PostgresV3PDO extends PDOInterface {
         ),
       );
     } else {
-      connection = await Connection.open(endpoint,
+      connection = await _inDriverZone(() => Connection.open(endpoint,
           settings: ConnectionSettings(
             applicationName: config.applicationName,
             timeZone: config.timezone,
@@ -131,7 +131,7 @@ class PostgresV3PDO extends PDOInterface {
             queryMode: queryMode,
             ignoreSuperfluousParameters:
                 options.flag('ignoreSuperfluousParameters'),
-          ));
+          )));
     }
 
     return this;
@@ -171,7 +171,8 @@ class PostgresV3PDO extends PDOInterface {
   /// A new Connection, outside the pool, for LISTEN.
   @override
   Future<PDONotificationConnection> openNotificationConnection() async {
-    final conn = await Connection.open(
+    final sslMode = await _sslMode();
+    final conn = await _inDriverZone(() => Connection.open(
         Endpoint(
           host: config.host,
           port: config.port,
@@ -186,10 +187,10 @@ class PostgresV3PDO extends PDOInterface {
             await _onOpen(conn, config);
           },
           encoding: _getEncoding(config.charset ?? 'utf8'),
-          sslMode: await _sslMode(),
+          sslMode: sslMode,
           securityContext: config.buildSecurityContext(),
           typeRegistry: postgresV3TypeRegistry(config),
-        ));
+        )));
     return PDONotificationConnection(
       notifications: conn.channels.all
           .map((n) => DriverNotification(n.channel, n.payload, n.processId)),
@@ -250,9 +251,8 @@ class PostgresV3PDO extends PDOInterface {
         Duration(seconds: timeoutInSeconds ?? queryTimeoutInSeconds);
     final c = connection;
     if (c is Pool) {
-      return c.withConnection<T>(
-          (session) => _transaction(session, operation, timeout),
-          settings: _poolConnectionSettings);
+      return _onPool<T>(
+          c, (session) => _transaction(session, operation, timeout));
     }
     return _transaction(c as Connection, operation, timeout);
   }
@@ -340,10 +340,45 @@ class PostgresV3PDO extends PDOInterface {
   /// connections, as Pool.execute does.
   Future<R> _onSession<R>(Future<R> Function(Session session) operation) {
     final c = connection;
-    return c is Pool
-        ? c.withConnection<R>(operation, settings: _poolConnectionSettings)
-        : operation(c as Connection);
+    return c is Pool ? _onPool<R>(c, operation) : operation(c as Connection);
   }
+
+  /// Runs [operation] on a connection of [pool]. The pool opens its connections
+  /// in the zone of the call, so that part runs in the driver's zone (see
+  /// [_inDriverZone]), and [operation] in the caller's.
+  Future<R> _onPool<R>(Pool pool, Future<R> Function(Connection) operation) {
+    final caller = Zone.current;
+    return _inDriverZone(() => pool.withConnection<R>((session) async {
+          // Errors do not cross from one error zone to another: the outcome
+          // does, and it is thrown here so the pool sees the failure.
+          final outcome = await caller.run(() => operation(session).then(
+              (value) => _Outcome<R>.value(value),
+              onError: (Object error, StackTrace stackTrace) =>
+                  _Outcome<R>.error(error, stackTrace)));
+          return outcome.unwrap();
+        }, settings: _poolConnectionSettings));
+  }
+
+  /// Runs [body] so that the sockets it opens belong to a zone of their own.
+  ///
+  /// postgres 3.5.7, the last version for Dart below 3.9, has errors no caller
+  /// can catch: a write to a socket the server reset, a script with two
+  /// statements that return rows, a malformed message. They are raised in the
+  /// zone that opened the socket, and by default end the process. The call they
+  /// belong to fails, or succeeds, by itself, so here they are dropped.
+  static Future<R> _inDriverZone<R>(Future<R> Function() body) {
+    final completer = Completer<R>();
+    Zone.current
+        .fork(
+            specification: const ZoneSpecification(
+                handleUncaughtError: _dropDriverError))
+        .run(() =>
+            body().then(completer.complete, onError: completer.completeError));
+    return completer.future;
+  }
+
+  static void _dropDriverError(Zone self, ZoneDelegate parent, Zone zone,
+      Object error, StackTrace stackTrace) {}
 
   /// The settings of each call on the pool. postgres 3.5.7 ignores
   /// PoolSettings.securityContext when the pool opens a connection (it reads
@@ -381,5 +416,25 @@ class PostgresV3PDO extends PDOInterface {
     } else if (connection is Pool) {
       await (connection as Pool).close(force: true);
     }
+  }
+}
+
+/// What an operation ended with, as a value that can cross error zones.
+class _Outcome<R> {
+  _Outcome.value(R this._value)
+      : _error = null,
+        _stackTrace = null;
+
+  _Outcome.error(Object this._error, StackTrace this._stackTrace)
+      : _value = null;
+
+  final R? _value;
+  final Object? _error;
+  final StackTrace? _stackTrace;
+
+  R unwrap() {
+    final error = _error;
+    if (error != null) Error.throwWithStackTrace(error, _stackTrace!);
+    return _value as R;
   }
 }
