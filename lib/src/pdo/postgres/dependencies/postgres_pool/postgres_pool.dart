@@ -320,6 +320,10 @@ class PgPoolSettings {
   /// null uses the system roots.
   SecurityContext? securityContext;
 
+  /// Whether the pooled connections may send the password in clear text when
+  /// the server asks for it.
+  bool allowClearTextPassword = false;
+
   /// This callback function will be called after opening the connection.
   Future<void> Function(PostgreSQLExecutionContext connection)? onOpen;
 
@@ -344,6 +348,7 @@ class PgPoolSettings {
     timeZone = other.timeZone;
     encoding = other.encoding;
     securityContext = other.securityContext;
+    allowClearTextPassword = other.allowClearTextPassword;
   }
 }
 
@@ -546,6 +551,7 @@ class PgPool implements PostgreSQLExecutionContext {
             useSSL: _url.requireSsl,
             sslMode: _url.sslMode,
             securityContext: settings.securityContext,
+            allowClearTextPassword: settings.allowClearTextPassword,
             isUnixSocket: _url.isUnixSocket,
             timeoutInSeconds: settings.connectTimeout.inSeconds,
             queryTimeoutInSeconds: settings.queryTimeout.inSeconds,

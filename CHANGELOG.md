@@ -1,5 +1,20 @@
-## 4.1.1
+## 4.2.0
 
+- The `dargres` and `dpgsql` adapters no longer send the password in clear text
+  when the server asks for it with no verified TLS: whoever asks gets the
+  password itself, so with `sslmode` `require`, or without TLS, that could be
+  anyone between the application and the server. The connection fails instead.
+  With a server that authenticates with LDAP, PAM or `password`, use `sslmode`
+  `verify-full`, or `driver_options` `allowCleartextPassword: true` (dargres) or
+  `'Allow Cleartext Password': 'true'` (dpgsql). `postgres` already refused it,
+  and its `allowClearTextPassword` now also works with `pool`. On `postgres_v3`
+  the postgres package has no such option: it still sends it.
+- The dpgsql adapter requires dpgsql 1.3.0: opening a connection is now bounded
+  by `Timeout` (15 s by default; it had no limit, so a server that stopped
+  answering left it waiting forever), and bytes it cannot read on an idle
+  connection lose that connection instead of ending the process.
+- The dargres adapter requires dargres 4.1.0, and the postgres adapter
+  postgres_fork 3.1.1.
 - README: what each `sslmode` does, the host name a certificate must name, what
   `require` does not protect from, and a "What's new in 4.1" section.
 

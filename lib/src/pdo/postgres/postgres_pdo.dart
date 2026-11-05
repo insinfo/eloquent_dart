@@ -68,6 +68,7 @@ class PostgresV2PDO extends PDOInterface {
                 'maxSessionUse',
                 'maxErrorCount',
                 'maxQueryCount',
+                'allowClearTextPassword',
               }
             : const {
                 'timeoutInSeconds',
@@ -101,6 +102,8 @@ class PostgresV2PDO extends PDOInterface {
       settings.timeZone = timeZone;
       settings.decodingSettings = _decodingSettings(config);
       settings.securityContext = config.buildSecurityContext();
+      settings.allowClearTextPassword =
+          options.flag('allowClearTextPassword') ?? false;
       final connectTimeout = options.duration('connectTimeout');
       if (connectTimeout != null) settings.connectTimeout = connectTimeout;
       final queryTimeout = options.duration('queryTimeout');

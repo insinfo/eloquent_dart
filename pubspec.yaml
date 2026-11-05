@@ -1,5 +1,5 @@
 name: eloquent
-version: 4.1.1
+version: 4.2.0
 description: >-
   Laravel-style (Eloquent 5.2) query builder, schema builder and migrations
   for Dart, with PostgreSQL and MySQL drivers.
@@ -23,10 +23,10 @@ dependencies:
   meta: ^1.17.0
   path: ^1.9.1
 
-  dargres: ^4.0.3
-  dpgsql: ^1.2.0
+  dargres: ^4.1.0
+  dpgsql: ^1.3.0
   # postgres v2
-  postgres_fork: ^3.1.0
+  postgres_fork: ^3.1.1
   mysql_dart: ^4.0.1
   # postgres v3
   postgres: ^3.5.4

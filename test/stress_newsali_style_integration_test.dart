@@ -622,13 +622,15 @@ void main() {
         expect(await db.table('ns_pessoa').where('versao', '=', 99).count(), 0,
             reason: 'versao is not fillable');
 
-        // No connection left open by the servers.
+        // No connection left open by the servers. Fewer than the baseline is
+        // fine: one from an earlier test may have closed in the meantime.
         var left = await _connections(db) - baseline;
         for (var i = 0; i < 20 && left > 0; i++) {
           await Future.delayed(const Duration(milliseconds: 100));
           left = await _connections(db) - baseline;
         }
-        expect(left, 0, reason: 'connections left open after the servers');
+        expect(left, lessThanOrEqualTo(0),
+            reason: 'connections left open after the servers');
 
         await db.unprepared('drop table if exists ${_tables.join(', ')}');
         await manager.getDatabaseManager().purge('adm');

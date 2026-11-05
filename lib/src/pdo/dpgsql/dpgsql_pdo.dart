@@ -563,6 +563,7 @@ class DpgsqlPDO extends PDOInterface {
     'Database',
     'SSL Mode',
     'Trust Server Certificate',
+    'Allow Cleartext Password',
     'Pooling',
     'Minimum Pool Size',
     'Maximum Pool Size',

@@ -54,6 +54,7 @@ class DargresPDO extends PDOInterface {
       'queueConcurrentCalls',
       'numericAsString',
       'sourceAddress',
+      'allowCleartextPassword',
     });
     return dargres.ConnectionSettings(
       user: config.username ?? '',
@@ -78,6 +79,7 @@ class DargresPDO extends PDOInterface {
       searchPath: config.schema,
       sessionStatements: config.postgresTimeoutStatements(),
       sslContext: _sslContext,
+      allowCleartextPassword: options.flag('allowCleartextPassword') ?? false,
       // postgres_fork (the default driver) returns numeric as an exact String.
       numericAsString: options.flag('numericAsString') ?? true,
     );

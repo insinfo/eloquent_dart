@@ -20,6 +20,12 @@ Runnable examples, one per topic (query builders, transactions, both ORM
 styles, migrations, bulk and streaming, PostgreSQL features, MySQL,
 connection options), are in [example/](example/README.md).
 
+### What's new in 4.2
+
+- The `dargres` and `dpgsql` adapters send the password in clear text only to a
+  verified server or by explicit choice (see [TLS certificates](#tls-certificates)).
+- dpgsql bounds opening a connection with `Timeout`; it could wait forever.
+
 ### What's new in 4.1
 
 - [TLS certificates](#tls-certificates) on every driver, single connection and
@@ -1356,6 +1362,14 @@ a file that cannot be loaded or a wrong `sslpassword`.
 `require` encrypts the traffic but does not prove who the server is: someone
 between the application and the database can impersonate it. On a network you
 do not control, use `verify-full`.
+
+A server can also ask for the password in clear text, which hands it to whoever
+is asking. `postgres`, `dargres` and `dpgsql` refuse that, except that `dargres`
+and `dpgsql` allow it with `verify-ca` or `verify-full`. If your server needs it
+(LDAP, PAM, `password`), set `driver_options`: `allowClearTextPassword: true`
+(postgres), `allowCleartextPassword: true` (dargres) or
+`'Allow Cleartext Password': 'true'` (dpgsql). `postgres_v3` has no such option:
+the postgres package always sends it.
 
 With `postgres_v3` and `pool`, the certificates apply to what runs through
 eloquent. A `Pool` taken from the PDO and used directly does not send them
