@@ -77,6 +77,25 @@ class PDOConfig {
   /// [sslmode] parsed; throws [ArgumentError] for an unknown value.
   PDOSslMode get parsedSslMode => parseSslMode(sslmode);
 
+  /// `sslrootcert`: PEM file with the CA certificates that verify the server.
+  /// Only these are trusted, not the system roots. Requires `sslmode`
+  /// verify-ca or verify-full.
+  String? sslRootCert;
+
+  /// `sslcert`: PEM or PKCS#12 file with the client certificate chain.
+  /// Requires [sslKey].
+  String? sslCert;
+
+  /// `sslkey`: PEM or PKCS#12 file with the private key of [sslCert].
+  String? sslKey;
+
+  /// `sslpassword`: the password of [sslKey], when it is encrypted.
+  String? sslPassword;
+
+  /// `security_context`: a ready [SecurityContext], for certificates that are
+  /// not in files. It replaces [sslRootCert], [sslCert] and [sslKey].
+  SecurityContext? securityContext;
+
   /// MySQL: the collation of the connection (`collation` config key).
   String? collation;
 
@@ -154,6 +173,11 @@ class PDOConfig {
       'applicationName': applicationName,
       'allowReconnect': allowReconnect,
       'sslmode': sslmode,
+      'sslrootcert': sslRootCert,
+      'sslcert': sslCert,
+      'sslkey': sslKey,
+      'sslpassword': sslPassword,
+      'security_context': securityContext,
       'collation': collation,
       'timezone': timezone,
       'schema': schema,
@@ -209,6 +233,24 @@ class PDOConfig {
       schema: map['schema'] as String?,
     );
     co.collation = map['collation'] as String?;
+    // An empty value is absent, as with sslmode: an environment variable that
+    // is not set.
+    String? path(String name) {
+      final value = map[name]?.toString();
+      return value == null || value.trim().isEmpty ? null : value;
+    }
+
+    co.sslRootCert = path('sslrootcert');
+    co.sslCert = path('sslcert');
+    co.sslKey = path('sslkey');
+    co.sslPassword = path('sslpassword');
+    final securityContext = key(['security_context', 'securityContext']);
+    if (securityContext != null && securityContext is! SecurityContext) {
+      throw ArgumentError.value(
+          securityContext, 'security_context', 'Expected a SecurityContext.');
+    }
+    co.securityContext = securityContext as SecurityContext?;
+    co.checkTlsSettings();
     if (map['forceDecodeTimestamptzAsUTC'] is bool) {
       co.forceDecodeTimestamptzAsUTC =
           map['forceDecodeTimestamptzAsUTC'] as bool;
@@ -310,6 +352,72 @@ class PDOConfig {
     }
     throw ArgumentError.value(value, 'sslmode',
         'Expected disable, allow, prefer, require, verify-ca or verify-full');
+  }
+
+  /// Throws [ArgumentError] for TLS settings that cannot be honored: a
+  /// certificate that nothing would use must not end in a connection with
+  /// less security than the one asked for.
+  void checkTlsSettings() {
+    final hasFiles = sslRootCert != null || sslCert != null || sslKey != null;
+    if (securityContext == null && !hasFiles) return;
+    if (securityContext != null && hasFiles) {
+      throw ArgumentError(
+          'security_context cannot be combined with sslrootcert, sslcert or '
+          'sslkey');
+    }
+    final mode = parsedSslMode;
+    if (mode == PDOSslMode.disable) {
+      throw ArgumentError(
+          'TLS certificates were given, but sslmode is disable (or absent)');
+    }
+    if (sslRootCert != null &&
+        mode != PDOSslMode.verifyCa &&
+        mode != PDOSslMode.verifyFull) {
+      throw ArgumentError('sslrootcert requires sslmode verify-ca or '
+          'verify-full: sslmode ${mode.name} would not verify the server '
+          'against it');
+    }
+    if ((sslCert == null) != (sslKey == null)) {
+      throw ArgumentError('sslcert and sslkey must be given together');
+    }
+  }
+
+  /// The [SecurityContext] of the TLS settings, read from the files now; null
+  /// when there are none (the system roots verify the server). Throws
+  /// [ArgumentError] when they cannot be honored or a file cannot be loaded.
+  SecurityContext? buildSecurityContext() {
+    checkTlsSettings();
+    final root = sslRootCert;
+    final certificate = sslCert;
+    final key = sslKey;
+    if (root == null && certificate == null) return securityContext;
+
+    // A client certificate alone keeps the system roots for the server.
+    final context = SecurityContext(withTrustedRoots: root == null);
+    void load(String name, String file, void Function() read) {
+      try {
+        read();
+      } on IOException catch (e) {
+        // FileSystemException and TlsException.
+        throw ArgumentError.value(file, name, 'Could not be loaded: $e');
+      } on ArgumentError catch (e) {
+        // A key that the password does not decrypt.
+        throw ArgumentError.value(file, name, 'Could not be loaded: $e');
+      }
+    }
+
+    if (root != null) {
+      load('sslrootcert', root, () => context.setTrustedCertificates(root));
+    }
+    if (certificate != null && key != null) {
+      load(
+          'sslcert',
+          certificate,
+          () =>
+              context.useCertificateChain(certificate, password: sslPassword));
+      load('sslkey', key, () => context.usePrivateKey(key, password: sslPassword));
+    }
+    return context;
   }
 
   /// [parsedSslMode] for a PostgreSQL driver that cannot fall back to a

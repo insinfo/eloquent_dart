@@ -1,3 +1,20 @@
+## 4.1.0
+
+- TLS certificates on every adapter: the `sslrootcert`, `sslcert`, `sslkey`
+  (the names Laravel uses for PostgreSQL) and `sslpassword` config keys, and
+  `security_context` for a `SecurityContext` with certificates in memory. A
+  private CA can verify the server with `sslmode` `verify-ca` or `verify-full`
+  (only the system roots could), and the connection can present a client
+  certificate. Settings that cannot be honored throw `ArgumentError` instead of
+  connecting with less security: `sslrootcert` in a mode that does not verify,
+  any certificate with `sslmode` `disable` or absent, a certificate without
+  its key, a file that cannot be loaded.
+- The mysql adapter requires mysql_dart 4.0.1. `sslmode` keeps its meaning:
+  `require`, `allow` and `prefer` use TLS without verifying the certificate,
+  `verify-ca` and `verify-full` verify it.
+- The dpgsql adapter requires dpgsql 1.2.0, and the postgres adapter
+  postgres_fork 3.1.0.
+
 ## 4.0.0
 
 Details and migration notes: [doc/release_notes_4.0.0.md](doc/release_notes_4.0.0.md).

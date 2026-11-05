@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:eloquent/src/pdo/core/pdo_config.dart';
 import 'package:eloquent/src/pdo/core/pdo_interface.dart';
 import 'package:eloquent/src/pdo/core/pdo_result.dart';
@@ -122,14 +120,14 @@ class MySqlClientPDO extends PDOInterface {
         options.enumeration('zeroDateBehavior', ZeroDateBehavior.values) ??
             ZeroDateBehavior.convertToNull;
     // sslmode: disable (or absent) is plain; require uses TLS without
-    // verifying the certificate (mysql_dart's default); verify-ca and
-    // verify-full reject a certificate dart:io cannot verify (chain and host
-    // name); allow and prefer use TLS when the server offers it.
+    // verifying the certificate; verify-ca and verify-full reject a
+    // certificate dart:io cannot verify (chain and host name); allow and
+    // prefer use TLS, unverified, when the server offers it. mysql_dart
+    // verifies by default since 4.0, so the flag is always passed.
     final sslMode = config.parsedSslMode;
     final verify =
         sslMode == PDOSslMode.verifyCa || sslMode == PDOSslMode.verifyFull;
-    final onBadCertificate =
-        verify ? (X509Certificate certificate) => false : null;
+    final securityContext = config.buildSecurityContext();
     final collation = handshakeCollation(config);
 
     Future<MySQLConnection> open(bool secure) async {
@@ -141,7 +139,8 @@ class MySqlClientPDO extends PDOInterface {
         password: config.password ?? '',
         collation: collation,
         secure: secure,
-        onBadCertificate: onBadCertificate,
+        securityContext: securityContext,
+        verifyServerCertificate: verify,
         autoPreparedStatementCacheCapacity:
             options.integer('autoPreparedStatementCacheCapacity') ?? 32,
         allowPublicKeyRetrieval:
@@ -188,7 +187,8 @@ class MySqlClientPDO extends PDOInterface {
         collation: collation,
         maxConnections: config.poolSize ?? 1,
         secure: secure,
-        onBadCertificate: onBadCertificate,
+        securityContext: securityContext,
+        verifyServerCertificate: verify,
         onConnectionOpen: _initSession,
         autoPreparedStatementCacheCapacity:
             options.integer('autoPreparedStatementCacheCapacity') ?? 32,

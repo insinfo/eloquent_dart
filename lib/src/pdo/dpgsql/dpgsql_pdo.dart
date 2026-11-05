@@ -533,11 +533,16 @@ class DpgsqlPDO extends PDOInterface {
     // driver_options: dpgsql connection-string keywords, over the ones set
     // above.
     final options = config.driverOptionsFor('dpgsql', _connectionKeywords);
-    if (options.values.isEmpty) return settings;
+    // securityContext is not part of the connection string.
+    final securityContext = config.buildSecurityContext();
+    if (options.values.isEmpty) {
+      return settings..securityContext = securityContext;
+    }
     return DpgsqlConnectionStringBuilder([
       settings.toString(),
       for (final entry in options.values.entries) '${entry.key}=${entry.value}',
-    ].join(';'));
+    ].join(';'))
+      ..securityContext = securityContext;
   }
 
   static const _connectionKeywords = {

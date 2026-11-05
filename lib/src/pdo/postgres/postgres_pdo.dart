@@ -100,6 +100,7 @@ class PostgresV2PDO extends PDOInterface {
       };
       settings.timeZone = timeZone;
       settings.decodingSettings = _decodingSettings(config);
+      settings.securityContext = config.buildSecurityContext();
       final connectTimeout = options.duration('connectTimeout');
       if (connectTimeout != null) settings.connectTimeout = connectTimeout;
       final queryTimeout = options.duration('queryTimeout');
@@ -137,6 +138,7 @@ class PostgresV2PDO extends PDOInterface {
             options.integer('queryTimeoutInSeconds') ?? queryTimeoutInSeconds,
         useSSL: options.flag('useSSL') ?? false,
         sslMode: _sslMode(options.flag('useSSL')),
+        securityContext: config.buildSecurityContext(),
         allowClearTextPassword: options.flag('allowClearTextPassword') ?? false,
         isUnixSocket: options.flag('isUnixSocket') ?? false,
         cancelQueryOnTimeout: options.flag('cancelQueryOnTimeout') ?? false,
@@ -195,6 +197,7 @@ class PostgresV2PDO extends PDOInterface {
       // The same TLS mode as the queries' connections.
       useSSL: useSSL,
       sslMode: _sslMode(useSSL),
+      securityContext: config.buildSecurityContext(),
     );
     await conn.open();
     try {

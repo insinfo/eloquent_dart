@@ -1289,6 +1289,41 @@ See the release notes for the full type table and the keys of each adapter
 `serverPublicKey`, `zeroDateBehavior`, `queueConcurrentCalls`, and the pool
 settings).
 
+## TLS certificates
+
+`sslmode` chooses how TLS is used on every driver: `disable` (or absent),
+`allow`, `prefer`, `require` (TLS, the certificate is not verified), `verify-ca`
+and `verify-full` (dart:io verifies the chain and the host name together). They
+verify against the system roots. For a private CA, or to present a client
+certificate:
+
+```dart
+manager.addConnection({
+  'driver': 'pgsql', // or 'mysql'
+  // ...
+  'sslmode': 'verify-full',
+  'sslrootcert': '/etc/ssl/db/ca.pem',
+  'sslcert': '/etc/ssl/db/client.pem',
+  'sslkey': '/etc/ssl/db/client.key',
+  'sslpassword': 'key-password', // only for an encrypted key
+});
+```
+
+- `sslrootcert` replaces the system roots and requires `verify-ca` or
+  `verify-full`.
+- `sslcert` and `sslkey` go together, in any `sslmode` with TLS.
+- For certificates that are not in files, pass a `SecurityContext` in
+  `security_context` instead of those keys:
+
+```dart
+'sslmode': 'verify-full',
+'security_context': SecurityContext()
+  ..setTrustedCertificatesBytes(utf8.encode(caPem)),
+```
+
+Settings that cannot be honored throw `ArgumentError` instead of connecting with
+less security.
+
 ## DateTime bindings (`datetime_bindings`)
 
 By default (`'datetime_bindings': 'string'`) `Connection.prepareBindings()`

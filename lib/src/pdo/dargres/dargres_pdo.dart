@@ -92,6 +92,9 @@ class DargresPDO extends PDOInterface {
   /// chain and host name), which rejects a certificate it cannot verify.
   Future<void> _resolveSsl() async {
     _tlsOptional = false;
+    final securityContext = config.buildSecurityContext();
+    dargres.SslContext unverified() => dargres.SslContext(
+        onBadCertificate: (_) => true, context: securityContext);
     switch (config.parsedSslMode) {
       case PDOSslMode.disable:
         _sslContext = null;
@@ -99,15 +102,14 @@ class DargresPDO extends PDOInterface {
       case PDOSslMode.allow:
       case PDOSslMode.prefer:
         _tlsOptional = await config.resolvePgSslMode() == PDOSslMode.require;
-        _sslContext =
-            _tlsOptional ? dargres.SslContext.createDefaultContext() : null;
+        _sslContext = _tlsOptional ? unverified() : null;
         break;
       case PDOSslMode.require:
-        _sslContext = dargres.SslContext.createDefaultContext();
+        _sslContext = unverified();
         break;
       case PDOSslMode.verifyCa:
       case PDOSslMode.verifyFull:
-        _sslContext = dargres.SslContext();
+        _sslContext = dargres.SslContext(context: securityContext);
         break;
     }
   }

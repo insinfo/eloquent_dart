@@ -66,6 +66,7 @@ class PostgresV3PDO extends PDOInterface {
     );
 
     final sslMode = await _sslMode();
+    final securityContext = config.buildSecurityContext();
     // driver_options: ConnectionSettings / PoolSettings fields (durations as
     // Duration or seconds; queryMode 'extended' or 'simple').
     final options = config.driverOptionsFor('postgres_v3', {
@@ -87,6 +88,9 @@ class PostgresV3PDO extends PDOInterface {
     }
 
     if (config.pool == true) {
+      _poolConnectionSettings = securityContext == null
+          ? null
+          : ConnectionSettings(securityContext: securityContext);
       connection = Pool.withEndpoints(
         [endpoint],
         settings: PoolSettings(
@@ -98,6 +102,7 @@ class PostgresV3PDO extends PDOInterface {
           maxConnectionCount: config.poolSize,
           encoding: _getEncoding(config.charset ?? 'utf8'),
           sslMode: sslMode,
+          securityContext: securityContext,
           typeRegistry: postgresV3TypeRegistry(config),
           connectTimeout: options.duration('connectTimeout'),
           queryTimeout: options.duration('queryTimeout'),
@@ -119,6 +124,7 @@ class PostgresV3PDO extends PDOInterface {
             },
             encoding: _getEncoding(config.charset ?? 'utf8'),
             sslMode: sslMode,
+            securityContext: securityContext,
             typeRegistry: postgresV3TypeRegistry(config),
             connectTimeout: options.duration('connectTimeout'),
             queryTimeout: options.duration('queryTimeout'),
@@ -181,6 +187,7 @@ class PostgresV3PDO extends PDOInterface {
           },
           encoding: _getEncoding(config.charset ?? 'utf8'),
           sslMode: await _sslMode(),
+          securityContext: config.buildSecurityContext(),
           typeRegistry: postgresV3TypeRegistry(config),
         ));
     return PDONotificationConnection(
@@ -244,7 +251,8 @@ class PostgresV3PDO extends PDOInterface {
     final c = connection;
     if (c is Pool) {
       return c.withConnection<T>(
-          (session) => _transaction(session, operation, timeout));
+          (session) => _transaction(session, operation, timeout),
+          settings: _poolConnectionSettings);
     }
     return _transaction(c as Connection, operation, timeout);
   }
@@ -319,13 +327,28 @@ class PostgresV3PDO extends PDOInterface {
     // Simple query protocol, as PDO::exec (libpq's PQexec): no parameters,
     // and a script with several statements runs whole. The extended
     // protocol (queryMode's default) refuses more than one (42601).
-    final res = await connection.execute(
-      statement,
-      queryMode: QueryMode.simple,
-      timeout: Duration(seconds: timeoutInSeconds),
-    );
-    return res.affectedRows as int;
+    final timeout = Duration(seconds: timeoutInSeconds);
+    final res = await _onSession((session) => session.execute(
+          statement,
+          queryMode: QueryMode.simple,
+          timeout: timeout,
+        ));
+    return res.affectedRows;
   }
+
+  /// Runs [operation] on the connection or, with a pool, on one of its
+  /// connections, as Pool.execute does.
+  Future<R> _onSession<R>(Future<R> Function(Session session) operation) {
+    final c = connection;
+    return c is Pool
+        ? c.withConnection<R>(operation, settings: _poolConnectionSettings)
+        : operation(c as Connection);
+  }
+
+  /// The settings of each call on the pool. postgres 3.5.7 ignores
+  /// PoolSettings.securityContext when the pool opens a connection (it reads
+  /// it only from the settings of the call).
+  ConnectionSettings? _poolConnectionSettings;
 
   /// Prepares and executes an SQL statement with placeholders
   Future<PDOResults> query(String query,
@@ -340,14 +363,14 @@ class PostgresV3PDO extends PDOInterface {
 
     // final conn = connection is Pool ? connection as Pool : connection as Connection;
 
-    final rs = await connection.execute(
-      Sql.indexed(query, substitution: '?'),
-      parameters: params,
-      timeout: Duration(seconds: timeoutInSeconds),
-    );
+    final timeout = Duration(seconds: timeoutInSeconds);
+    final rs = await _onSession((session) => session.execute(
+          Sql.indexed(query, substitution: '?'),
+          parameters: params,
+          timeout: timeout,
+        ));
 
-    final pdoResult =
-        PDOResults(postgresV3Rows(config, rs as Result), rs.affectedRows);
+    final pdoResult = PDOResults(postgresV3Rows(config, rs), rs.affectedRows);
     return pdoResult;
   }
 

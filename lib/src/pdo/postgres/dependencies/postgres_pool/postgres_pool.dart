@@ -316,6 +316,10 @@ class PgPoolSettings {
   /// How the pooled connections decode values (see [DecodingSettings]).
   DecodingSettings decodingSettings = const DecodingSettings();
 
+  /// The trusted CAs and the client certificate of the pooled connections;
+  /// null uses the system roots.
+  SecurityContext? securityContext;
+
   /// This callback function will be called after opening the connection.
   Future<void> Function(PostgreSQLExecutionContext connection)? onOpen;
 
@@ -339,6 +343,7 @@ class PgPoolSettings {
     retryOptions = other.retryOptions;
     timeZone = other.timeZone;
     encoding = other.encoding;
+    securityContext = other.securityContext;
   }
 }
 
@@ -540,6 +545,7 @@ class PgPool implements PostgreSQLExecutionContext {
             password: _url.password,
             useSSL: _url.requireSsl,
             sslMode: _url.sslMode,
+            securityContext: settings.securityContext,
             isUnixSocket: _url.isUnixSocket,
             timeoutInSeconds: settings.connectTimeout.inSeconds,
             queryTimeoutInSeconds: settings.queryTimeout.inSeconds,
